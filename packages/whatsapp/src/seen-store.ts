@@ -15,16 +15,25 @@ export interface MemorySeenStoreOptions {
   ttlMs?: number;
 }
 
-export function createMemorySeenStore(opts: MemorySeenStoreOptions = {}): SeenStore {
+export function createMemorySeenStore(opts: MemorySeenStoreOptions = {}): SeenStore & { size(): number } {
   const ttlMs = opts.ttlMs ?? 24 * 60 * 60 * 1000;
   const expiresAt = new Map<string, number>();
 
   return {
-    // No `await` between the read and the write below, so this is atomic even under concurrent
-    // callers racing on the same event-loop turn — exactly one of them observes `true`.
+    size: () => expiresAt.size,
+    // No `await` between the read/sweep and the write below, so this is atomic even under
+    // concurrent callers racing on the same event-loop turn — exactly one observes `true`.
     async checkAndSet(id, now) {
       const existing = expiresAt.get(id);
       if (existing !== undefined && existing > now) return false;
+
+      // Opportunistic sweep so this stays bounded to "unique ids within the TTL window" instead
+      // of growing for the life of the process — a long-running receiver never reuses most ids
+      // after their TTL, so without this the map would only ever grow.
+      for (const [seenId, expiry] of expiresAt) {
+        if (expiry <= now) expiresAt.delete(seenId);
+      }
+
       expiresAt.set(id, now + ttlMs);
       return true;
     },

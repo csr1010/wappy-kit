@@ -27,6 +27,16 @@ describe("createMemorySeenStore", () => {
     expect(results.filter(Boolean)).toHaveLength(1);
   });
 
+  test("expired entries are swept, not kept forever (bounded memory)", async () => {
+    const store = createMemorySeenStore({ ttlMs: 100 });
+    for (let i = 0; i < 500; i++) await store.checkAndSet(`old-${i}`, 0);
+    expect(store.size()).toBe(500);
+
+    // Long after every one of those expired, one more call should sweep them all away.
+    await store.checkAndSet("new-id", 10_000);
+    expect(store.size()).toBe(1);
+  });
+
   test("default TTL is 24h", async () => {
     const store = createMemorySeenStore();
     expect(await store.checkAndSet("m1", 0)).toBe(true);
