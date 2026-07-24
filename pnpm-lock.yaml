@@ -218,6 +218,9 @@ importers:
 
   packages/e2e:
     dependencies:
+      '@libsql/client':
+        specifier: 0.18.0
+        version: 0.18.0
       '@wappy/core':
         specifier: workspace:*
         version: link:../core

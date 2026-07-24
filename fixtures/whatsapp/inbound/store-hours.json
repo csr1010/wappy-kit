@@ -1,0 +1,27 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102290129340398",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550001111", "phone_number_id": "106540352242922" },
+            "contacts": [{ "profile": { "name": "Ada Lovelace" }, "wa_id": "15550002222" }],
+            "messages": [
+              {
+                "from": "15550002222",
+                "id": "wamid.HBgLMTU1NTAwMDIyMjIVAgARGBI1QjJGRTU3NzUxNjBDQjI4RTgA",
+                "timestamp": "1750000001",
+                "type": "text",
+                "text": { "body": "what are your store hours?" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
