@@ -32,13 +32,10 @@ function lexicalRelevance(query: string, text: string): number {
  * -> tool retrieval + curation"; T6.2's assembler further caps this by token budget) — never
  * returns more than `maxSnippets`, most relevant first.
  *
- * Not called anywhere in `agent.ts` itself: `AgentDeps.retrieveRag` is a caller-supplied hook whose
- * default is a no-op stub (M5 precedent — `Memory.recall` was never wired as the default RAG
- * implementation either). This function is the intended building block for a caller that DOES want
- * to implement `retrieveRag` on top of `Memory.recall` — e.g. `retrieveRag: (input) =>
- * recallWithBudget({ memory, contactId: input.contactId, query: input.query, maxSnippets: N })` —
- * left for the CLI/wiring layer (or M7/M8's real RAG work) to actually do, matching
- * `bound-tool-result.ts`'s same "built and tested, wired by its real caller later" precedent.
+ * Real caller as of M8: `knowledge.ts`'s `createKnowledgeRag({knowledge, memory})` calls this to
+ * blend recalled PAST-CONVERSATION snippets in alongside Knowledge's document-corpus RAG, when a
+ * `memory` is supplied (optional — Knowledge alone is T8.3's actual requirement). Still usable
+ * standalone by anything else that wants `retrieveRag` built on `Memory.recall` directly.
  */
 export async function recallWithBudget(opts: RecallBudgetOptions): Promise<string[]> {
   const raw = await opts.memory.recall(opts.contactId, opts.query);

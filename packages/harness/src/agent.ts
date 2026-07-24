@@ -29,13 +29,13 @@ export interface AgentDeps {
   clock: Clock;
   tracer: Tracer;
   skills?: SkillRegistry;
-  /** RAG hook — default: no-op (no extra context). Real semantic search lands in M7/M8 (§9 Scenario B is a stub here). */
+  /** RAG hook — default: no-op (no extra context). Real implementation (§9 Scenario B): `knowledge.ts`'s `createKnowledgeRag()` (M8). */
   retrieveRag?: (input: { contactId: string; query: string }) => Promise<string[]>;
-  /** Tool-invocation hook — default: no-op (no findings). Real tool execution lands in M7 tools-openapi (§9 Scenario C is a stub here). */
+  /** Tool-invocation hook — default: no-op (no findings). Real implementation (§9 Scenario C): `invoke-tools.ts`'s `createToolInvoker()` (M8). */
   invokeTools?: (input: { message: InboundMessage; decision: RouterDecision }) => Promise<string[]>;
   /** Pool available for runtime BM25 selection (T6.5) when a message needsTool — declaring available
-   * tools to the model is separate from actually invoking one (that's `invokeTools`, still a stub
-   * until M7). Default []. */
+   * tools to the model (for the prompt's textual tool-schema disclosure) is separate from actually
+   * invoking one (that's `invokeTools`, e.g. `createToolInvoker({tools, ...})` using this same pool). Default []. */
   tools?: Tool[];
   /** Bounds the whole assembled prompt (T6.1/T6.2); default is a conservative, model-agnostic budget. */
   contextBudget?: ContextBudget;

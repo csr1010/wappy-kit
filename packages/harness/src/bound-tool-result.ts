@@ -23,12 +23,8 @@ function byteSize(value: unknown): number {
  * `maxBytes`; anything else that's oversized is JSON-stringified and truncated the same way. Never
  * passes raw megabytes through untouched.
  *
- * Deliberately NOT wired into any real call path yet: `AgentDeps.invokeTools` (agent.ts) returns
- * pre-stringified `string[]` findings, not the raw tool-result objects this function expects to
- * bound. Real tool execution — where raw results actually exist to bound — lands in M7's
- * tools-openapi engine; that's the natural place to wire this in, matching M5/M6's established
- * precedent of leaving a built-and-tested piece unwired until its real caller exists (e.g.
- * createVercelModel's tool loop, Memory.recall not yet the default RAG implementation).
+ * Real caller as of M8: `invoke-tools.ts`'s `createToolInvoker()` calls this on a tool's real
+ * `ToolResult.data` before turning it into a finding string for `AgentDeps.invokeTools`.
  */
 export function boundToolResult(data: unknown, opts: BoundToolResultOptions): BoundedToolResult {
   const totalBytes = byteSize(data);

@@ -1,5 +1,44 @@
 import type { Client } from "@libsql/client";
+import type { Memory } from "@wappy/core";
 import { bm25Scores, tokenize } from "./bm25.js";
+import { recallWithBudget } from "./recall-budget.js";
+
+export interface CreateKnowledgeRagOptions {
+  knowledge: Knowledge;
+  topK?: number;
+  scoreFloor?: number;
+  /** Also recalls relevant PAST CONVERSATION turns via `Memory.recall()` (T6.4's `recallWithBudget`,
+   * finally given a real caller here) and appends them after the Knowledge chunks — e.g. surfacing
+   * "the user already gave us their order number earlier in this chat" alongside document knowledge.
+   * Optional: omit for Knowledge-only RAG (the default — Knowledge is the module T8.3 actually asks
+   * for; this is an additive complement, not a requirement). */
+  memory?: Memory;
+  memoryMaxSnippets?: number;
+  memoryRelevanceFloor?: number;
+}
+
+/** Builds the real `AgentDeps.retrieveRag` hook (§9 Scenario B, finally wired for real in M8):
+ * recalls chunks from `knowledge` and hands back their text verbatim — `agent.ts` already bounds/caps
+ * everything downstream (M6), so this stays a thin adapter, not a second place that re-implements
+ * bounding. An empty query or an empty/no-match store both naturally resolve to `[]` via `recall()`
+ * itself (§9 "empty store -> falls back to 'I don't know', no hallucinated retrieval") — the compose
+ * model, given no snippets, is the one that has to say so honestly, not this function's job. */
+export function createKnowledgeRag(opts: CreateKnowledgeRagOptions): (input: { contactId: string; query: string }) => Promise<string[]> {
+  return async ({ contactId, query }) => {
+    if (!query) return [];
+    const results = await opts.knowledge.recall(query, { topK: opts.topK, scoreFloor: opts.scoreFloor });
+    const snippets = results.map((r) => r.text);
+    if (!opts.memory) return snippets;
+    const memorySnippets = await recallWithBudget({
+      memory: opts.memory,
+      contactId,
+      query,
+      maxSnippets: opts.memoryMaxSnippets ?? 3,
+      relevanceFloor: opts.memoryRelevanceFloor,
+    });
+    return [...snippets, ...memorySnippets];
+  };
+}
 
 export interface ChunkOptions {
   /** Target max size of a chunk, in characters. Default 800. */
