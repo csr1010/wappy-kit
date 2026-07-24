@@ -18,6 +18,7 @@
   "dependencies": {
     "@libsql/client": "0.18.0",
     "@wappy/core": "workspace:*",
-    "ai": "7.0.107"
+    "ai": "7.0.107",
+    "zod": "^4.6.5"
   }
 }
