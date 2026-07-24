@@ -1,4 +1,4 @@
-import type { DeliveryResult, InboundMessage, RouterDecision, SmartMessage, ToolResult, Turn } from "./schemas.js";
+import type { DeliveryResult, InboundMessage, RouterDecision, SessionProfile, SmartMessage, ToolResult, Turn } from "./schemas.js";
 
 /** JSON Schema object, as produced by zod's toJSONSchema and consumed by Model tool-calling. */
 export type JsonSchema = Record<string, unknown>;
@@ -49,6 +49,18 @@ export interface Memory {
   append(turn: Turn): Promise<void>;
   /** Semantic recall scoped to one contact's history/knowledge. Returns text snippets. */
   recall(contactId: string, query: string): Promise<string[]>;
+}
+
+/** M13: one focused store for the session profile, same pattern as `@wappy/whatsapp`'s
+ * `SeenStore`/`SessionWindowTracker` — not an overload of `Memory` (turn history is a separate
+ * concern from a structured, TTL-bound profile). */
+export interface SessionProfileStore {
+  /** `undefined` when no profile exists for this contact, OR it exists but `now > expiresAt` — a
+   * caller never has to separately check expiry; an expired profile IS an absent one. */
+  get(contactId: string, now: number): Promise<SessionProfile | undefined>;
+  /** Upsert. Callers always pass a fresh `expiresAt`, so calling this after every successful turn
+   * is also how the TTL renews — there's no separate "touch" operation. */
+  set(profile: SessionProfile): Promise<void>;
 }
 
 export interface RouterInput {

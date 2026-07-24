@@ -16,8 +16,15 @@ const FALLBACK_RATIONALE = "(no rationale — compose failed, this is the honest
  * rationale (not just prompting for good format choice and discarding the reasoning) makes a bad
  * format choice debuggable later — traced by agent.ts after a successful call.
  */
+/** M13: extends the same wrapper with the session-profile extraction fields — zero extra model
+ * calls, the same compose call that already produces `formatRationale` also drafts these. All
+ * three are optional: the model may have nothing worth extracting on a given turn ("summary" is
+ * explicitly allowed to lag `currentState`, and not every reply introduces a new fact). */
 const ComposeResponseSchema = z.object({
   formatRationale: z.string().min(1).max(300),
+  sessionFacts: z.record(z.string(), z.string()).optional(),
+  sessionCurrentState: z.string().optional(),
+  sessionSummary: z.string().optional(),
   message: SmartMessageSchema,
 });
 const composeResponseJsonSchema = z.toJSONSchema(ComposeResponseSchema);
@@ -46,6 +53,11 @@ export interface ComposeWithBudgetResult {
   /** M12: the model's own stated reason for the format it picked — captured for tracing, never
    * sent to WhatsApp. `FALLBACK_RATIONALE` on the honest-degrade path (no real compose succeeded). */
   formatRationale: string;
+  /** M13: session-profile extraction from this same compose call — all optional, absent on the
+   * fallback-degrade path (never a fabricated extraction, same principle as `FALLBACK_RATIONALE`). */
+  sessionFacts?: Record<string, string>;
+  sessionCurrentState?: string;
+  sessionSummary?: string;
   usage: Record<string, number>;
   dropped: string[];
   /** True if a context-length error triggered the shrink-and-retry (§10 T6.8). */
@@ -75,7 +87,16 @@ export async function composeWithBudget(opts: ComposeWithBudgetOptions): Promise
       if (result.text) lastText = result.text;
       const parsed = ComposeResponseSchema.safeParse(result.structured);
       if (parsed.success) {
-        return { reply: parsed.data.message, formatRationale: parsed.data.formatRationale, usage: assembled.usage, dropped: assembled.dropped, shrunkForContextLength };
+        return {
+          reply: parsed.data.message,
+          formatRationale: parsed.data.formatRationale,
+          sessionFacts: parsed.data.sessionFacts,
+          sessionCurrentState: parsed.data.sessionCurrentState,
+          sessionSummary: parsed.data.sessionSummary,
+          usage: assembled.usage,
+          dropped: assembled.dropped,
+          shrunkForContextLength,
+        };
       }
       input = { ...opts.input, userMessage: opts.input.userMessage + REPAIR_NOTE };
     } catch (e) {

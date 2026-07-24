@@ -150,6 +150,19 @@ export const RouterDecisionSchema = z.object({
 });
 export type RouterDecision = z.infer<typeof RouterDecisionSchema>;
 
+/** M13: a small, structured, per-contact profile — facts (name, location, ...), the fresh open
+ * thread right now (`currentState`, updated every turn, never compressed), and a coarser
+ * `summary` allowed to lag behind it. TTL-bound via `expiresAt`; session-scoped, not a permanent
+ * cross-session user profile (see docs/milestones/M13.md — that's explicitly deferred). */
+export const SessionProfileSchema = z.object({
+  contactId: z.string().min(1),
+  facts: z.record(z.string(), z.string()),
+  currentState: z.string().optional(),
+  summary: z.string().optional(),
+  expiresAt: z.number(),
+});
+export type SessionProfile = z.infer<typeof SessionProfileSchema>;
+
 export const ToolResultSchema = z.object({
   toolName: z.string().min(1),
   ok: z.boolean(),
