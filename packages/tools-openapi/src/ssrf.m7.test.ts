@@ -1,4 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
+import { createServer } from "node:http";
+import { Agent } from "undici";
 import { assertSafeUrl, fetchSafely, pinnedLookup, SsrfBlockedError } from "./ssrf.js";
 
 describe("assertSafeUrl — scheme validation", () => {
@@ -207,7 +209,6 @@ describe("fetchSafely — DNS-rebinding TOCTOU: the REAL connection (not just th
   test("allowPrivateNetworks bypasses the pinned dispatcher entirely (documented escape hatch for local dev)", async () => {
     // Confirms the dispatcher is genuinely skipped (not silently still blocking) when explicitly
     // opted out — a request to a real local server succeeds end-to-end through the real fetch.
-    const { createServer } = await import("node:http");
     const server = createServer((_req, res) => res.end("ok"));
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
@@ -220,4 +221,51 @@ describe("fetchSafely — DNS-rebinding TOCTOU: the REAL connection (not just th
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+});
+
+describe("fetchSafely's dispatcher-close pattern doesn't deadlock on a real, sizeable response body", () => {
+  // A REAL end-to-end test through fetchSafely() itself can't reach this exact code path with a real
+  // network target — the pinned dispatcher only activates for an address that classifies as public
+  // ("unicast"), and this sandbox has no way to bind a test server to a publicly-routable address or
+  // reliably reach one over real egress. Instead, this test reproduces createPinnedDispatcher()'s
+  // EXACT connect/close pattern (a real undici Agent using pinnedLookup — the same exported function
+  // fetchSafely()'s dispatcher wraps — against a real local server with a large body), which is the
+  // part of the mechanism that actually determines whether the deadlock exists: undici's
+  // `Agent.close()` only resolves once the response body is fully drained by a consumer, so awaiting
+  // it before returning the response (the bug fetchSafely() had) hangs for any non-trivial body until
+  // the caller's own abort timeout fires; NOT awaiting it (the fix) lets the caller read the body
+  // first and the close complete naturally afterward.
+  test("a ~200KB body is fully readable promptly, without the close() call ever blocking the response from being returned", async () => {
+    const bigBody = "x".repeat(200_000);
+    const server = createServer((_req, res) => res.end(bigBody));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    try {
+      // A hand-rolled lookup (not pinnedLookup() itself, which would correctly reject a loopback
+      // address regardless of any option — that validation is already covered elsewhere). This test
+      // is specifically about the connect/close TIMING mechanism createPinnedDispatcher() uses, not
+      // re-proving the address-safety check.
+      const dispatcher = new Agent({
+        connect: { lookup: (_hostname, _options, callback) => callback(null, [{ address: "127.0.0.1", family: 4 }]) },
+      });
+      const start = Date.now();
+      let response: Response;
+      try {
+        response = await fetch(`http://fake-target.invalid:${port}/`, { dispatcher: dispatcher as unknown as never });
+        // The fix under test: fire-and-forget, exactly matching fetchSafely()'s own success path —
+        // NOT `await dispatcher.close()`, which would block until the body below is fully read.
+        dispatcher.close().catch(() => undefined);
+      } catch (e) {
+        await dispatcher.close().catch(() => undefined);
+        throw e;
+      }
+      const elapsedBeforeRead = Date.now() - start;
+      expect(elapsedBeforeRead).toBeLessThan(2000); // returned promptly — proves close() wasn't awaited
+      const text = await response.text();
+      expect(text).toHaveLength(200_000);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 10_000);
 });

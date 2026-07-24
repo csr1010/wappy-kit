@@ -152,6 +152,16 @@ describe("resolveSchema — allOf merge", () => {
     expect(result?.anyOf).toEqual([{ type: "string" }, { type: "integer" }]);
   });
 
+  test("when MULTIPLE allOf members each declare their own oneOf, the last member's wins (documented, not a crash/corruption)", () => {
+    const result = resolveSchema(
+      {
+        allOf: [{ oneOf: [{ type: "string" }, { type: "integer" }] }, { oneOf: [{ type: "boolean" }, { type: "null" }] }],
+      } as unknown as OpenAPIV3.SchemaObject,
+      { document: doc({}) },
+    );
+    expect(result?.oneOf).toEqual([{ type: "boolean" }, { type: "null" }]);
+  });
+
   test("a sibling oneOf on the SAME node as allOf (not nested inside a member) is also preserved, not dropped by the allOf branch winning first", () => {
     const result = resolveSchema(
       {

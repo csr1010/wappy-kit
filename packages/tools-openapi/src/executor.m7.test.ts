@@ -414,6 +414,60 @@ describe("buildExecutor — a header param already setting Content-Type is not o
   });
 });
 
+describe("buildExecutor — body serialization respects the operation's declared media type", () => {
+  test("a body with no declared x-wappy-media-type defaults to JSON (backward compatible)", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const t = tool({ method: "post", path: "/x", parameters: { type: "object", properties: { body: { type: "object", "x-wappy-in": "body" } } } });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ body: { name: "widget" } });
+    expect(activeServer.requests[0]?.headers["content-type"]).toContain("application/json");
+    expect(JSON.parse(activeServer.requests[0]!.body)).toEqual({ name: "widget" });
+  });
+
+  test("a body declaring application/x-www-form-urlencoded is sent as a real URL-encoded form, not JSON", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const t = tool({
+      method: "post",
+      path: "/x",
+      parameters: { type: "object", properties: { body: { type: "object", "x-wappy-in": "body", "x-wappy-media-type": "application/x-www-form-urlencoded" } } },
+    });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ body: { name: "widget", qty: 3 } });
+    expect(activeServer.requests[0]?.headers["content-type"]).toBe("application/x-www-form-urlencoded");
+    expect(activeServer.requests[0]?.body).toBe("name=widget&qty=3");
+  });
+
+  test("a form-urlencoded body that skips explicit-undefined properties and tolerates a missing/non-object body", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const t = tool({
+      method: "post",
+      path: "/x",
+      parameters: { type: "object", properties: { body: { type: "object", "x-wappy-in": "body", "x-wappy-media-type": "application/x-www-form-urlencoded" } } },
+    });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+
+    await execute({ body: { name: "widget", note: undefined } });
+    expect(activeServer.requests[0]?.body).toBe("name=widget");
+
+    await execute({ body: undefined });
+    expect(activeServer.requests[1]?.body).toBe("");
+  });
+
+  test("a body declaring an unsupported media type (e.g. multipart/form-data) fails as a normalized ToolResult, not a silently wrong request", async () => {
+    activeServer = await startServer(() => ({ status: 200, body: "{}" }));
+    const t = tool({
+      method: "post",
+      path: "/x",
+      parameters: { type: "object", properties: { body: { type: "object", "x-wappy-in": "body", "x-wappy-media-type": "multipart/form-data" } } },
+    });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    const result = await execute({ body: { name: "widget" } });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("multipart/form-data");
+    expect(activeServer.requests).toHaveLength(0); // never sent a mismatched request
+  });
+});
+
 describe("buildExecutor — default envReader falls back to process.env", () => {
   test("when no envReader is supplied, the real process.env is used", async () => {
     activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
