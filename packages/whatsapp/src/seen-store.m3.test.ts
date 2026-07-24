@@ -37,19 +37,17 @@ describe("createMemorySeenStore", () => {
     expect(store.size()).toBe(1);
   });
 
-  test("has() peeks without marking — checkAndSet still returns true afterward", async () => {
+  test("forget() un-marks an id so checkAndSet treats it as new again", async () => {
     const store = createMemorySeenStore();
-    expect(await store.has("m1", 0)).toBe(false);
-    expect(await store.has("m1", 0)).toBe(false); // still false: has() never marks
     expect(await store.checkAndSet("m1", 0)).toBe(true);
-    expect(await store.has("m1", 0)).toBe(true);
+    expect(await store.checkAndSet("m1", 1)).toBe(false);
+    await store.forget("m1");
+    expect(await store.checkAndSet("m1", 2)).toBe(true);
   });
 
-  test("has() respects TTL expiry the same as checkAndSet", async () => {
-    const store = createMemorySeenStore({ ttlMs: 100 });
-    await store.checkAndSet("m1", 0);
-    expect(await store.has("m1", 99)).toBe(true);
-    expect(await store.has("m1", 100)).toBe(false);
+  test("forget() on an id that was never seen is a no-op", async () => {
+    const store = createMemorySeenStore();
+    await expect(store.forget("never-seen")).resolves.toBeUndefined();
   });
 
   test("default TTL is 24h", async () => {

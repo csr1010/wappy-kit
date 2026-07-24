@@ -82,8 +82,13 @@ function parseOneMessage(raw: unknown, channel: string): InboundMessage | null {
     const buttonReply = record(interactive.button_reply);
     const listReply = record(interactive.list_reply);
     const title = str(buttonReply.title) ?? str(listReply.title);
-    const selectionId = str(buttonReply.id) ?? str(listReply.id);
-    return { ...base, text: title, selectionId };
+    if (title !== undefined) {
+      return { ...base, text: title, selectionId: str(buttonReply.id) ?? str(listReply.id) };
+    }
+    // Not a recognized interactive subtype (e.g. a Flow "nfm_reply") — flag as unsupported rather
+    // than silently returning a content-less message.
+    const subtype = str(interactive.type) ?? "unknown";
+    return { ...base, text: `[unsupported WhatsApp message type: interactive/${subtype}]` };
   }
 
   if ((MEDIA_TYPES as readonly string[]).includes(type)) {
