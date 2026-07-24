@@ -86,7 +86,10 @@ function buildPath(pathTemplate: string, pathParams: Record<string, unknown>): s
 /** Joins `baseUrl`'s own path (e.g. an API version prefix like `/v1`, common in `servers[].url`)
  * with the operation's path — NOT `new URL(operationPath, baseUrl)` alone, since an operation path
  * always starts with `/`, and per WHATWG URL resolution an absolute path REPLACES the base's path
- * rather than appending to it, which would silently drop `baseUrl`'s prefix on every real call. */
+ * rather than appending to it, which would silently drop `baseUrl`'s prefix on every real call.
+ * Known, accepted limitation: a `baseUrl` carrying its OWN query string or fragment (not a
+ * documented/supported OpenAPI Server Object pattern — no real spec does this) is dropped the same
+ * way, since `fullPath` is still resolved as an absolute path against `base`. */
 function buildUrl(baseUrl: string, pathTemplate: string, pathParams: Record<string, unknown>, query: Record<string, unknown>): URL {
   const base = new URL(baseUrl);
   const basePath = base.pathname.endsWith("/") ? base.pathname.slice(0, -1) : base.pathname;

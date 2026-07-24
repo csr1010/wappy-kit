@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { assertSafeUrl, fetchSafely, SsrfBlockedError } from "./ssrf.js";
+import { assertSafeUrl, fetchSafely, pinnedLookup, SsrfBlockedError } from "./ssrf.js";
 
 describe("assertSafeUrl — scheme validation", () => {
   test("http and https are allowed by default", async () => {
@@ -134,5 +134,90 @@ describe("assertSafeUrl — the real default DNS resolver (no injected resolveHo
 describe("assertSafeUrl — a resolved address that isn't a parseable IP at all is treated as unsafe, not a crash", () => {
   test("a custom resolveHostname returning garbage (not an IP) fails safe rather than throwing an unhandled error", async () => {
     await expect(assertSafeUrl("https://weird.example.com/", { resolveHostname: async () => ["not-an-ip-address"] })).rejects.toThrow(SsrfBlockedError);
+  });
+});
+
+describe("pinnedLookup — the dispatcher's actual connect-time lookup, tested directly (no real network needed)", () => {
+  function collect(): { promise: Promise<[Error | null, unknown]>; callback: (err: Error | null, addresses: unknown) => void } {
+    let resolve!: (v: [Error | null, unknown]) => void;
+    const promise = new Promise<[Error | null, unknown]>((r) => (resolve = r));
+    return { promise, callback: (err, addresses) => resolve([err, addresses]) };
+  }
+
+  test("a safe hostname resolves to address/family entries via the callback, no error", async () => {
+    const { promise, callback } = collect();
+    pinnedLookup("api.example.com", { resolveHostname: async () => ["93.184.216.34"] }, callback);
+    const [err, addresses] = await promise;
+    expect(err).toBeNull();
+    expect(addresses).toEqual([{ address: "93.184.216.34", family: 4 }]);
+  });
+
+  test("an unsafe hostname calls back with an error (SsrfBlockedError) and an empty address list, never a thrown/unhandled rejection", async () => {
+    const { promise, callback } = collect();
+    pinnedLookup("internal.example.com", { resolveHostname: async () => ["10.0.0.1"] }, callback);
+    const [err, addresses] = await promise;
+    expect(err).toBeInstanceOf(SsrfBlockedError);
+    expect(addresses).toEqual([]);
+  });
+
+  test("a resolveHostname that rejects with a non-Error value is still normalized into a real Error via the callback", async () => {
+    const { promise, callback } = collect();
+    pinnedLookup(
+      "broken.example.com",
+      {
+        resolveHostname: () => {
+          throw "a plain string rejection, not an Error instance";
+        },
+      },
+      callback,
+    );
+    const [err, addresses] = await promise;
+    expect(err).toBeInstanceOf(Error);
+    expect(err?.message).toContain("plain string rejection");
+    expect(addresses).toEqual([]);
+  });
+
+  test("an IPv6 address is classified with family 6", async () => {
+    const { promise, callback } = collect();
+    pinnedLookup("v6.example.com", { resolveHostname: async () => ["2001:4860:4860::8888"] }, callback);
+    const [err, addresses] = await promise;
+    expect(err).toBeNull();
+    expect(addresses).toEqual([{ address: "2001:4860:4860::8888", family: 6 }]);
+  });
+});
+
+describe("fetchSafely — DNS-rebinding TOCTOU: the REAL connection (not just the pre-check) is guarded", () => {
+  test("a hostname that's safe at pre-check time but resolves to a private address at actual-connect time is still blocked — a true rebind simulation, not just the pre-check catching it", async () => {
+    // No fetchImpl here deliberately — this exercises createPinnedDispatcher()'s connect-time lookup,
+    // via pinnedLookup(), not just assertSafeUrl()'s separate pre-check. The resolver returns a SAFE
+    // address on its first call (assertSafeUrl's pre-check, which must pass) and an UNSAFE one on the
+    // second (the dispatcher's own lookup at actual connect time) — simulating an attacker's DNS
+    // server answering differently a moment later. Before this fix, real fetch() would have performed
+    // its own independent system DNS resolution at connect time (ignoring resolveHostname entirely),
+    // so a rebind like this would NOT have been caught — the pre-check alone can't see it coming.
+    let calls = 0;
+    const resolveHostname = async () => {
+      calls++;
+      return calls === 1 ? ["93.184.216.34"] : ["10.0.0.1"];
+    };
+    await expect(fetchSafely("http://rebind-target.invalid/", { resolveHostname })).rejects.toThrow(SsrfBlockedError);
+    expect(calls).toBeGreaterThanOrEqual(2); // proves the dispatcher's OWN lookup actually ran, not just the pre-check
+  });
+
+  test("allowPrivateNetworks bypasses the pinned dispatcher entirely (documented escape hatch for local dev)", async () => {
+    // Confirms the dispatcher is genuinely skipped (not silently still blocking) when explicitly
+    // opted out — a request to a real local server succeeds end-to-end through the real fetch.
+    const { createServer } = await import("node:http");
+    const server = createServer((_req, res) => res.end("ok"));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    try {
+      const response = await fetchSafely(`http://127.0.0.1:${port}/`, { allowPrivateNetworks: true });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("ok");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
