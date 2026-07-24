@@ -6,7 +6,7 @@ Open-source WhatsApp Agent OS (pnpm + turbo monorepo). Spec: `docs/SPEC.md`. Pla
 1. Read `docs/PROGRESS.md` (the "Current handoff" block).
 2. `pnpm ctx M<n>` for the current milestone — prints the brief + only the spec sections it cites. Do **not** read the whole spec.
 3. Work one task (`T<n>.<k>`) at a time: test first, implement, `pnpm gate <n> --quick`, one commit `M<n> T<n>.<k>: ...`.
-4. Finish a milestone with `pnpm gate <n>` (full, cumulative incl. backward checks) → `git tag m<n>-done` → update PROGRESS.md.
+4. Finish a milestone with `pnpm gate <n>` (full, cumulative incl. backward checks) → code review the milestone's diff → a use-case sanity check (run the relevant scenario/CLI path for real, not just the automated suite) → `git tag m<n>-done` → update PROGRESS.md → push `main` (bump `.github/workflows/ci.yml`'s gate number to `<n>` first) → commit + push that too. (Push-to-main-per-milestone is explicit user instruction, 2026-09-21 session — narrower than the irreversible-action rule below; if push credentials/remote are ever missing, stop and ask rather than silently skipping.)
 
 ## Rules
 - Tests are named `*.m<N>.test.ts` (N = milestone that introduced it). Untagged tests fail the gate.
