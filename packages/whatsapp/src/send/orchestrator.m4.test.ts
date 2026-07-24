@@ -175,6 +175,15 @@ describe("sendSmartMessage — outbound media preflight", () => {
 });
 
 describe("replayPendingSends", () => {
+  test("increments attempts on every replay, matching attemptAndReport's bookkeeping", async () => {
+    const queue = createMemoryOutboundQueue();
+    await queue.enqueue({ idempotencyKey: "k1", to: "c1", payload: { type: "text" } }, 0);
+    await queue.update("k1", { attempts: 3 }, 0); // simulate 3 prior real attempts
+    const fetchImpl = (async () => new Response(JSON.stringify({ error: { code: 131026, message: "x" } }), { status: 400 })) as typeof fetch;
+    await replayPendingSends({ graphApiBaseUrl: "https://api", phoneNumberId: "pn1", accessToken: "t", fetchImpl, clock, queue });
+    expect((await queue.get("k1"))?.attempts).toBe(4);
+  });
+
   test("re-attempts every pending item and updates the queue", async () => {
     const queue = createMemoryOutboundQueue();
     await queue.enqueue({ idempotencyKey: "k1", to: "c1", payload: { type: "text" } }, 0);

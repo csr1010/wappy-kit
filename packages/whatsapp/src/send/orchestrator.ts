@@ -107,10 +107,10 @@ export async function replayPendingSends(deps: Pick<SendDeps, "queue" | "clock" 
   for (const item of await deps.queue.pending()) {
     const result = await sendWithRetry(item.payload, deps);
     if (result.ok) {
-      await deps.queue.update(item.idempotencyKey, { status: "sent", metaMessageId: result.messageId }, deps.clock.now());
+      await deps.queue.update(item.idempotencyKey, { status: "sent", attempts: item.attempts + 1, metaMessageId: result.messageId }, deps.clock.now());
       results.push({ status: "sent", messageId: result.messageId });
     } else {
-      await deps.queue.update(item.idempotencyKey, { status: "failed", lastError: result.reason }, deps.clock.now());
+      await deps.queue.update(item.idempotencyKey, { status: "failed", attempts: item.attempts + 1, lastError: result.reason }, deps.clock.now());
       results.push({ status: "failed", reason: result.reason });
     }
   }
