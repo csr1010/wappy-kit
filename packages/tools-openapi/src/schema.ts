@@ -47,7 +47,9 @@ function decodeRefToken(token: string): string {
   return token.replace(/~1/g, "/").replace(/~0/g, "~");
 }
 
-function resolveRef(ref: string, document: OpenAPIV3.Document): unknown {
+/** Resolves any local `$ref` JSON pointer (parameter/requestBody/schema/...) against the bundled
+ * document — shared by operations.ts for non-schema `$ref`s (e.g. `components/parameters/X`). */
+export function resolveJsonPointer(ref: string, document: OpenAPIV3.Document): unknown {
   if (!ref.startsWith("#/")) {
     throw new SchemaUnmappableError(`Unsupported $ref (not a local pointer — should have been bundled): ${ref}`);
   }
@@ -99,7 +101,7 @@ function resolveInner(schema: SchemaOrRef | undefined, opts: ResolveSchemaOption
 
   if (isRef(schema)) {
     if (seenRefs.has(schema.$ref)) return {}; // circular — stop expanding, degrade to "any"
-    const resolved = resolveRef(schema.$ref, opts.document) as SchemaOrRef;
+    const resolved = resolveJsonPointer(schema.$ref, opts.document) as SchemaOrRef;
     const nextSeen = new Set(seenRefs);
     nextSeen.add(schema.$ref);
     return resolveInner(resolved, opts, nextSeen, depth + 1);
