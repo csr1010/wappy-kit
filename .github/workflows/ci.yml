@@ -22,4 +22,4 @@ jobs:
       # required again here: render.m4.test.ts was corrected post-m7-done (Meta rejects an empty
       # interactive.body.text; see SPEC.md v2.6), so B2's diff against m7-done flags it on every
       # run until the gate number moves past 8 (M9's own m8-done baseline will include the fix).
-      - run: pnpm gate 8 --allow-test-change "SPEC.md v2.6: Meta rejects empty interactive.body.text, render.m4.test.ts corrected accordingly"
+      - run: pnpm gate 8 --allow-test-change "SPEC v2.6 - Meta rejects empty interactive.body.text, render.m4.test.ts corrected accordingly"
