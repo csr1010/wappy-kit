@@ -13,6 +13,10 @@ export const LIMITS = {
   listRowDescription: 72,
   ctaButtonText: 20,
   bodyText: 4096,
+  /** Confirmed against the real Cloud API (M12 T12.2, not assumed): a 60-char header text
+   * succeeded, 61 was rejected with "(#131009) Header text length invalid. Min length: 0, Max
+   * length: 60". */
+  headerText: 60,
 } as const;
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
@@ -63,6 +67,8 @@ export function applyConstraints(message: SmartMessage): ConstrainedMessage {
   }
 
   if (out.cta) out.cta = { ...out.cta, text: clip("cta.text", out.cta.text, LIMITS.ctaButtonText) };
+
+  if (out.header?.type === "text") out.header = { ...out.header, text: clip("header.text", out.header.text, LIMITS.headerText) };
 
   return { message: out, truncated };
 }
