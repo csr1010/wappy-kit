@@ -8,7 +8,8 @@
     "dist"
   ],
   "bin": {
-    "create-wappy": "dist/bin.js"
+    "create-wappy": "dist/bin.js",
+    "wappy": "dist/wappy-bin.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -20,9 +21,11 @@
     "@wappy/core": "workspace:*",
     "@wappy/harness": "workspace:*",
     "@wappy/tools-openapi": "workspace:*",
-    "@wappy/whatsapp": "workspace:*"
+    "@wappy/whatsapp": "workspace:*",
+    "localtunnel": "^2.0.2"
   },
   "devDependencies": {
+    "@types/localtunnel": "^2.0.4",
     "@types/node": "^26.6.2",
     "typescript": "^6.0.3",
     "vitest": "^5.0.1"

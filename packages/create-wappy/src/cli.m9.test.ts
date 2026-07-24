@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { applyAnswer, DEFAULT_ANSWERS, type CompleteInterviewAnswers, type InterviewAnswers } from "./interview.js";
 import { runCli, type CliDeps } from "./cli.js";
 
-const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", toolsOpenapi: "0.1.0" };
+const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", toolsOpenapi: "0.1.0", createWappy: "0.1.0" };
 
 function golden(): CompleteInterviewAnswers {
   let answers: InterviewAnswers = {};

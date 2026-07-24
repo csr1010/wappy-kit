@@ -20,5 +20,6 @@ export function readPartVersions(fromUrl: string = import.meta.url): PartVersion
     harness: read("@wappy/harness"),
     whatsapp: read("@wappy/whatsapp"),
     toolsOpenapi: read("@wappy/tools-openapi"),
+    createWappy: read("create-wappy"),
   };
 }

@@ -39,6 +39,9 @@ export interface PartVersions {
   harness: string;
   whatsapp: string;
   toolsOpenapi: string;
+  /** create-wappy's own version — needed as a generated project's OWN dependency (not just a
+   * scaffolding tool) so `npm run dev`/`status`/`doctor` can resolve the `wappy` bin it provides. */
+  createWappy: string;
 }
 
 /** A store-specific skill draft, e.g. from `@wappy/harness`'s `generateStoreSkill()` — computed
@@ -186,7 +189,10 @@ function renderIndexTs(opts: RenderProjectOptions): string {
     lines.push("");
   }
 
-  lines.push("const channel = createWhatsAppChannel({");
+  // Exported (not just used locally): `wappy dev` (T9.7) needs channel.receive() to turn a raw
+  // webhook into InboundMessages before it can call agent.handle() on each one — the Agent itself
+  // only exposes handle(), not receive(), since receiving isn't an agent concern.
+  lines.push("export const channel = createWhatsAppChannel({");
   lines.push("  phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,");
   lines.push("  accessToken: process.env.WHATSAPP_ACCESS_TOKEN!,");
   lines.push("  clock: systemClock,");
@@ -279,6 +285,9 @@ function renderPackageJson(opts: RenderProjectOptions): string {
     "@wappy/core": versions.core,
     "@wappy/harness": versions.harness,
     "@wappy/whatsapp": versions.whatsapp,
+    // Provides the `wappy` bin (dev/status/reset/doctor) that this project's own scripts invoke —
+    // a real runtime dependency here, not just the one-time scaffolder.
+    "create-wappy": versions.createWappy,
     ai: "^7.0.0",
     dotenv: "^17.0.0",
   };
