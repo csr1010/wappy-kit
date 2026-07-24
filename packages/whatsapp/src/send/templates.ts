@@ -40,6 +40,21 @@ export function renderTemplate(registry: TemplateRegistry, to: string, name: str
   const missing = def.variables.filter((v) => !(v in variables));
   if (missing.length > 0) return { ok: false, error: `template "${name}" is missing variables: ${missing.join(", ")}` };
 
+  const components: Record<string, unknown>[] = [
+    { type: "body", parameters: def.variables.map((v) => ({ type: "text", text: variables[v] })) },
+  ];
+  // A button's dynamic value: the payload returned in the click webhook for quick_reply, or the
+  // {{1}} URL-suffix text for url (§6.1 "variable + button mapping"). Meta's own approved template
+  // already fixes each button's static label/URL — this component only supplies the per-send part.
+  for (const [index, button] of (def.buttons ?? []).entries()) {
+    components.push({
+      type: "button",
+      sub_type: button.type,
+      index: String(index),
+      parameters: [button.type === "quick_reply" ? { type: "payload", payload: button.text } : { type: "text", text: button.text }],
+    });
+  }
+
   return {
     ok: true,
     payload: {
@@ -49,7 +64,7 @@ export function renderTemplate(registry: TemplateRegistry, to: string, name: str
       template: {
         name: def.name,
         language: { code: def.language },
-        components: [{ type: "body", parameters: def.variables.map((v) => ({ type: "text", text: variables[v] })) }],
+        components,
       },
     },
   };
