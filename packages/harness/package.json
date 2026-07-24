@@ -11,10 +11,12 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
+    "@wappy/testkit": "workspace:*",
     "typescript": "^6.0.3",
     "vitest": "^5.0.1"
   },
   "dependencies": {
+    "@libsql/client": "0.18.0",
     "@wappy/core": "workspace:*",
     "ai": "7.0.107"
   }
