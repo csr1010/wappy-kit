@@ -6,5 +6,6 @@ export * from "./compose.js";
 export * from "./context-budget.js";
 export * from "./history-window.js";
 export * from "./model.js";
+export * from "./recall-budget.js";
 export * from "./router.js";
 export * from "./skills.js";
