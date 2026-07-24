@@ -5,16 +5,15 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
 ## Current handoff
 
 - **Date:** 2026-09-20
-- **Milestone / task:** M0 in progress (T0.1–T0.3 done; T0.4–T0.8 next)
-- **Last green gate:** none. `pnpm gate 0` currently fails ONLY on missing M0 mechanisms (testkit, e2e, ratchet, arch test); lint/typecheck/build/tests are green.
-- **Repo:** https://github.com/csr1010/wappy-kit (private). Commit `2a11f34` = scaffold. `main` tracks `origin/main`.
-- **Files in flight (uncommitted):** docs/, scripts/gate.mjs, scripts/ctx.mjs, CLAUDE.md, package.json (scripts + packageManager), renamed index.m0.test.ts files.
+- **Milestone / task:** M0 DONE (T0.1-T0.8). Tag `m0-done`. M1 not started.
+- **Last green gate:** `pnpm gate 0` PASS (lint, typecheck, build, tests m0, coverage ratchet).
+- **Repo:** https://github.com/csr1010/wappy-kit (private). `main` tracks `origin/main`.
 - **Next 3 actions:**
-  1. Commit the docs/scripts work, then T0.4 `packages/testkit`.
-  2. T0.5 `packages/e2e`, T0.6 arch guard test, T0.7 coverage ratchet.
-  3. `pnpm gate 0` green → `git tag m0-done` → `pnpm ctx M1`.
-- **Open decisions:** license (MIT vs Apache-2.0), tunnel provider for `wappy dev`, Shopify API flavor (Admin GraphQL vs REST) — see milestone files M11/M9/M8.
-- **Gotchas:** pnpm here is v12.5.1 (no `-s`, different recursive flags) — gate loops packages itself. Added `packageManager` to root package.json (turbo + CI need it). `gh` installed at `~/.local/bin/gh` (not on PATH by default). Repo is private until M11 (spec §15.2 says public).
+  1. `pnpm ctx M1`, then T1.1 (ratify spec additions: Tracer, Skill, Knowledge in SPEC section 16).
+  2. Bump CI step to `pnpm gate 1` when M1 lands (see .github/workflows/ci.yml).
+  3. Create scripts/contract.mjs + contracts/core.api.json as M1 requires (gate n>=1 needs them).
+- **Open decisions:** license (MIT vs Apache-2.0), tunnel provider for `wappy dev`, Shopify API flavor (Admin GraphQL vs REST) - see milestone files M11/M9/M8.
+- **Gotchas:** pnpm here is v12.5.1 (no `-s`). TS 6 has no default `types`: packages using node APIs need `"types": ["node"]` in tsconfig (testkit/e2e do). testkit API is documented in the header of packages/testkit/src/index.ts - do not open its internals. Arch guard + ratchet tests live in packages/e2e (scripts/ratchet.mjs, coverage-baseline.json; `pnpm ratchet` only raises the baseline). `gate.m0.test.ts` (listed in M0 brief) was not among T0.4-T0.8 and does not exist yet. `gh` at `~/.local/bin/gh`. Repo stays private until M11.
 
 ## Decision & change log
 
