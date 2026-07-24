@@ -1,17 +1,20 @@
 {
   "name": "@wappy/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
     "typescript": "^6.0.3",
     "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
   }
 }
