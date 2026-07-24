@@ -128,7 +128,16 @@ function toolsSetup(tools: ToolsAnswer): ToolsSetup | undefined {
   };
 }
 
-const SKILL_IMPORT_NAMES: Record<ReferenceSkillName, string> = { "store-info": "STORE_INFO_SKILL", orders: "createOrdersSkill" };
+const SKILL_IMPORT_NAMES: Record<ReferenceSkillName, string> = { "store-info": "STORE_INFO_SKILL", orders: "createOrdersSkill", products: "createProductsSkill" };
+
+/** Per-skill rendering: `store-info` is a static import (STORE_INFO_SKILL is a plain object, not a
+ * factory), `orders`/`products` are factory calls — one small table instead of an if/else chain
+ * that only knew about two skills. */
+const SKILL_RENDER: Record<ReferenceSkillName, { varName: string; isFactory: boolean }> = {
+  "store-info": { varName: "storeInfoSkill", isFactory: false },
+  orders: { varName: "ordersSkill", isFactory: true },
+  products: { varName: "productsSkill", isFactory: true },
+};
 
 function renderIndexTs(opts: RenderProjectOptions): string {
   const { answers } = opts;
@@ -180,11 +189,10 @@ function renderIndexTs(opts: RenderProjectOptions): string {
     lines.push("const skills = createSkillRegistry();");
     for (const s of skills) {
       const draft = opts.storeSkillDrafts?.[s];
-      if (s === "store-info") {
-        lines.push(draft ? `skills.register(${renderInlineSkill("store-info", draft)});` : "skills.register(STORE_INFO_SKILL);");
-      } else {
-        lines.push(draft ? `skills.register(${renderInlineSkill("orders", draft, "createOrdersSkill()")});` : "skills.register(createOrdersSkill());");
-      }
+      const { isFactory } = SKILL_RENDER[s];
+      const importName = SKILL_IMPORT_NAMES[s];
+      const baseExpr = isFactory ? `${importName}()` : importName;
+      lines.push(draft ? `skills.register(${renderInlineSkill(draft, baseExpr)});` : `skills.register(${baseExpr});`);
     }
     lines.push("");
   }
@@ -217,10 +225,10 @@ function renderIndexTs(opts: RenderProjectOptions): string {
 /** Embeds an already-computed skill draft (e.g. from `generateStoreSkill()`) as an inline object
  * literal — spreads over the static reference skill's `tools`/`memorySchema` (via the base
  * expression, when given) so only `description`/`promptFragment` actually change. */
-function renderInlineSkill(name: ReferenceSkillName, draft: StoreSkillDraft, baseExpr?: string): string {
+function renderInlineSkill(draft: StoreSkillDraft, baseExpr: string): string {
   const overrides: string[] = [`promptFragment: ${JSON.stringify(draft.promptFragment)}`];
   if (draft.description) overrides.push(`description: ${JSON.stringify(draft.description)}`);
-  return baseExpr ? `{ ...${baseExpr}, ${overrides.join(", ")} }` : `{ ...STORE_INFO_SKILL, ${overrides.join(", ")} }`;
+  return `{ ...${baseExpr}, ${overrides.join(", ")} }`;
 }
 
 /** WhatsApp Cloud API credentials — never asked in the interview; always listed in `.env.sample`. */
@@ -359,21 +367,15 @@ function renderSkillFiles(opts: RenderProjectOptions): GeneratedFile[] {
   const files: GeneratedFile[] = [];
   for (const s of skillsOf(opts.answers)) {
     const draft = opts.storeSkillDrafts?.[s];
-    if (s === "store-info") {
-      files.push({
-        path: "skills/store-info.ts",
-        content: draft
-          ? `import type { Skill } from "@wappy/core";\nimport { STORE_INFO_SKILL } from "@wappy/harness";\n\nexport const storeInfoSkill: Skill = ${renderInlineSkill("store-info", draft)};\n`
-          : `export { STORE_INFO_SKILL as storeInfoSkill } from "@wappy/harness";\n`,
-      });
-    } else {
-      files.push({
-        path: "skills/orders.ts",
-        content: draft
-          ? `import type { Skill } from "@wappy/core";\nimport { createOrdersSkill } from "@wappy/harness";\n\nexport const ordersSkill: Skill = ${renderInlineSkill("orders", draft, "createOrdersSkill()")};\n`
-          : `import { createOrdersSkill } from "@wappy/harness";\n\nexport const ordersSkill = createOrdersSkill();\n`,
-      });
-    }
+    const { varName, isFactory } = SKILL_RENDER[s];
+    const importName = SKILL_IMPORT_NAMES[s];
+    const baseExpr = isFactory ? `${importName}()` : importName;
+    const content = draft
+      ? `import type { Skill } from "@wappy/core";\nimport { ${importName} } from "@wappy/harness";\n\nexport const ${varName}: Skill = ${renderInlineSkill(draft, baseExpr)};\n`
+      : isFactory
+        ? `import { ${importName} } from "@wappy/harness";\n\nexport const ${varName} = ${baseExpr};\n`
+        : `export { ${importName} as ${varName} } from "@wappy/harness";\n`;
+    files.push({ path: `skills/${s}.ts`, content });
   }
   return files;
 }

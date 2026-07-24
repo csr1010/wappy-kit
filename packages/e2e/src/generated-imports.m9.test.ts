@@ -43,7 +43,8 @@ const combos: { label: string; answers: RenderProjectOptions["answers"] }[] = [
   { label: "shopify, no skills", answers: { model: DEFAULT_ANSWERS.model, tools: { kind: "shopify" }, skills: { skills: [] } } },
   { label: "shopify, store-info", answers: { model: { provider: "anthropic" }, tools: { kind: "shopify" }, skills: { skills: ["store-info"] } } },
   { label: "shopify, orders", answers: { model: { provider: "gemini" }, tools: { kind: "shopify" }, skills: { skills: ["orders"] } } },
-  { label: "shopify, both skills", answers: { model: { provider: "ollama" }, tools: { kind: "shopify" }, skills: { skills: ["store-info", "orders"] } } },
+  { label: "shopify, products", answers: { model: { provider: "openai" }, tools: { kind: "shopify" }, skills: { skills: ["products"] } } },
+  { label: "shopify, all three skills", answers: { model: { provider: "ollama" }, tools: { kind: "shopify" }, skills: { skills: ["store-info", "orders", "products"] } } },
 ];
 
 describe.each(combos)("generated project imports are real, for combo: $label", ({ answers }) => {
