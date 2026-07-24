@@ -215,9 +215,6 @@ importers:
       '@wappy/harness':
         specifier: workspace:*
         version: link:../harness
-      '@wappy/tools-openapi':
-        specifier: workspace:*
-        version: link:../tools-openapi
       '@wappy/whatsapp':
         specifier: workspace:*
         version: link:../whatsapp
