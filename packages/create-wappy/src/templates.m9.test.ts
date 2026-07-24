@@ -33,11 +33,13 @@ describe("renderProject — golden path (openai + shopify)", () => {
     expect([...files.keys()].sort()).toEqual(["README.md", ".env.sample", ".gitignore", "index.ts", "package.json", "tools/shopify.ts"].sort());
   });
 
-  test("index.ts imports the OpenAI adapter and wires model/memory/router/tools/channel — no skills/rag wiring", () => {
+  test("index.ts imports the OpenAI adapter and wires model/memory/sessionProfileStore/router/tools/channel — no skills/rag wiring", () => {
     const indexTs = files.get("index.ts")!;
     expect(indexTs).toContain('import { openai } from "@ai-sdk/openai";');
     expect(indexTs).toContain('openai(process.env.OPENAI_MODEL ?? "gpt-4o")');
     expect(indexTs).toContain("createLibsqlMemory");
+    expect(indexTs).toContain("createLibsqlSessionProfileStore");
+    expect(indexTs).toContain("sessionProfileStore,");
     expect(indexTs).toContain("createLlmRouter({ model })");
     expect(indexTs).toContain("const toolProvider = createShopifyToolProvider(");
     expect(indexTs).toContain("const invokeTools = createToolInvoker({ model, tools });");
@@ -72,6 +74,7 @@ describe("renderProject — golden path (openai + shopify)", () => {
     expect(env).toContain("Develop apps");
     expect(env).toContain("\n# MEMORY_DB_URL=\n"); // optional: default applies unless uncommented
     expect(env).not.toContain("\nMEMORY_DB_URL=");
+    expect(env).toContain("\n# SESSION_PROFILE_DB_URL=\n"); // M13: on by default, optional to override
     expect(env).not.toContain("KNOWLEDGE_DB_URL"); // M12: no RAG wiring left to need it
   });
 
@@ -100,6 +103,7 @@ describe("renderProject — golden path (openai + shopify)", () => {
     expect(readme).toContain("cp .env.sample .env");
     expect(readme).toContain("WHATSAPP_APP_SECRET");
     expect(readme).toContain("Memory:** local SQLite");
+    expect(readme).toContain("session-profile.db");
     expect(readme).toMatch(/Model:\*\* openai/);
     expect(readme).toContain("wappy dev");
     expect(readme).not.toContain("Skills:**");

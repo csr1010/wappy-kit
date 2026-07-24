@@ -94,12 +94,24 @@ const MEMORY_ENV: EnvVarSpec = {
   description: "LibSQL URL for conversation memory. Default: a local file at .wappy/memory.db (nothing to set).",
 };
 
+/** M13: session profile (facts + current thread state, TTL-bound) — on by default for every
+ * generated project, same posture as Memory itself (a local LibSQL file, nothing to configure
+ * unless overridden). A separate DB file from MEMORY_DB_URL: a distinct concern (SPEC.md's own
+ * "one focused store per concern" call), and it keeps `wappy reset`/inspection simple — one file
+ * per store, not a shared schema two different pieces of code both reach into. */
+const SESSION_PROFILE_ENV: EnvVarSpec = {
+  name: "SESSION_PROFILE_DB_URL",
+  required: false,
+  group: "Memory",
+  description: "LibSQL URL for the session profile (facts + current thread state). Default: a local file at .wappy/session-profile.db (nothing to set).",
+};
+
 function renderIndexTs(opts: RenderProjectOptions): string {
   const { answers } = opts;
   const model = modelSetup(answers.model.provider);
   const tools = shopifyToolsSetup(answers.tools);
 
-  const harnessImports = new Set<string>(["createAgent", "createVercelModel", "createLibsqlMemory", "createLlmRouter"]);
+  const harnessImports = new Set<string>(["createAgent", "createVercelModel", "createLibsqlMemory", "createLibsqlSessionProfileStore", "createLlmRouter"]);
   if (tools) {
     harnessImports.add("createToolInvoker");
   }
@@ -115,6 +127,7 @@ function renderIndexTs(opts: RenderProjectOptions): string {
 
   lines.push(`const model = createVercelModel({ model: ${model.constructorExpr} });`);
   lines.push('const memory = createLibsqlMemory({ url: process.env.MEMORY_DB_URL ?? "file:.wappy/memory.db" });');
+  lines.push('const sessionProfileStore = createLibsqlSessionProfileStore({ url: process.env.SESSION_PROFILE_DB_URL ?? "file:.wappy/session-profile.db" });');
   lines.push("const router = createLlmRouter({ model });");
   lines.push("const tracer = createInMemoryTracer();");
   lines.push("");
@@ -139,6 +152,7 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("export const agent = createAgent({");
   lines.push("  channel, memory, router, model, tracer,");
   lines.push("  clock: systemClock,");
+  lines.push("  sessionProfileStore,");
   if (tools) {
     lines.push("  tools,");
     lines.push("  invokeTools,");
@@ -166,6 +180,7 @@ export function collectEnvVars(opts: RenderProjectOptions): EnvVarSpec[] {
   const tools = shopifyToolsSetup(answers.tools);
   if (tools) vars.push(...tools.envVars);
   vars.push(MEMORY_ENV);
+  vars.push(SESSION_PROFILE_ENV);
   return vars;
 }
 
@@ -258,7 +273,7 @@ function renderReadme(opts: RenderProjectOptions): string {
   lines.push("## 3. What was generated");
   lines.push("");
   lines.push(`- **Model:** ${answers.model.provider}`);
-  lines.push("- **Memory:** local SQLite file (`.wappy/memory.db`)");
+  lines.push("- **Memory:** local SQLite file (`.wappy/memory.db`), plus a session profile (`.wappy/session-profile.db`) — facts and where the conversation currently stands, TTL-bound");
   lines.push(`- **Tools:** ${answers.tools.kind === "shopify" ? "Shopify" : "none"}`);
   lines.push("");
   lines.push("Run `wappy status` any time to see what's done vs. pending, and `wappy doctor` to validate your env + connectivity.");
