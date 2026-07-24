@@ -51,6 +51,20 @@ describe("applyManifests", () => {
     expect(removedStepIds).toEqual(["old-step"]);
   });
 
+  test("two different parts declaring the same step id don't collide (aggregateSetupManifests only dedupes within a part)", () => {
+    const sameIdManifests: SetupManifest[] = [
+      { part: "whatsapp", steps: [{ id: "creds", description: "WA creds" }] },
+      { part: "shopify", steps: [{ id: "creds", description: "Shopify creds" }] },
+    ];
+    const seeded = { ...createEmptyState("r1"), steps: [{ id: "creds", part: "whatsapp", status: "done" as const }] };
+    const { state, removedStepIds } = applyManifests(seeded, [{ name: "whatsapp", version: "0.1.0" }, { name: "shopify", version: "0.1.0" }], sameIdManifests);
+    expect(state.steps).toEqual([
+      { id: "creds", part: "whatsapp", status: "done" }, // preserved — matched by (part, id), not id alone
+      { id: "creds", part: "shopify", status: "pending" }, // a distinct step despite the same id
+    ]);
+    expect(removedStepIds).toEqual([]);
+  });
+
   test("no manifests -> empty steps/envKeys, existing state.parts replaced", () => {
     const seeded = { ...createEmptyState("r1"), parts: [{ name: "stale", version: "0.0.1" }] };
     const { state } = applyManifests(seeded, [], []);

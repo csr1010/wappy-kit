@@ -1,5 +1,5 @@
 import { systemClock, type Clock } from "../clock.js";
-import type { State, StateStep } from "./schema.js";
+import { stepKey, type State, type StateStep } from "./schema.js";
 
 export interface StepDef {
   id: string;
@@ -16,7 +16,8 @@ export interface StepResult {
 }
 
 function upsertStep(steps: StateStep[], next: StateStep): StateStep[] {
-  const i = steps.findIndex((s) => s.id === next.id);
+  const key = stepKey(next);
+  const i = steps.findIndex((s) => stepKey(s) === key);
   if (i === -1) return [...steps, next];
   const copy = [...steps];
   copy[i] = next;
@@ -25,7 +26,8 @@ function upsertStep(steps: StateStep[], next: StateStep): StateStep[] {
 
 /** Idempotent: a step already `done` is skipped, never re-run. Persists status either way. */
 export async function runStep(state: State, def: StepDef, clock: Pick<Clock, "now"> = systemClock): Promise<{ state: State; result: StepResult }> {
-  const existing = state.steps.find((s) => s.id === def.id);
+  const key = stepKey(def);
+  const existing = state.steps.find((s) => stepKey(s) === key);
   if (existing?.status === "done") {
     return { state, result: { id: def.id, status: "done", skipped: true } };
   }
