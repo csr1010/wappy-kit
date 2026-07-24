@@ -116,6 +116,15 @@ describe("fetchSafely — redirects are re-validated on every hop", () => {
     expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(3); // initial + 2 redirects, then stop
   });
 
+  test("an intermediate redirect hop's body is drained (cancelled), not left unread — a leaked connection otherwise", async () => {
+    const cancel = vi.fn(async () => undefined);
+    const redirectResponse = { status: 302, headers: new Headers({ location: "https://other.example.com/y" }), body: { cancel } } as unknown as Response;
+    const fetchImpl = vi.fn().mockResolvedValueOnce(redirectResponse).mockResolvedValueOnce(fakeResponse(200));
+    const response = await fetchSafely("https://api.example.com/x", { resolveHostname: async () => ["93.184.216.34"], fetchImpl });
+    expect(response.status).toBe(200);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
   test("a relative Location header is resolved against the current URL before re-validation", async () => {
     const fetchImpl = vi
       .fn()

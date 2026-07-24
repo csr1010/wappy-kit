@@ -263,6 +263,38 @@ describe("buildExecutor — retries only idempotent GET/HEAD", () => {
     await execute({});
     expect(activeServer.requests).toHaveLength(1);
   });
+
+  test("a retried 5xx response's body is drained (cancelled), not leaked, before moving to the next attempt", async () => {
+    let cancelled = false;
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls++;
+      if (calls === 1) {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("server error detail"));
+            controller.close();
+          },
+          cancel() {
+            cancelled = true;
+          },
+        });
+        return new Response(body, { status: 503 });
+      }
+      return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const execute = buildExecutor(tool(), {
+      baseUrl: "https://example.invalid",
+      auth: NO_AUTH,
+      ssrf: { allowPrivateNetworks: true, fetchImpl },
+      maxRetries: 1,
+      retryDelayMs: 1,
+    });
+    const result = await execute({ id: "x" });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(2);
+    expect(cancelled).toBe(true);
+  });
 });
 
 describe("buildExecutor — security: path-injection and header/cookie-injection safety", () => {

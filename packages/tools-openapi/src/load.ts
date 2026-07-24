@@ -48,8 +48,11 @@ async function fetchEntrySpec(url: string, ssrfOptions: SafeFetchOptions | undef
   // guard, so the entry spec URL is fetched and re-validated (incl. every redirect hop) here first,
   // and only the already-fetched TEXT is handed downstream (§8 T7.8, "spec-URL fetch").
   const response = await fetchSafely(url, ssrfOptions);
-  if (!response.ok) throw new SpecLoadError(`Fetching spec from "${url}" failed: HTTP ${response.status}`);
+  // Read the body BEFORE checking .ok — fetchSafely()'s dispatcher-close relies on every caller
+  // draining (or cancelling) the body regardless of status, or the connection is left open until
+  // GC/timeout; an early throw on a non-ok status without reading first would leak it.
   const text = await response.text();
+  if (!response.ok) throw new SpecLoadError(`Fetching spec from "${url}" failed: HTTP ${response.status}`);
   try {
     return JSON.parse(text);
   } catch {
