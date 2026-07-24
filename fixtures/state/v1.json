@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "runId": "run_example_0001",
+  "parts": [
+    { "name": "whatsapp", "version": "0.1.0" },
+    { "name": "harness", "version": "0.1.0" }
+  ],
+  "steps": [
+    { "id": "creds", "part": "whatsapp", "status": "done" },
+    { "id": "model-key", "part": "harness", "status": "pending" }
+  ],
+  "envKeys": [
+    { "name": "WA_TOKEN", "required": true, "filled": true },
+    { "name": "OPENAI_API_KEY", "required": true, "filled": false }
+  ],
+  "lastStep": "creds",
+  "generatedFiles": [
+    { "path": "index.ts", "part": "harness", "sha256": "deadbeefcafebabe0000000000000000000000000000000000000000000001" }
+  ],
+  "createdAt": 1750000000000,
+  "updatedAt": 1750000001000
+}
