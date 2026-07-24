@@ -44,6 +44,19 @@ for (const [label, makeQueue] of [
     test("get() on an unknown key returns undefined", () => {
       expect(makeQueue().get("nope")).toBeUndefined();
     });
+
+    test("update() only touches the matching item, others are untouched", () => {
+      const q = makeQueue();
+      q.enqueue({ idempotencyKey: "k1", to: "c1", payload: {} }, 0);
+      q.enqueue({ idempotencyKey: "k2", to: "c2", payload: {} }, 0);
+      q.update("k1", { status: "sent" }, 5);
+      expect(q.get("k1")?.status).toBe("sent");
+      expect(q.get("k2")).toMatchObject({ status: "pending", updatedAt: 0 });
+    });
+
+    test("update() on an unknown key is a no-op, not a throw", () => {
+      expect(() => makeQueue().update("nope", { status: "sent" }, 0)).not.toThrow();
+    });
   });
 }
 
@@ -71,12 +84,22 @@ describe("createFileOutboundQueue — survives restart", () => {
     expect(q2.pending()).toEqual([]);
   });
 
-  test("a corrupt queue file starts fresh instead of crashing the process", () => {
+  test("a corrupt (invalid JSON) queue file starts fresh instead of crashing the process", () => {
     const path = join(tmpDir(), "queue.json");
     writeFileSync(path, "{ not json");
     const q = createFileOutboundQueue(path);
     expect(q.pending()).toEqual([]);
     expect(q.enqueue({ idempotencyKey: "k1", to: "c1", payload: {} }, 0).status).toBe("pending");
+  });
+
+  test("a queue file whose JSON is valid but not the expected shape ({items: [...]}) also starts fresh", () => {
+    const path = join(tmpDir(), "queue.json");
+    writeFileSync(path, JSON.stringify({ items: "not-an-array" }));
+    expect(createFileOutboundQueue(path).pending()).toEqual([]);
+
+    const path2 = join(tmpDir(), "queue2.json");
+    writeFileSync(path2, "{}");
+    expect(createFileOutboundQueue(path2).pending()).toEqual([]);
   });
 
   test("no leftover temp file after a write", () => {

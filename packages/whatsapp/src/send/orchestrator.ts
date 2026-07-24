@@ -53,7 +53,7 @@ export async function sendSmartMessage(message: SmartMessage, to: string, deps: 
   deps.fallbackStore?.record(to, numbered.options, now);
   const fallbackResult = await attemptAndReport(renderSmartMessage({ text: numbered.text }, to), to, deps, deps.idempotencyKey ? `${deps.idempotencyKey}:fallback` : undefined);
   if (fallbackResult.status === "sent") return { status: "fellBack", messageId: fallbackResult.messageId, reason: primary.reason };
-  return { status: "failed", reason: fallbackResult.reason ?? primary.reason };
+  return { status: "failed", reason: fallbackResult.reason };
 }
 
 async function attemptAndReport(payload: CloudApiOutboundPayload, to: string, deps: SendDeps, idempotencyKeyOverride?: string): Promise<DeliveryResult> {

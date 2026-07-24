@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import type { SmartMessage } from "@wappy/core";
 import { renderReaction, renderSmartMessage } from "./render.js";
 
 const TO = "15550002222";
@@ -64,6 +65,13 @@ describe("renderSmartMessage", () => {
   test("voice media maps to the Cloud API's audio type, with no caption (unsupported by Meta for audio)", () => {
     const payload = renderSmartMessage({ media: { kind: "voice", url: "https://example.com/a.ogg", caption: "ignored" } }, TO);
     expect(payload).toEqual({ messaging_product: "whatsapp", to: TO, type: "audio", audio: { link: "https://example.com/a.ogg" } });
+  });
+
+  test("buttons/list/cta/text all default an absent text to an empty body string", () => {
+    expect((renderSmartMessage({ buttons: [{ id: "a", title: "A" }] }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("");
+    expect((renderSmartMessage({ list: { buttonText: "x", sections: [{ rows: [{ id: "r", title: "R" }] }] } }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("");
+    expect((renderSmartMessage({ cta: { text: "x", url: "https://x.com" } }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("");
+    expect((renderSmartMessage({} as SmartMessage, TO) as { text: { body: string } }).text.body).toBe("");
   });
 
   test("a quoteId adds a context.message_id to any rendered type", () => {
