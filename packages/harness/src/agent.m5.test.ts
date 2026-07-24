@@ -278,6 +278,79 @@ describe("createAgent — retry after a failed send (the exact scenario the idem
   });
 });
 
+describe("createAgent — persisting rich (non-text) replies", () => {
+  test("a buttons-only reply (no `text`) is still persisted as a readable summary, not lost from memory", async () => {
+    const memory = fakeMemory();
+    const model: Model = { generate: async () => ({ structured: { buttons: [{ id: "a", title: "Track order" }, { id: "b", title: "Cancel order" }] } }) };
+    const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
+    const result = await agent.handle(msg());
+    expect(result.status).toBe("sent");
+    const agentTurn = memory.turns.find((t) => t.role === "agent");
+    expect(agentTurn?.text).toContain("Track order");
+    expect(agentTurn?.text).toContain("Cancel order");
+  });
+
+  test("a list-only reply is persisted with its row titles summarized", async () => {
+    const memory = fakeMemory();
+    const model: Model = {
+      generate: async () => ({
+        structured: { list: { buttonText: "Pick one", sections: [{ rows: [{ id: "a", title: "Size S" }, { id: "b", title: "Size M" }] }] } },
+      }),
+    };
+    const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
+    await agent.handle(msg());
+    const agentTurn = memory.turns.find((t) => t.role === "agent");
+    expect(agentTurn?.text).toContain("Size S");
+    expect(agentTurn?.text).toContain("Size M");
+  });
+
+  test("a cta-only reply is persisted with its link text and url", async () => {
+    const memory = fakeMemory();
+    const model: Model = { generate: async () => ({ structured: { cta: { text: "Visit our site", url: "https://example.com" } } }) };
+    const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
+    await agent.handle(msg());
+    const agentTurn = memory.turns.find((t) => t.role === "agent");
+    expect(agentTurn?.text).toContain("Visit our site");
+    expect(agentTurn?.text).toContain("https://example.com");
+  });
+
+  test("a media-only reply with a caption is persisted using the caption", async () => {
+    const memory = fakeMemory();
+    const model: Model = { generate: async () => ({ structured: { media: { kind: "image", url: "https://example.com/a.png", caption: "our new arrivals" } } }) };
+    const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
+    await agent.handle(msg());
+    const agentTurn = memory.turns.find((t) => t.role === "agent");
+    expect(agentTurn?.text).toBe("[image: our new arrivals]");
+  });
+
+  test("a media-only reply with no caption is persisted using just the media kind", async () => {
+    const memory = fakeMemory();
+    const model: Model = { generate: async () => ({ structured: { media: { kind: "video", url: "https://example.com/a.mp4" } } }) };
+    const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
+    await agent.handle(msg());
+    const agentTurn = memory.turns.find((t) => t.role === "agent");
+    expect(agentTurn?.text).toBe("[video]");
+  });
+
+  test("a persisted rich reply is not silently dropped from the next turn's model context (round-trips through toModelMessages)", async () => {
+    const memory = fakeMemory();
+    let secondCallHistory: Turn[] | undefined;
+    let calls = 0;
+    const model: Model = {
+      generate: async (req) => {
+        calls++;
+        if (calls === 1) return { structured: { buttons: [{ id: "a", title: "Track order" }] } };
+        secondCallHistory = req.history;
+        return { structured: { text: "ok" } };
+      },
+    };
+    const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
+    await agent.handle(msg({ id: "m1" }));
+    await agent.handle(msg({ id: "m2" }));
+    expect(secondCallHistory?.some((t) => t.role === "agent" && t.text?.includes("Track order"))).toBe(true);
+  });
+});
+
 describe("createAgent — idempotent persist", () => {
   test("replaying the same message id (e.g. a post-crash webhook retry) persists exactly one turn and doesn't re-send", async () => {
     const channel = fakeChannel("whatsapp");
