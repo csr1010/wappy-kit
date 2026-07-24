@@ -1,4 +1,5 @@
 import type { GeneratedTool } from "./operations.js";
+import { matchesAny } from "./glob.js";
 
 export interface PolicyOptions {
   /** Glob patterns (only `*`/`?` wildcards) matched against an operation's operationId, derived
@@ -18,24 +19,6 @@ export interface PolicyDecision {
   confirmBefore: boolean;
   /** Present when `included` is false — why this operation was excluded. */
   reason?: string;
-}
-
-function escapeRegExpLiteral(text: string): string {
-  // Escapes every regex-special char, INCLUDING * and ? — so the next step can reliably find the
-  // (now-escaped) wildcard markers and turn only those into their regex equivalents, rather than
-  // leaving a bare "*"/"?" to be misinterpreted as a real regex quantifier on the preceding char.
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Minimal glob matcher (`*` = any run of chars, `?` = one char) — no dependency, since this is a
- * handful of characters' worth of translation, not spec parsing. */
-function globToRegExp(pattern: string): RegExp {
-  const translated = escapeRegExpLiteral(pattern).replace(/\\\*/g, ".*").replace(/\\\?/g, ".");
-  return new RegExp(`^${translated}$`);
-}
-
-function matchesAny(patterns: string[], value: string): boolean {
-  return patterns.some((p) => globToRegExp(p).test(value));
 }
 
 /**
