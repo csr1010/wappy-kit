@@ -17,3 +17,4 @@ export * from "./bm25.js";
 export * from "./knowledge.js";
 export * from "./invoke-tools.js";
 export * from "./reference-skills.js";
+export * from "./confirm.js";

@@ -2,6 +2,7 @@ import type { InboundMessage, JsonSchema, Model, RouterDecision, Tool } from "@w
 import { selectTools } from "./tool-selector.js";
 import { boundToolResult, type BoundToolResultOptions } from "./bound-tool-result.js";
 import type { TokenEstimator } from "./context-budget.js";
+import type { ConfirmFlow } from "./confirm.js";
 
 export interface CreateToolInvokerOptions {
   model: Model;
@@ -17,6 +18,12 @@ export interface CreateToolInvokerOptions {
    * `ok:false` or itself throws — e.g. the underlying API is down — matching §10's "their API down
    * -> caught -> honest reply, escalate hook fired" (T8.6). */
   onToolFailure?: (info: { toolName: string; error: string }) => void | Promise<void>;
+  /** Required for a `confirmBefore: true` tool to ever actually execute (§8 "write/delete tools
+   * gated by confirmBefore"; T8.5): such a tool's execution is held pending instead of run
+   * immediately. Omitting this while a confirmBefore tool is in the pool is a safe default, not a
+   * silent gap — the tool is simply never executed, with an honest finding explaining why, rather
+   * than skipping the safety gate the app author presumably wanted by marking it confirmBefore. */
+  confirmFlow?: ConfirmFlow;
 }
 
 const DEFAULT_MAX_SCHEMA_TOKENS = 1000;
@@ -79,6 +86,17 @@ export function createToolInvoker(opts: CreateToolInvokerOptions): (input: { mes
 
     const tool = selected.find((t) => t.name === decision.toolName);
     if (!tool) return []; // model named a tool outside the candidate set it was actually offered — ignore, don't guess
+
+    if (tool.confirmBefore) {
+      if (!opts.confirmFlow) {
+        return [`Tool "${tool.name}" requires confirmation before it can run, but no confirmation flow is configured — tell the user honestly that you can't complete this action right now.`];
+      }
+      const summary = `${tool.name} with arguments ${JSON.stringify(decision.args ?? {})}`;
+      await opts.confirmFlow.request({ contactId: message.contactId, toolName: tool.name, args: decision.args ?? {}, summary });
+      return [
+        `This action (${summary}) requires user confirmation before it can proceed. In your reply, briefly explain what will happen and ask the user to confirm, including exactly two buttons: one with id "confirm" and title "Confirm", and one with id "cancel" and title "Cancel". Do NOT say this has already been done — it has NOT been executed yet.`,
+      ];
+    }
 
     let toolResult;
     try {
