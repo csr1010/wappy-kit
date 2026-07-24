@@ -1,0 +1,73 @@
+import { SmartMessageSchema, smartMessageJsonSchema, type Model, type SmartMessage } from "@wappy/core";
+import { assemblePrompt, type AssembleInput, type AssembleResult } from "./assemble.js";
+import type { ContextBudget } from "./context-budget.js";
+
+const REPAIR_NOTE = "\n\n(Your previous reply didn't match the required JSON schema — respond again with valid JSON only.)";
+const FALLBACK_TEXT = "Sorry, I'm having trouble putting together a reply right now — please try again shortly.";
+
+/** Provider-agnostic detection of a "context too long" failure (§10 T6.8): checks the normalized
+ * `code` convention used by testkit's mockModel first, then falls back to matching common phrasing
+ * across providers, since there's no single error type shared by every model provider. */
+function isContextLengthError(e: unknown): boolean {
+  if (e && typeof e === "object" && "code" in e && (e as { code: unknown }).code === "context_length_exceeded") return true;
+  const message = e instanceof Error ? e.message : String(e);
+  return /context.?length|too many tokens|maximum context|token limit|context window/i.test(message);
+}
+
+function shrinkBudget(budget: ContextBudget, factor: number): ContextBudget {
+  return { estimator: budget.estimator, promptBudget: Math.floor(budget.promptBudget * factor) };
+}
+
+export interface ComposeWithBudgetOptions {
+  model: Model;
+  input: AssembleInput;
+  budget: ContextBudget;
+}
+
+export interface ComposeWithBudgetResult {
+  reply: SmartMessage;
+  usage: Record<string, number>;
+  dropped: string[];
+  /** True if a context-length error triggered the shrink-and-retry (§10 T6.8). */
+  shrunkForContextLength: boolean;
+}
+
+/**
+ * Assembles a prompt (T6.2) and composes a SmartMessage, with ONE repair attempt across two
+ * distinct failure modes: malformed/invalid structured output (or any other error) gets the same
+ * repair-note retry as compose.ts's composeSmartMessage; a context-length error specifically SHRINKS
+ * the budget by 25% and retries instead (adding a repair note would only make an oversized prompt
+ * worse). Still degrades to whatever text either attempt produced, or an honest fallback, never a
+ * crash or a silent reply (§10).
+ */
+export async function composeWithBudget(opts: ComposeWithBudgetOptions): Promise<ComposeWithBudgetResult> {
+  let budget = opts.budget;
+  let input = opts.input;
+  let lastText: string | undefined;
+  let lastAssembled: AssembleResult | undefined;
+  let shrunkForContextLength = false;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const assembled = assemblePrompt(input, budget);
+    lastAssembled = assembled;
+    try {
+      const result = await opts.model.generate({ prompt: assembled.prompt, responseSchema: smartMessageJsonSchema });
+      if (result.text) lastText = result.text;
+      const parsed = SmartMessageSchema.safeParse(result.structured);
+      if (parsed.success) return { reply: parsed.data, usage: assembled.usage, dropped: assembled.dropped, shrunkForContextLength };
+      input = { ...opts.input, userMessage: opts.input.userMessage + REPAIR_NOTE };
+    } catch (e) {
+      if (isContextLengthError(e)) {
+        shrunkForContextLength = true;
+        budget = shrinkBudget(budget, 0.75);
+        input = opts.input; // don't also grow the prompt with a repair note when the problem is size
+      } else {
+        input = { ...opts.input, userMessage: opts.input.userMessage + REPAIR_NOTE };
+      }
+    }
+  }
+
+  // lastAssembled is always set: the loop above runs at least twice (attempt < 2 starts at 0) and
+  // assigns it unconditionally on every iteration before anything that could exit early.
+  return { reply: { text: lastText ?? FALLBACK_TEXT }, usage: lastAssembled!.usage, dropped: lastAssembled!.dropped, shrunkForContextLength };
+}

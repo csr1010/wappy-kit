@@ -1,12 +1,19 @@
-import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, SmartMessage, TracedSystem, Tracer, Turn } from "@wappy/core";
+import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, SmartMessage, TracedSystem, Tool, Tracer, Turn } from "@wappy/core";
 import { boundInboundText, DEFAULT_INBOUND_TEXT_LIMITS, type InboundTextLimits } from "./bound-inbound-text.js";
-import { composeSmartMessage } from "./compose.js";
+import { composeWithBudget } from "./compose-with-budget.js";
+import { createContextBudget, type ContextBudget } from "./context-budget.js";
+import { windowHistory } from "./history-window.js";
+import { selectTools } from "./tool-selector.js";
 import type { SkillRegistry } from "./skills.js";
 
 const SCOPE_GUARDRAIL = "If the user's request is genuinely unrelated to what you're configured to help with, say so honestly and directly rather than guessing or making something up.";
 
 const REFUSAL_TEXT = "That message is too long for me to process — could you send it as a shorter message?";
 const OVERSIZED_PLACEHOLDER = "(the user sent a message too large to process)";
+
+/** Used when the caller doesn't supply one — a conservative, safe-by-default budget (§10 T6.1). */
+const DEFAULT_CONTEXT_BUDGET: ContextBudget = createContextBudget("unrecognized");
+const DEFAULT_MAX_RECENT_TURNS = 20;
 
 /** TracedSystem values a MessageChannel is allowed to be traced under — deliberately closed (not
  * `channel.name` verbatim) so a customized channel name can't inject an out-of-union label into
@@ -25,6 +32,14 @@ export interface AgentDeps {
   retrieveRag?: (input: { contactId: string; query: string }) => Promise<string[]>;
   /** Tool-invocation hook — default: no-op (no findings). Real tool execution lands in M7 tools-openapi (§9 Scenario C is a stub here). */
   invokeTools?: (input: { message: InboundMessage; decision: RouterDecision }) => Promise<string[]>;
+  /** Pool available for runtime BM25 selection (T6.5) when a message needsTool — declaring available
+   * tools to the model is separate from actually invoking one (that's `invokeTools`, still a stub
+   * until M7). Default []. */
+  tools?: Tool[];
+  /** Bounds the whole assembled prompt (T6.1/T6.2); default is a conservative, model-agnostic budget. */
+  contextBudget?: ContextBudget;
+  /** Turns kept verbatim in the prompt; older history is summarized (T6.3). Default 20. */
+  maxRecentTurns?: number;
   /** Below this, skill/RAG/tool augmentation is suppressed but a reply is still always sent (§9 confidence gate). Default 0.3. */
   confidenceThreshold?: number;
   onEscalate?: (message: InboundMessage, decision: RouterDecision) => void | Promise<void>;
@@ -168,29 +183,37 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     }
 
     const confident = decision.confidence >= (deps.confidenceThreshold ?? 0.3);
-    // §10 "out-of-scope ask -> honest decline": a standing instruction, not special-cased branching —
-    // the model is trusted to say so plainly rather than guess when a request is genuinely unrelated
-    // to what it's configured to help with.
-    const promptParts: string[] = [SCOPE_GUARDRAIL, effectiveText ?? "(no text)"];
+    const budget = deps.contextBudget ?? DEFAULT_CONTEXT_BUDGET;
 
+    const skillFragments: string[] = [];
+    let skillToolNames: string[] = [];
     if (confident && decision.skill) {
       const skill = await safeCall(async () => deps.skills?.get(decision.skill!), undefined);
       if (skill) {
         trace(deps.tracer, "skill", "selected", { skill: skill.name });
-        promptParts.unshift(skill.promptFragment);
+        skillFragments.push(skill.promptFragment);
+        skillToolNames = skill.tools ?? [];
       }
     }
 
+    const recalledSnippets: string[] = [];
     if (confident && decision.needsRAG && deps.retrieveRag) {
       trace(deps.tracer, "rag", "retrieve");
       const snippets = await safeCall(() => deps.retrieveRag!({ contactId: message.contactId, query: effectiveText ?? "" }), []);
-      if (snippets.length > 0) promptParts.push(`Relevant context:\n${snippets.join("\n")}`);
+      recalledSnippets.push(...snippets);
     }
 
-    if (confident && decision.needsTool && deps.invokeTools) {
-      trace(deps.tracer, "tools", "invoke");
-      const findings = await safeCall(() => deps.invokeTools!({ message, decision }), []);
-      if (findings.length > 0) promptParts.push(`Tool results:\n${findings.join("\n")}`);
+    const toolSchemas: string[] = [];
+    if (confident && decision.needsTool) {
+      if (deps.invokeTools) {
+        trace(deps.tracer, "tools", "invoke");
+        const findings = await safeCall(() => deps.invokeTools!({ message, decision }), []);
+        recalledSnippets.push(...findings.map((f) => `Tool result: ${f}`));
+      }
+      if (deps.tools && deps.tools.length > 0) {
+        const selected = selectTools({ tools: deps.tools, message: effectiveText ?? "", alwaysInclude: skillToolNames, maxTokens: budget.promptBudget });
+        toolSchemas.push(...selected.map((t) => JSON.stringify({ name: t.name, description: t.description, parameters: t.parameters })));
+      }
     }
 
     if (decision.escalate && deps.onEscalate) {
@@ -200,8 +223,29 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
       }, undefined);
     }
 
-    trace(deps.tracer, "llm", "compose");
-    reply = await composeSmartMessage({ model: deps.model, prompt: promptParts.join("\n\n"), history });
+    // §10 "out-of-scope ask -> honest decline": a standing instruction, not special-cased branching —
+    // the model is trusted to say so plainly rather than guess when a request is genuinely unrelated
+    // to what it's configured to help with. Kept as its own leading skill-like fragment.
+    const windowed = await windowHistory({ model: deps.model, memory: deps.memory, contactId: message.contactId, history, maxRecentTurns: deps.maxRecentTurns ?? DEFAULT_MAX_RECENT_TURNS, clock: deps.clock });
+
+    const composed = await composeWithBudget({
+      model: deps.model,
+      input: {
+        system: SCOPE_GUARDRAIL,
+        skillFragments,
+        toolSchemas,
+        summary: windowed.summary,
+        recalledSnippets,
+        recentTurns: windowed.recentTurns,
+        userMessage: effectiveText ?? "(no text)",
+      },
+      budget,
+    });
+    // One "llm" event (not two) carries both the compose step and its token-usage-per-section (T6.9)
+    // — spine A's own assertion counts "llm" trace events as a proxy for underlying model calls, and
+    // this compose step is exactly one such call (retries/shrinks happen inside composeWithBudget).
+    trace(deps.tracer, "llm", "compose", { usage: composed.usage, dropped: composed.dropped, shrunkForContextLength: composed.shrunkForContextLength });
+    reply = composed.reply;
   }
 
   const channelSystem = KNOWN_TRACED_CHANNELS.has(deps.channel.name) ? (deps.channel.name as TracedSystem) : undefined;
