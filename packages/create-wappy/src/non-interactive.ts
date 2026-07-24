@@ -21,8 +21,6 @@ export interface NonInteractiveFlags {
   /** Accept the default (`DEFAULT_ANSWERS`) for any step whose flag is omitted. */
   yes?: boolean;
   model?: string;
-  /** "none" | "shopify". */
-  api?: string;
 }
 
 export type NonInteractiveResult = { ok: true; answers: CompleteInterviewAnswers } | { ok: false; errors: string[] };
@@ -43,13 +41,6 @@ function resolveStepAnswer(step: InterviewStepId, flags: NonInteractiveFlags, er
         return undefined;
       }
       return { provider: flags.model };
-    }
-    case "tools": {
-      if (flags.api === undefined) return undefined;
-      if (flags.api === "none") return { kind: "none" };
-      if (flags.api === "shopify") return { kind: "shopify" };
-      errors.push(`--api must be one of none|shopify, got "${flags.api}".`);
-      return undefined;
     }
   }
 }
@@ -73,9 +64,13 @@ export function resolveNonInteractiveAnswers(flags: NonInteractiveFlags): NonInt
       errors.push(`Missing required flag for step "${step}" (pass it explicitly, or use --yes to accept the default).`);
       continue;
     }
+    // resolveStepAnswer (above) already only ever produces a well-formed ModelAnswer here (a real
+    // provider string, checked by isModelProvider, or DEFAULT_ANSWERS.model) — applyAnswer's own
+    // validation can't fail on it. Asserted rather than branched-and-swallowed, so a future change
+    // to resolveStepAnswer that DID produce a malformed value would surface loudly, not silently.
     const result = applyAnswer(answers, step, value);
-    if (!result.ok) errors.push(...result.errors);
-    else answers = result.answers;
+    if (!result.ok) throw new Error(`unreachable: ${result.errors.join("\n")}`);
+    answers = result.answers;
   }
 
   if (errors.length > 0) return { ok: false, errors };

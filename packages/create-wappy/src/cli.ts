@@ -24,11 +24,10 @@ Usage:
   create-wappy                      interactive interview
   create-wappy --yes                interactive interview, but every omitted step takes its default
   create-wappy [flags]              non-interactive, e.g.:
-    --model openai --api shopify
+    --model openai
 
 Flags:
   --model <openai|anthropic|gemini|ollama>
-  --api <none|shopify>
   --dir <path>                        target directory (default: current directory)
   --yes, -y                           accept defaults for any omitted step
   --help, -h                          show this help

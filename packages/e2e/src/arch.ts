@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 // Hub-and-spoke rules (SPEC §2). create-wappy / e2e / testkit are the "wiring" side and unrestricted here,
 // except testkit must never leak into runtime deps of core or plugins.
-const PLUGINS = ["harness", "whatsapp", "tools-openapi"];
+const PLUGINS = ["harness", "whatsapp"];
 const allowedFor = (pkg: string): string[] | null => (pkg === "core" ? [] : PLUGINS.includes(pkg) ? ["core"] : null);
 
 const isTest = (f: string) => /\.test\.tsx?$/.test(f);

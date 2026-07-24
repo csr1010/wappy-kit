@@ -5,14 +5,13 @@ import { join } from "node:path";
 import { DEFAULT_ANSWERS, type CompleteInterviewAnswers, type InterviewAnswers } from "./interview.js";
 import { generateProject, StateLoadError, type GenerateProjectOptions } from "./generate.js";
 
-const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", toolsOpenapi: "0.1.0", createWappy: "0.1.0" };
+const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", createWappy: "0.1.0" };
 
-// M12 removed the interview's "skills" step — `complete()` no longer needs the Shopify-path branch
-// it used to have (`--allow-test-change`, SPEC.md decisions log).
+// The interview's "tools" step (M9, Shopify) was removed entirely — `complete()` no longer needs
+// the Shopify-path branch it used to have (`--allow-test-change`, SPEC.md decisions log).
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
   const model = overrides.model ?? DEFAULT_ANSWERS.model;
-  const tools = overrides.tools ?? DEFAULT_ANSWERS.tools;
-  return { model, tools };
+  return { model };
 }
 
 const dirs: string[] = [];
@@ -32,7 +31,7 @@ function fakeClock() {
 
 function baseOptions(projectRoot: string): GenerateProjectOptions {
   return {
-    answers: complete({ tools: { kind: "shopify" } }),
+    answers: complete(),
     versions: VERSIONS,
     projectRoot,
     projectName: "luna-and-co-bot",
@@ -51,7 +50,7 @@ describe("generateProject — defaults", () => {
 });
 
 describe("generateProject — writes every rendered file to disk", () => {
-  test("a fresh project directory gets index.ts, tools/, .env.sample, .gitignore, package.json, README.md, and .wappy/state.json", async () => {
+  test("a fresh project directory gets index.ts, .env.sample, .gitignore, package.json, README.md, and .wappy/state.json", async () => {
     const root = tmpProjectRoot();
     const result = await generateProject(baseOptions(root));
 
@@ -69,7 +68,7 @@ describe("generateProject — writes every rendered file to disk", () => {
 
     expect(result.state.steps.every((s) => s.status === "done" && s.part === "create-wappy")).toBe(true);
     expect(result.state.steps.map((s) => s.id)).toContain("generate:index.ts");
-    expect(result.state.envKeys.map((e) => e.name)).toContain("SHOPIFY_ACCESS_TOKEN");
+    expect(result.state.envKeys.map((e) => e.name)).toContain("OPENAI_API_KEY");
     const indexHash = result.state.generatedFiles.find((f) => f.path === "index.ts");
     expect(indexHash?.sha256).toMatch(/^[0-9a-f]{64}$/);
   });

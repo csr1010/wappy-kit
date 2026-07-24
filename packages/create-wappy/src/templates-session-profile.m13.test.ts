@@ -2,10 +2,10 @@ import { describe, expect, test } from "vitest";
 import { DEFAULT_ANSWERS, type CompleteInterviewAnswers, type InterviewAnswers } from "./interview.js";
 import { renderProject, type PartVersions } from "./templates.js";
 
-const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", toolsOpenapi: "0.1.0", createWappy: "0.1.0" };
+const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", createWappy: "0.1.0" };
 
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
-  return { model: overrides.model ?? DEFAULT_ANSWERS.model, tools: overrides.tools ?? DEFAULT_ANSWERS.tools };
+  return { model: overrides.model ?? DEFAULT_ANSWERS.model };
 }
 
 function fileMap(files: { path: string; content: string }[]): Map<string, string> {
@@ -14,14 +14,15 @@ function fileMap(files: { path: string; content: string }[]): Map<string, string
 
 /**
  * M13 follow-on: the session profile is default-on for every generated project, same posture as
- * Memory itself — no interview question, no opt-in flag, works identically regardless of what
- * tools/model were chosen.
+ * Memory itself — no interview question, no opt-in flag, works identically regardless of which
+ * model was chosen. (The "tools" step's Shopify combo this file used to also check was removed
+ * along with the step itself — domain connectors are out of scope for this repo now — `--allow-
+ * test-change`, SPEC.md decisions log.)
  */
 describe("renderProject — session profile is default-on, every combo", () => {
   test.each([
-    ["no store", complete()],
-    ["shopify", complete({ tools: { kind: "shopify" } })],
-    ["ollama, no store", complete({ model: { provider: "ollama" } })],
+    ["openai (default)", complete()],
+    ["ollama", complete({ model: { provider: "ollama" } })],
   ] as const)("%s: index.ts wires createLibsqlSessionProfileStore and passes it to createAgent", (_label, answers) => {
     const files = fileMap(renderProject({ answers, versions: VERSIONS }));
     const indexTs = files.get("index.ts")!;

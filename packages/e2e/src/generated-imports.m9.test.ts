@@ -12,14 +12,15 @@ import { DEFAULT_ANSWERS, renderProject, type RenderProjectOptions } from "creat
  * packages; every unit test only does string-matching (`toContain(...)`) on the rendered source.
  *
  * This test closes that class of bug generically: for every combination `renderProject` can emit,
- * every `import { a, b, ... } from "@wappy/X"` in the generated `index.ts`/`tools/*.ts` names only
- * symbols `@wappy/X`'s own BUILT dist actually exports. Needs a prior `pnpm build`. (M12 removed the
- * `skills/*.ts` files this used to also scan — `@wappy/harness` ships no reference skills anymore.)
+ * every `import { a, b, ... } from "@wappy/X"` in the generated `index.ts` names only symbols
+ * `@wappy/X`'s own BUILT dist actually exports. Needs a prior `pnpm build`. (M12 removed the
+ * `skills/*.ts` files this used to also scan; the "tools" step/`tools/*.ts` files this used to also
+ * scan were removed entirely afterward — `@wappy/tools-openapi` no longer ships from this repo.)
  */
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", toolsOpenapi: "0.1.0" };
-const PACKAGE_DIR: Record<string, string> = { "@wappy/core": "core", "@wappy/harness": "harness", "@wappy/whatsapp": "whatsapp", "@wappy/tools-openapi": "tools-openapi" };
+const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0" };
+const PACKAGE_DIR: Record<string, string> = { "@wappy/core": "core", "@wappy/harness": "harness", "@wappy/whatsapp": "whatsapp" };
 
 const IMPORT_RE = /^import\s+(?:type\s+)?\{([^}]+)\}\s+from\s+"(@wappy\/[a-z-]+)";?$/gm;
 
@@ -40,9 +41,9 @@ function importedNames(content: string): { pkg: string; names: string[] }[] {
 }
 
 const combos: { label: string; answers: RenderProjectOptions["answers"] }[] = [
-  { label: "no store", answers: { model: DEFAULT_ANSWERS.model, tools: { kind: "none" } } },
-  { label: "shopify", answers: { model: { provider: "anthropic" }, tools: { kind: "shopify" } } },
-  { label: "shopify, ollama", answers: { model: { provider: "ollama" }, tools: { kind: "shopify" } } },
+  { label: "openai (default)", answers: { model: DEFAULT_ANSWERS.model } },
+  { label: "anthropic", answers: { model: { provider: "anthropic" } } },
+  { label: "ollama", answers: { model: { provider: "ollama" } } },
 ];
 
 describe.each(combos)("generated project imports are real, for combo: $label", ({ answers }) => {

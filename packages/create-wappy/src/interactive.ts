@@ -1,12 +1,5 @@
 import * as clack from "@clack/prompts";
-import {
-  applyAnswer,
-  isComplete,
-  nextQuestion,
-  type CompleteInterviewAnswers,
-  type InterviewAnswers,
-  type ModelProvider,
-} from "./interview.js";
+import { applyAnswer, isComplete, nextQuestion, type CompleteInterviewAnswers, type InterviewAnswers, type ModelProvider } from "./interview.js";
 
 /**
  * The thin `@clack/prompts` layer T9.1 asked for — pure UI, zero validation or sequencing logic of
@@ -29,8 +22,14 @@ async function selectOne<T extends string>(message: string, choices: { value: st
   return choice as T;
 }
 
-/** Runs the interactive interview (model, tools) and returns a complete, valid `InterviewAnswers`;
- * re-prompts a step on an invalid answer instead of ever exiting mid-interview with a partial state. */
+/**
+ * Runs the interactive interview (just the `model` step, since the "tools" step was removed
+ * entirely — domain connectors are out of scope for this repo now) and returns a complete, valid
+ * `InterviewAnswers`. No "re-prompt on an invalid answer" loop here: with `model` the only step,
+ * `applyAnswer` can never reject what `selectOne` returns (it's always one of the choices clack was
+ * given), so that branch would be dead code, not real defensiveness — it existed when a second step
+ * (the removed "tools" one) could genuinely produce an invalid combination.
+ */
 export async function runInteractiveInterview(): Promise<CompleteInterviewAnswers> {
   clack.intro("create-wappy — let's set up your WhatsApp agent");
   let answers: InterviewAnswers = {};
@@ -43,16 +42,10 @@ export async function runInteractiveInterview(): Promise<CompleteInterviewAnswer
       case "model":
         value = { provider: await selectOne<ModelProvider>(q.prompt, q.choices!) };
         break;
-      case "tools":
-        value = { kind: await selectOne<"none" | "shopify">(q.prompt, q.choices!) };
-        break;
     }
 
     const result = applyAnswer(answers, q.step, value);
-    if (!result.ok) {
-      clack.log.error(result.errors.join("\n"));
-      continue;
-    }
+    if (!result.ok) throw new Error(`unreachable: ${result.errors.join("\n")}`);
     answers = result.answers;
   }
 

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 // which crashed the installed `create-wappy` bin on startup. Needs a prior `pnpm build`
 // (the gate builds before running tests).
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const publishable = ["core", "harness", "whatsapp", "tools-openapi", "create-wappy"];
+const publishable = ["core", "harness", "whatsapp", "create-wappy"];
 
 function packedFiles(pkg: string): string[] {
   const dir = resolve(repoRoot, "packages", pkg);
