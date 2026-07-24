@@ -1,2 +1,5 @@
 packages:
   - "packages/*"
+minimumReleaseAgeExclude:
+  - '@apidevtools/json-schema-ref-parser@16.0.3'
+  - '@apidevtools/swagger-parser@13.1.0'
