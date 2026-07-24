@@ -53,9 +53,11 @@ export async function sendSmartMessage(message: SmartMessage, to: string, deps: 
   }
 
   const primary = await attemptAndReport(payload, to, deps);
-  if (primary.status === "sent" || decision.kind === "template") return primary; // no further fallback ladder past a template attempt
+  // decision.kind is guaranteed "freeform" past this point: "queued" already returned above, and
+  // "template" returns here too — no further fallback ladder past a template attempt.
+  if (primary.status === "sent" || decision.kind === "template") return primary;
 
-  const hasRichOptions = decision.kind === "freeform" && Boolean(constrained.buttons ?? constrained.list);
+  const hasRichOptions = Boolean(constrained.buttons ?? constrained.list);
   if (!hasRichOptions) return primary;
 
   const numbered = renderNumberedFallback(constrained);
