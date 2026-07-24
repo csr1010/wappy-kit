@@ -249,24 +249,28 @@ export function createShopifyToolProvider(opts: CreateShopifyToolProviderOptions
   const tools: Tool[] = [
     {
       name: "searchProducts",
-      description: "Search the store's products by title/tag/type keywords. Returns id, title, handle, status, inventory, and price range for each match.",
+      description: "List or search the store's products, optionally filtered by title/tag/type keywords. Omit query to list products generally (\"show me your products\"). Returns id, title, handle, status, inventory, and price range for each match.",
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Free-text search, e.g. a product name or keyword." },
+          query: { type: "string", description: 'Free-text search, e.g. a product name or keyword. Omit to list products without filtering — Shopify\'s own API treats a null query as "no filter", not an error.' },
           limit: { type: "integer", minimum: 1, maximum: 50, description: "Max products to return. Default 10." },
         },
-        required: ["query"],
+        required: [],
       },
       readOnly: true,
       confirmBefore: false,
       async execute(args): Promise<ToolResult> {
         const { query: q, limit } = (args ?? {}) as { query?: string; limit?: number };
-        if (!q) return failed("searchProducts", 'Missing required "query" argument.');
         const first = Math.min(Math.max(limit ?? 10, 1), 50);
+        // $q is nullable — found by hand-testing a real store: the earlier version required a
+        // non-empty query at BOTH this JS check AND the GraphQL document (`$q: String!`), even
+        // though Shopify's own API returns all products for a null query. A plain browsing ask
+        // ("show me your products") has no natural keyword, so requiring one made this tool unusable
+        // for its own most common case.
         const result = await call(
-          `query($q: String!, $first: Int!) { products(first: $first, query: $q) { edges { node { id title handle status totalInventory priceRangeV2 { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } } } } } }`,
-          { q, first },
+          `query($q: String, $first: Int!) { products(first: $first, query: $q) { edges { node { id title handle status totalInventory priceRangeV2 { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } } } } } }`,
+          { q: q && q.length > 0 ? q : null, first },
         );
         if (!result.ok) return failed("searchProducts", result.error);
         const edges = ((result.data as { products?: { edges?: { node: ProductNode }[] } })?.products?.edges ?? []) as { node: ProductNode }[];
