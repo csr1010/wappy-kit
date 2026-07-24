@@ -84,7 +84,7 @@ test("Shopify policy auto-ingest — a refundPolicy fetched from Shopify grounds
 
   const model = mockModel([
     { structured: { intent: "refund-policy", skill: "store-info", needsRAG: true, needsTool: false, escalate: false, confidence: 0.9 } }, // router's decision
-    { structured: { text: "You can return items within 45 days of delivery as long as you have your receipt." } }, // grounded compose reply
+    { structured: { formatRationale: "test rationale", message: { text: "You can return items within 45 days of delivery as long as you have your receipt." } } }, // grounded compose reply
   ]);
   const tracer = createInMemoryTracer();
   const memory = inMemoryMemory();

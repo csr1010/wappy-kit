@@ -41,7 +41,7 @@ test("Spine A — \"hi\" touches exactly {whatsapp, memory, router, llm}, one LL
   const whatsapp = await mockWhatsAppCloud();
   const model = mockModel([
     { structured: { intent: "greeting", needsRAG: false, needsTool: false, escalate: false, confidence: 0.9 } }, // router's decision
-    { structured: { text: "Hi there! How can I help you today?" } }, // the composed reply
+    { structured: { formatRationale: "test rationale", message: { text: "Hi there! How can I help you today?" } } }, // the composed reply
   ]);
   const tracer = createInMemoryTracer();
   const memory = inMemoryMemory();

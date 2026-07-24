@@ -90,7 +90,7 @@ test('Spine C — "where\'s my order 8842?" touches exactly {whatsapp, memory, r
   const model = mockModel([
     { structured: { intent: "order-status", skill: "orders", needsRAG: false, needsTool: true, escalate: false, confidence: 0.9 } }, // router's decision
     { structured: { toolName: "getOrder", args: { id: "8842" } } }, // invokeTools' tool decision
-    { structured: { text: "Your order #8842 is in transit — tracking 1Z999AA1, expected soon!" } }, // grounded compose reply
+    { structured: { formatRationale: "test rationale", message: { text: "Your order #8842 is in transit — tracking 1Z999AA1, expected soon!" } } }, // grounded compose reply
   ]);
   const tracer = createInMemoryTracer();
   const memory = inMemoryMemory();

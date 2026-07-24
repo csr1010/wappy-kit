@@ -149,3 +149,11 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
 
 - 2026-09-22: gate M8 --allow-test-change: SPEC v2.6 - Meta rejects empty interactive.body.text, render.m4.test.ts corrected accordingly (already logged, re-detected every run since M9-M11 aren't tagged done yet)
   M	packages/whatsapp/src/send/render.m4.test.ts
+
+- 2026-09-22: gate M8 --allow-test-change: M12: compose response wrapped with formatRationale (SPEC v2.7); recalibrated two m6 tests' hardcoded context-budget thresholds since system prompt legitimately grew (embedded in assembled prompt's mandatory section)
+  M	packages/e2e/src/spine-a.m5.test.ts
+  M	packages/harness/src/agent-context-management.m6.test.ts
+  M	packages/harness/src/agent-oversized-text.m6.test.ts
+  M	packages/harness/src/agent.m5.test.ts
+  M	packages/harness/src/compose-with-budget.m6.test.ts
+  M	packages/whatsapp/src/send/render.m4.test.ts

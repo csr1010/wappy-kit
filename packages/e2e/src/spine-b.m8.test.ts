@@ -47,7 +47,7 @@ test('Spine B — "what are your store hours?" touches exactly {whatsapp, memory
 
   const model = mockModel([
     { structured: { intent: "hours", skill: "store-info", needsRAG: true, needsTool: false, escalate: false, confidence: 0.9 } }, // router's decision
-    { structured: { text: "We're open 9am–6pm, Monday to Saturday, and closed Sundays and holidays." } }, // the grounded compose reply
+    { structured: { formatRationale: "test rationale", message: { text: "We're open 9am–6pm, Monday to Saturday, and closed Sundays and holidays." } } }, // the grounded compose reply
   ]);
   const tracer = createInMemoryTracer();
   const memory = inMemoryMemory();
@@ -93,7 +93,7 @@ test("Spine B — an empty Knowledge store recalls nothing; the compose prompt c
 
   const model = mockModel([
     { structured: { intent: "hours", skill: "store-info", needsRAG: true, needsTool: false, escalate: false, confidence: 0.9 } },
-    { structured: { text: "I don't have that information on hand — I'll have the team follow up with the exact hours." } },
+    { structured: { formatRationale: "test rationale", message: { text: "I don't have that information on hand — I'll have the team follow up with the exact hours." } } },
   ]);
   const tracer = createInMemoryTracer();
   const memory = inMemoryMemory();

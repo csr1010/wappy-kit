@@ -10,7 +10,7 @@ function msg(overrides: Partial<InboundMessage> = {}): InboundMessage {
 }
 
 function textModel(text = "reply"): Model {
-  return { generate: async () => ({ structured: { text } }) };
+  return { generate: async () => ({ structured: { formatRationale: "test rationale", message: { text } } }) };
 }
 
 const GREETING: RouterDecision = { intent: "greeting", needsRAG: false, needsTool: false, escalate: false, confidence: 0.9 };
@@ -37,7 +37,7 @@ describe("createAgent — happy path (Scenario A: \"hi\")", () => {
 
   test("a textless message (e.g. media-only) still composes and sends a reply, using a placeholder in the prompt", async () => {
     let seenPrompt = "";
-    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { text: "got your photo!" } }; } };
+    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { formatRationale: "test rationale", message: { text: "got your photo!" } } }; } };
     const agent = createAgent({ channel: fakeChannel("whatsapp"), memory: fakeMemory(), router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
     const result = await agent.handle(msg({ text: undefined }));
     expect(result.status).toBe("sent");
@@ -72,7 +72,7 @@ describe("createAgent — skill", () => {
     const skills = createSkillRegistry();
     skills.register({ name: "store-info", description: "x", promptFragment: "STORE_INFO_FRAGMENT" });
     let seenPrompt = "";
-    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { text: "hours are 9-5" } }; } };
+    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { formatRationale: "test rationale", message: { text: "hours are 9-5" } } }; } };
     const tracer = createInMemoryTracer();
     const agent = createAgent({
       channel: fakeChannel("whatsapp"),
@@ -108,7 +108,7 @@ describe("createAgent — skill", () => {
 describe("createAgent — RAG / tools hooks", () => {
   test("needsRAG=true with a retrieveRag hook injects its snippets into compose and is traced", async () => {
     let seenPrompt = "";
-    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { text: "we're at 123 Main St" } }; } };
+    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { formatRationale: "test rationale", message: { text: "we're at 123 Main St" } } }; } };
     const tracer = createInMemoryTracer();
     const agent = createAgent({
       channel: fakeChannel("whatsapp"),
@@ -141,7 +141,7 @@ describe("createAgent — RAG / tools hooks", () => {
 
   test("needsTool=true with an invokeTools hook injects its findings into compose and is traced", async () => {
     let seenPrompt = "";
-    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { text: "order 8842 has shipped" } }; } };
+    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { formatRationale: "test rationale", message: { text: "order 8842 has shipped" } } }; } };
     const tracer = createInMemoryTracer();
     const agent = createAgent({
       channel: fakeChannel("whatsapp"),
@@ -179,7 +179,7 @@ describe("createAgent — confidence gate", () => {
     const skills = createSkillRegistry();
     skills.register({ name: "store-info", description: "x", promptFragment: "STORE_INFO_FRAGMENT" });
     let seenPrompt = "";
-    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { text: "not sure, let me check" } }; } };
+    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { formatRationale: "test rationale", message: { text: "not sure, let me check" } } }; } };
     const tracer = createInMemoryTracer();
     const agent = createAgent({
       channel: fakeChannel("whatsapp"),
@@ -205,7 +205,7 @@ describe("createAgent — confidence gate", () => {
 describe("createAgent — out-of-scope decline (§10)", () => {
   test("the compose prompt always includes a standing instruction to honestly decline out-of-scope requests", async () => {
     let seenPrompt = "";
-    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { text: "ok" } }; } };
+    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { formatRationale: "test rationale", message: { text: "ok" } } }; } };
     const agent = createAgent({ channel: fakeChannel("whatsapp"), memory: fakeMemory(), router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
     await agent.handle(msg());
     expect(seenPrompt).toContain("say so honestly");
@@ -287,7 +287,7 @@ describe("createAgent — retry after a failed send (the exact scenario the idem
 describe("createAgent — persisting rich (non-text) replies", () => {
   test("a buttons-only reply (no `text`) is still persisted as a readable summary, not lost from memory", async () => {
     const memory = fakeMemory();
-    const model: Model = { generate: async () => ({ structured: { buttons: [{ id: "a", title: "Track order" }, { id: "b", title: "Cancel order" }] } }) };
+    const model: Model = { generate: async () => ({ structured: { formatRationale: "test rationale", message: { buttons: [{ id: "a", title: "Track order" }, { id: "b", title: "Cancel order" }] } } }) };
     const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
     const result = await agent.handle(msg());
     expect(result.status).toBe("sent");
@@ -300,7 +300,7 @@ describe("createAgent — persisting rich (non-text) replies", () => {
     const memory = fakeMemory();
     const model: Model = {
       generate: async () => ({
-        structured: { list: { buttonText: "Pick one", sections: [{ rows: [{ id: "a", title: "Size S" }, { id: "b", title: "Size M" }] }] } },
+        structured: { formatRationale: "test rationale", message: { list: { buttonText: "Pick one", sections: [{ rows: [{ id: "a", title: "Size S" }, { id: "b", title: "Size M" }] }] } } },
       }),
     };
     const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
@@ -312,7 +312,7 @@ describe("createAgent — persisting rich (non-text) replies", () => {
 
   test("a cta-only reply is persisted with its link text and url", async () => {
     const memory = fakeMemory();
-    const model: Model = { generate: async () => ({ structured: { cta: { text: "Visit our site", url: "https://example.com" } } }) };
+    const model: Model = { generate: async () => ({ structured: { formatRationale: "test rationale", message: { cta: { text: "Visit our site", url: "https://example.com" } } } }) };
     const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
     await agent.handle(msg());
     const agentTurn = memory.turns.find((t) => t.role === "agent");
@@ -322,7 +322,7 @@ describe("createAgent — persisting rich (non-text) replies", () => {
 
   test("a media-only reply with a caption is persisted using the caption", async () => {
     const memory = fakeMemory();
-    const model: Model = { generate: async () => ({ structured: { media: { kind: "image", url: "https://example.com/a.png", caption: "our new arrivals" } } }) };
+    const model: Model = { generate: async () => ({ structured: { formatRationale: "test rationale", message: { media: { kind: "image", url: "https://example.com/a.png", caption: "our new arrivals" } } } }) };
     const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
     await agent.handle(msg());
     const agentTurn = memory.turns.find((t) => t.role === "agent");
@@ -331,7 +331,7 @@ describe("createAgent — persisting rich (non-text) replies", () => {
 
   test("a media-only reply with no caption is persisted using just the media kind", async () => {
     const memory = fakeMemory();
-    const model: Model = { generate: async () => ({ structured: { media: { kind: "video", url: "https://example.com/a.mp4" } } }) };
+    const model: Model = { generate: async () => ({ structured: { formatRationale: "test rationale", message: { media: { kind: "video", url: "https://example.com/a.mp4" } } } }) };
     const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
     await agent.handle(msg());
     const agentTurn = memory.turns.find((t) => t.role === "agent");
@@ -345,9 +345,9 @@ describe("createAgent — persisting rich (non-text) replies", () => {
     const model: Model = {
       generate: async (req) => {
         calls++;
-        if (calls === 1) return { structured: { buttons: [{ id: "a", title: "Track order" }] } };
+        if (calls === 1) return { structured: { formatRationale: "test rationale", message: { buttons: [{ id: "a", title: "Track order" }] } } };
         if (calls === 2) secondCallPrompt = req.prompt; // fakeRouter doesn't call the model, so call 2 is the second message's compose
-        return { structured: { text: "ok" } };
+        return { structured: { formatRationale: "test rationale", message: { text: "ok" } } };
       },
     };
     const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
@@ -391,7 +391,7 @@ describe("createAgent — per-contact serialization", () => {
       generate: async (req) => {
         calls++;
         if (calls === 2) secondCallPrompt = req.prompt;
-        return { structured: { text: `reply ${calls}` } };
+        return { structured: { formatRationale: "test rationale", message: { text: `reply ${calls}` } } };
       },
     };
     const agent = createAgent({ channel: fakeChannel("whatsapp"), memory: delayedMemory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
