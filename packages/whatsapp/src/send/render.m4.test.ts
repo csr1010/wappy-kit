@@ -67,11 +67,22 @@ describe("renderSmartMessage", () => {
     expect(payload).toEqual({ messaging_product: "whatsapp", to: TO, type: "audio", audio: { link: "https://example.com/a.ogg" } });
   });
 
-  test("buttons/list/cta/text all default an absent text to an empty body string", () => {
-    expect((renderSmartMessage({ buttons: [{ id: "a", title: "A" }] }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("");
-    expect((renderSmartMessage({ list: { buttonText: "x", sections: [{ rows: [{ id: "r", title: "R" }] }] } }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("");
-    expect((renderSmartMessage({ cta: { text: "x", url: "https://x.com" } }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("");
+  // Corrected (SPEC.md decisions log): Meta HARD-rejects an empty interactive.body.text (confirmed
+  // against the real Cloud API: 400 "The parameter interactive.body.text is required."), so
+  // defaulting to "" here — this test's own original assertion — made every buttons/list/cta send
+  // without model-supplied intro text fail outright, silently degrading to the numbered-text
+  // fallback ladder. Plain `text` messages have no such requirement from Meta, so that branch is
+  // unchanged. Updated with --allow-test-change per the SPEC entry.
+  test("buttons/list/cta default an ABSENT text to a sensible non-empty body (Meta rejects empty); plain text still defaults to an empty string", () => {
+    expect((renderSmartMessage({ buttons: [{ id: "a", title: "A" }] }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("Please choose an option:");
+    expect((renderSmartMessage({ list: { buttonText: "x", sections: [{ rows: [{ id: "r", title: "R" }] }] } }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("Here's what I found:");
+    expect((renderSmartMessage({ cta: { text: "x", url: "https://x.com" } }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("Here's a link that might help:");
     expect((renderSmartMessage({} as SmartMessage, TO) as { text: { body: string } }).text.body).toBe("");
+  });
+
+  test("buttons/list/cta with a real model-supplied text use it verbatim, not the default", () => {
+    expect((renderSmartMessage({ text: "Pick one:", buttons: [{ id: "a", title: "A" }] }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("Pick one:");
+    expect((renderSmartMessage({ text: "Here's what we've got:", list: { buttonText: "x", sections: [{ rows: [{ id: "r", title: "R" }] }] } }, TO) as { interactive: { body: { text: string } } }).interactive.body.text).toBe("Here's what we've got:");
   });
 
   test("a quoteId adds a context.message_id to any rendered type", () => {
