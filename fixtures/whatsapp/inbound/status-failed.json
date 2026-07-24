@@ -1,0 +1,28 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102290129340398",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550001111", "phone_number_id": "106540352242922" },
+            "statuses": [
+              {
+                "id": "wamid.FAILED0001",
+                "status": "failed",
+                "timestamp": "1750000060",
+                "recipient_id": "15550002222",
+                "errors": [
+                  { "code": 131026, "title": "Message undeliverable", "message": "Message undeliverable" }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

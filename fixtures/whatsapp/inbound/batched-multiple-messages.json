@@ -1,0 +1,37 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102290129340398",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550001111", "phone_number_id": "106540352242922" },
+            "contacts": [{ "profile": { "name": "Ada Lovelace" }, "wa_id": "15550002222" }],
+            "messages": [
+              { "from": "15550002222", "id": "wamid.BATCH0001", "timestamp": "1750000800", "type": "text", "text": { "body": "hi" } },
+              { "from": "15550002222", "id": "wamid.BATCH0002", "timestamp": "1750000801", "type": "text", "text": { "body": "are you open today?" } }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "102290129340398",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550001111", "phone_number_id": "106540352242922" },
+            "statuses": [
+              { "id": "wamid.BATCHSTATUS0001", "status": "read", "timestamp": "1750000802", "recipient_id": "15550002222" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
