@@ -14,6 +14,7 @@
     "@wappy/core": "workspace:*",
     "@wappy/harness": "workspace:*",
     "@wappy/testkit": "workspace:*",
+    "@wappy/tools-openapi": "workspace:*",
     "@wappy/whatsapp": "workspace:*"
   },
   "devDependencies": {

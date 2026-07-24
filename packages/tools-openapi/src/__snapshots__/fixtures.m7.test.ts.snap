@@ -1,0 +1,320 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`T7.10 fixtures — golden snapshots of generated tools > circular-ref.json 1`] = `
+[
+  {
+    "description": "Get a category (categories can nest arbitrarily deep — self-referencing schema)",
+    "method": "get",
+    "name": "getCategory",
+    "operationId": "getCategory",
+    "parameters": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-wappy-in": "path",
+        },
+      },
+      "required": [
+        "id",
+      ],
+      "type": "object",
+    },
+    "path": "/categories/{id}",
+  },
+]
+`;
+
+exports[`T7.10 fixtures — golden snapshots of generated tools > missing-operationid.json 1`] = `
+[
+  {
+    "description": "Delete a widget (no operationId)",
+    "method": "delete",
+    "name": "delete_widgets_widgetId",
+    "operationId": undefined,
+    "parameters": {
+      "properties": {
+        "widgetId": {
+          "type": "string",
+          "x-wappy-in": "path",
+        },
+      },
+      "required": [
+        "widgetId",
+      ],
+      "type": "object",
+    },
+    "path": "/widgets/{widgetId}",
+  },
+  {
+    "description": "List widgets (no operationId — name must be derived from method+path)",
+    "method": "get",
+    "name": "get_widgets",
+    "operationId": undefined,
+    "parameters": {
+      "properties": {},
+      "type": "object",
+    },
+    "path": "/widgets",
+  },
+  {
+    "description": "Get a widget by id (no operationId)",
+    "method": "get",
+    "name": "get_widgets_widgetId",
+    "operationId": undefined,
+    "parameters": {
+      "properties": {
+        "widgetId": {
+          "type": "string",
+          "x-wappy-in": "path",
+        },
+      },
+      "required": [
+        "widgetId",
+      ],
+      "type": "object",
+    },
+    "path": "/widgets/{widgetId}",
+  },
+]
+`;
+
+exports[`T7.10 fixtures — golden snapshots of generated tools > oneof-payload.json 1`] = `
+[
+  {
+    "description": "Add a payment method (either a card or a bank account)",
+    "method": "post",
+    "name": "addPaymentMethod",
+    "operationId": "addPaymentMethod",
+    "parameters": {
+      "properties": {
+        "body": {
+          "oneOf": [
+            {
+              "properties": {
+                "cardNumber": {
+                  "type": "string",
+                },
+                "expiry": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "card",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "cardNumber",
+              ],
+              "type": "object",
+            },
+            {
+              "properties": {
+                "accountNumber": {
+                  "type": "string",
+                },
+                "routingNumber": {
+                  "type": "string",
+                },
+                "type": {
+                  "enum": [
+                    "bank",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+                "accountNumber",
+                "routingNumber",
+              ],
+              "type": "object",
+            },
+          ],
+          "x-wappy-in": "body",
+          "x-wappy-media-type": "application/json",
+        },
+      },
+      "required": [
+        "body",
+      ],
+      "type": "object",
+    },
+    "path": "/payment-methods",
+  },
+]
+`;
+
+exports[`T7.10 fixtures — golden snapshots of generated tools > petstore-2.0.json (post-normalization) 1`] = `
+[
+  {
+    "description": "Get a pet by id",
+    "method": "get",
+    "name": "getPet",
+    "operationId": "getPet",
+    "parameters": {
+      "properties": {
+        "petId": {
+          "type": "string",
+          "x-wappy-in": "path",
+        },
+      },
+      "required": [
+        "petId",
+      ],
+      "type": "object",
+    },
+    "path": "/pets/{petId}",
+  },
+  {
+    "description": "List all pets",
+    "method": "get",
+    "name": "listPets",
+    "operationId": "listPets",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "description": "Max results",
+          "type": "integer",
+          "x-wappy-in": "query",
+        },
+      },
+      "type": "object",
+    },
+    "path": "/pets",
+  },
+]
+`;
+
+exports[`T7.10 fixtures — golden snapshots of generated tools > petstore-3.0.json 1`] = `
+[
+  {
+    "description": "Create a pet",
+    "method": "post",
+    "name": "createPet",
+    "operationId": "createPet",
+    "parameters": {
+      "properties": {
+        "body": {
+          "properties": {
+            "name": {
+              "type": "string",
+            },
+            "tag": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "name",
+          ],
+          "type": "object",
+          "x-wappy-in": "body",
+          "x-wappy-media-type": "application/json",
+        },
+      },
+      "required": [
+        "body",
+      ],
+      "type": "object",
+    },
+    "path": "/pets",
+  },
+  {
+    "description": "Delete a pet by id",
+    "method": "delete",
+    "name": "deletePet",
+    "operationId": "deletePet",
+    "parameters": {
+      "properties": {
+        "petId": {
+          "type": "string",
+          "x-wappy-in": "path",
+        },
+      },
+      "required": [
+        "petId",
+      ],
+      "type": "object",
+    },
+    "path": "/pets/{petId}",
+  },
+  {
+    "description": "Get a pet by id",
+    "method": "get",
+    "name": "getPet",
+    "operationId": "getPet",
+    "parameters": {
+      "properties": {
+        "petId": {
+          "type": "string",
+          "x-wappy-in": "path",
+        },
+      },
+      "required": [
+        "petId",
+      ],
+      "type": "object",
+    },
+    "path": "/pets/{petId}",
+  },
+  {
+    "description": "List all pets",
+    "method": "get",
+    "name": "listPets",
+    "operationId": "listPets",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "description": "Max results",
+          "type": "integer",
+          "x-wappy-in": "query",
+        },
+      },
+      "type": "object",
+    },
+    "path": "/pets",
+  },
+]
+`;
+
+exports[`T7.10 fixtures — golden snapshots of generated tools > petstore-3.1.json 1`] = `
+[
+  {
+    "description": "Get a pet by id",
+    "method": "get",
+    "name": "getPet",
+    "operationId": "getPet",
+    "parameters": {
+      "properties": {
+        "petId": {
+          "type": "string",
+          "x-wappy-in": "path",
+        },
+      },
+      "required": [
+        "petId",
+      ],
+      "type": "object",
+    },
+    "path": "/pets/{petId}",
+  },
+  {
+    "description": "List all pets",
+    "method": "get",
+    "name": "listPets",
+    "operationId": "listPets",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "x-wappy-in": "query",
+        },
+      },
+      "type": "object",
+    },
+    "path": "/pets",
+  },
+]
+`;

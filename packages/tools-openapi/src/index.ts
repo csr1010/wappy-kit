@@ -10,3 +10,4 @@ export * from "./policy.js";
 export * from "./curate.js";
 export * from "./glob.js";
 export * from "./provider.js";
+export * from "./huge-spec-fixture.js";

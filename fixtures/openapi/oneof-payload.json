@@ -1,0 +1,46 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "oneOf payload fixture", "version": "1.0.0" },
+  "servers": [{ "url": "https://api.example.com" }],
+  "paths": {
+    "/payment-methods": {
+      "post": {
+        "operationId": "addPaymentMethod",
+        "summary": "Add a payment method (either a card or a bank account)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "oneOf": [{ "$ref": "#/components/schemas/CardPayment" }, { "$ref": "#/components/schemas/BankPayment" }] }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Created" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CardPayment": {
+        "type": "object",
+        "required": ["type", "cardNumber"],
+        "properties": {
+          "type": { "type": "string", "enum": ["card"] },
+          "cardNumber": { "type": "string" },
+          "expiry": { "type": "string" }
+        }
+      },
+      "BankPayment": {
+        "type": "object",
+        "required": ["type", "accountNumber", "routingNumber"],
+        "properties": {
+          "type": { "type": "string", "enum": ["bank"] },
+          "accountNumber": { "type": "string" },
+          "routingNumber": { "type": "string" }
+        }
+      }
+    }
+  }
+}
