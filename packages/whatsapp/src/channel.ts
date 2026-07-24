@@ -42,8 +42,11 @@ export interface WhatsAppChannelOptions {
 export function createWhatsAppChannel(opts: WhatsAppChannelOptions): MessageChannel {
   const base = opts.graphApiBaseUrl ?? "https://graph.facebook.com/v21.0";
   const fetchFn = opts.fetchImpl ?? fetch;
-  const now = opts.now ?? Date.now;
-  const clock: Clock = opts.clock ?? { ...systemClock, now };
+  // One clock drives both receive()'s window/dedup bookkeeping and send()'s window check + retry
+  // backoff — resolved once, here, so they can never desync (e.g. a caller supplying `clock` for
+  // deterministic backoff without also supplying `now` used to silently split the two).
+  const clock: Clock = opts.clock ?? { ...systemClock, now: opts.now ?? Date.now };
+  const now = clock.now;
   const seenStore = opts.seenStore ?? createMemorySeenStore();
   const sessionWindow = opts.sessionWindow ?? createSessionWindowTracker();
   const channelName = opts.channelName ?? "whatsapp";
