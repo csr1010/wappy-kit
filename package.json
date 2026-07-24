@@ -2,12 +2,17 @@
   "name": "wappy-kit",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.5.1",
   "scripts": {
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "lint": "eslint .",
-    "verify": "pnpm lint && turbo run typecheck build test"
+    "verify": "pnpm lint && turbo run typecheck build test",
+    "gate": "node scripts/gate.mjs",
+    "ctx": "node scripts/ctx.mjs",
+    "contract:update": "node scripts/contract.mjs update",
+    "ratchet": "node scripts/ratchet.mjs update"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
