@@ -54,6 +54,18 @@ describe("GET — Meta's webhook verification handshake", () => {
     const res = await fetch(`${base}/webhook?hub.verify_token=${VERIFY_TOKEN}&hub.challenge=xyz123`);
     expect(res.status).toBe(403);
   });
+
+  test("missing hub.challenge (mode/token otherwise correct) is rejected, not treated as an empty-string challenge", async () => {
+    const { base } = await boot();
+    const res = await fetch(`${base}/webhook?hub.mode=subscribe&hub.verify_token=${VERIFY_TOKEN}`);
+    expect(res.status).toBe(403);
+  });
+
+  test("missing hub.verify_token (mode/challenge otherwise present) is rejected", async () => {
+    const { base } = await boot();
+    const res = await fetch(`${base}/webhook?hub.mode=subscribe&hub.challenge=xyz123`);
+    expect(res.status).toBe(403);
+  });
 });
 
 describe("POST — signature verification (§6.2/§11: mandatory, checked on the raw body before parsing)", () => {
@@ -112,6 +124,38 @@ describe("POST — responds before processing finishes (ack fast, per WhatsApp's
   });
 });
 
+describe("POST — typing indicator (§6.1 presence): fired for a WhatsAppMessageChannel, skipped otherwise", () => {
+  test("a channel with markReadAndTyping gets it called with the message id, before/alongside agent.handle", async () => {
+    const markReadAndTyping = vi.fn(async () => ({ ok: true }) as const);
+    const channel = { ...fakeChannel(async () => [inbound("m1")]), markReadAndTyping };
+    const { base } = await boot({ channel });
+    const body = "{}";
+    await fetch(`${base}/webhook`, { method: "POST", headers: { "x-hub-signature-256": signWebhook(body, APP_SECRET) }, body });
+    await vi.waitFor(() => expect(markReadAndTyping).toHaveBeenCalledWith("m1"));
+  });
+
+  test("a plain MessageChannel without markReadAndTyping is never called for it, and still processes normally", async () => {
+    const handle = vi.fn(async (): Promise<DeliveryResult> => ({ status: "sent" }));
+    const { base } = await boot({ channel: fakeChannel(async () => [inbound("m1")]), agent: fakeAgent(handle) });
+    const body = "{}";
+    const res = await fetch(`${base}/webhook`, { method: "POST", headers: { "x-hub-signature-256": signWebhook(body, APP_SECRET) }, body });
+    expect(res.status).toBe(200);
+    await vi.waitFor(() => expect(handle).toHaveBeenCalled());
+  });
+
+  test("a failing markReadAndTyping is reported via onError but does not block agent.handle from running", async () => {
+    const onError = vi.fn();
+    const markReadAndTyping = vi.fn(async () => ({ ok: false, error: "rate limited" }) as const);
+    const handle = vi.fn(async (): Promise<DeliveryResult> => ({ status: "sent" }));
+    const channel = { ...fakeChannel(async () => [inbound("m1")]), markReadAndTyping };
+    const { base } = await boot({ channel, agent: fakeAgent(handle), onError });
+    const body = "{}";
+    await fetch(`${base}/webhook`, { method: "POST", headers: { "x-hub-signature-256": signWebhook(body, APP_SECRET) }, body });
+    await vi.waitFor(() => expect(handle).toHaveBeenCalled());
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("rate limited") })));
+  });
+});
+
 describe("robustness", () => {
   test("malformed JSON (but correctly signed) is rejected with 400, not a crash", async () => {
     const { base } = await boot();
@@ -123,6 +167,20 @@ describe("robustness", () => {
   test("a body over maxBodyBytes is rejected with 413 instead of buffered", async () => {
     const { base } = await boot({ maxBodyBytes: 10 });
     const res = await fetch(`${base}/webhook`, { method: "POST", headers: { "x-hub-signature-256": signWebhook("x".repeat(1000), APP_SECRET) }, body: "x".repeat(1000) });
+    expect(res.status).toBe(413);
+  });
+
+  test("further chunks arriving AFTER the 413 was already sent are silently ignored, not double-resolved", async () => {
+    const { base } = await boot({ maxBodyBytes: 5 });
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(new TextEncoder().encode("x".repeat(20))); // already over the limit
+        await new Promise((r) => setTimeout(r, 20)); // let the server's response land first
+        controller.enqueue(new TextEncoder().encode("more-after-too-large"));
+        controller.close();
+      },
+    });
+    const res = await fetch(`${base}/webhook`, { method: "POST", body: stream, duplex: "half" } as RequestInit);
     expect(res.status).toBe(413);
   });
 

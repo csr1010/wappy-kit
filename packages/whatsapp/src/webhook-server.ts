@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Agent, MessageChannel } from "@wappy/core";
 import { handleVerifyHandshake } from "./verify-handshake.js";
 import { verifySignature } from "./signature.js";
+import type { WhatsAppMessageChannel } from "./channel.js";
 
 /**
  * T9.7's server: the actual `http.Server` a generated project's `wappy dev` boots. Deliberately
@@ -70,7 +71,9 @@ export function createWebhookServer(opts: CreateWebhookServerOptions): Server {
 
   return createServer((req, res) => {
     void (async () => {
-      const url = new URL(req.url ?? "/", "http://localhost");
+      // req.url is typed string | undefined only because IncomingMessage is shared with the
+      // client-request case; for a real server "request" event it's always set (Node's own docs).
+      const url = new URL(req.url as string, "http://localhost");
       if (url.pathname !== path) {
         send(res, 404);
         return;
@@ -121,6 +124,17 @@ export function createWebhookServer(opts: CreateWebhookServerOptions): Server {
       try {
         const messages = await opts.channel.receive(payload);
         for (const message of messages) {
+          // Fired before/alongside agent.handle(), not awaited — it's the user-visible "..." while
+          // the slower model/tool work runs, so it must go out as early as possible, and Meta
+          // auto-dismisses it on its own (25s, or when the real reply lands) so there's nothing to
+          // clean up here even if agent.handle() is slow or fails. WhatsAppMessageChannel-specific
+          // (checked via the property, not the `MessageChannel` core type) — a channel without it
+          // just skips this, same as any channel implementation that isn't WhatsApp.
+          if (typeof (opts.channel as Partial<WhatsAppMessageChannel>).markReadAndTyping === "function") {
+            void (opts.channel as WhatsAppMessageChannel).markReadAndTyping(message.id).then((r) => {
+              if (!r.ok) opts.onError?.(new Error(`markReadAndTyping: ${r.error}`));
+            });
+          }
           void opts.agent.handle(message).catch((e: unknown) => opts.onError?.(e));
         }
       } catch (e) {
