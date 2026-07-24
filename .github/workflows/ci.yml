@@ -19,7 +19,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # Bump this number as each milestone lands (gate is cumulative).
-      # --allow-test-change: B2 diffs *.test.ts/fixtures against the PREVIOUS milestone's tag on every
-      # run, not just once, so this stays required here until the gate number bumps past 4 (M5 compares
-      # against m4-done instead, which already bakes in this change).
-      - run: pnpm gate 4 --allow-test-change "M4 replaces M3's documented placeholder send() (text-only, no window guard) with the required smart-send + window-guard behavior; channel.m3.test.ts's send() tests were updated to open the session window first and assert correct media rendering"
+      - run: pnpm gate 5
