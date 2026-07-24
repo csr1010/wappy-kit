@@ -4,6 +4,7 @@ import { composeWithBudget } from "./compose-with-budget.js";
 import { createContextBudget, type ContextBudget } from "./context-budget.js";
 import { windowHistory } from "./history-window.js";
 import { selectTools } from "./tool-selector.js";
+import { TOOL_SCHEMAS_BUDGET_FRACTION } from "./assemble.js";
 import type { SkillRegistry } from "./skills.js";
 
 const SCOPE_GUARDRAIL = "If the user's request is genuinely unrelated to what you're configured to help with, say so honestly and directly rather than guessing or making something up.";
@@ -196,6 +197,11 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
       }
     }
 
+    // Tool-invocation findings are typically more directly actionable (e.g. "order 8842: shipped")
+    // than generic RAG recall, so they're kept in their own array and placed AHEAD of recalledSnippets
+    // when the two are combined below — capArrayFromEnd drops from the tail first, so this ordering
+    // means generic RAG results are dropped before tool findings under budget pressure, not the reverse.
+    const toolFindings: string[] = [];
     const recalledSnippets: string[] = [];
     if (confident && decision.needsRAG && deps.retrieveRag) {
       trace(deps.tracer, "rag", "retrieve");
@@ -207,11 +213,13 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     if (confident && decision.needsTool) {
       if (deps.invokeTools) {
         trace(deps.tracer, "tools", "invoke");
-        const findings = await safeCall(() => deps.invokeTools!({ message, decision }), []);
-        recalledSnippets.push(...findings.map((f) => `Tool result: ${f}`));
+        // Uses the same bounded/truncated text every other consumer (router, RAG query, selectTools,
+        // the persisted turn) already uses — not the raw, unbounded message.
+        const findings = await safeCall(() => deps.invokeTools!({ message: { ...message, text: effectiveText }, decision }), []);
+        toolFindings.push(...findings.map((f) => `Tool result: ${f}`));
       }
       if (deps.tools && deps.tools.length > 0) {
-        const selected = selectTools({ tools: deps.tools, message: effectiveText ?? "", alwaysInclude: skillToolNames, maxTokens: budget.promptBudget });
+        const selected = selectTools({ tools: deps.tools, message: effectiveText ?? "", alwaysInclude: skillToolNames, maxTokens: Math.floor(budget.promptBudget * TOOL_SCHEMAS_BUDGET_FRACTION) });
         toolSchemas.push(...selected.map((t) => JSON.stringify({ name: t.name, description: t.description, parameters: t.parameters })));
       }
     }
@@ -226,7 +234,7 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     // §10 "out-of-scope ask -> honest decline": a standing instruction, not special-cased branching —
     // the model is trusted to say so plainly rather than guess when a request is genuinely unrelated
     // to what it's configured to help with. Kept as its own leading skill-like fragment.
-    const windowed = await windowHistory({ model: deps.model, memory: deps.memory, contactId: message.contactId, history, maxRecentTurns: deps.maxRecentTurns ?? DEFAULT_MAX_RECENT_TURNS, clock: deps.clock });
+    const windowed = await windowHistory({ model: deps.model, memory: deps.memory, contactId: message.contactId, history, maxRecentTurns: deps.maxRecentTurns ?? DEFAULT_MAX_RECENT_TURNS, clock: deps.clock, tracer: deps.tracer });
 
     const composed = await composeWithBudget({
       model: deps.model,
@@ -235,7 +243,7 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
         skillFragments,
         toolSchemas,
         summary: windowed.summary,
-        recalledSnippets,
+        recalledSnippets: [...toolFindings, ...recalledSnippets],
         recentTurns: windowed.recentTurns,
         userMessage: effectiveText ?? "(no text)",
       },

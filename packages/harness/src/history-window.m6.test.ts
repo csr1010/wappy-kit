@@ -84,25 +84,7 @@ describe("windowHistory — summarizing the oldest chunk", () => {
   });
 });
 
-describe("windowHistory — summarizer failure fallback", () => {
-  test("the model throwing falls back to plain truncation, never crashes, still returns recentTurns", async () => {
-    const model: Model = { generate: async () => { throw new Error("model down"); } };
-    const memory = fakeMemory();
-    const history = Array.from({ length: 20 }, (_, i) => turn(i));
-    const result = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
-    expect(result.recentTurns).toHaveLength(5);
-    expect(result.summary).toBeTruthy(); // an honest fallback summary, not empty/undefined
-  });
-
-  test("the fallback summary uses singular 'message' when only one turn needed summarizing", async () => {
-    const model: Model = { generate: async () => { throw new Error("model down"); } };
-    const memory = fakeMemory();
-    const history = Array.from({ length: 6 }, (_, i) => turn(i)); // 6 total, maxRecentTurns 5 -> exactly 1 to summarize
-    const result = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
-    expect(result.summary).toContain("1 earlier message ");
-    expect(result.summary).not.toContain("messages");
-  });
-
+describe("windowHistory — summarizer success, prompt content", () => {
   test("a turn with no text (e.g. media-only) is summarized with a placeholder, not 'undefined'", async () => {
     let seenPrompt = "";
     const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { text: "summary" }; } };
@@ -111,12 +93,77 @@ describe("windowHistory — summarizer failure fallback", () => {
     await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
     expect(seenPrompt).toContain("(no text)");
   });
+});
 
-  test("the model returning empty text also falls back to plain truncation", async () => {
+// On summarizer failure (thrown error or degenerate empty response), nothing is persisted to Memory:
+// marking those turns as permanently "covered" by a content-free placeholder would be unrecoverable,
+// whereas returning the full unsummarized set for just this call lets the next call retry from scratch.
+describe("windowHistory — summarizer failure: no persistence, retry-able", () => {
+  test("the model throwing never crashes, returns the FULL unsummarized set (not capped to maxRecentTurns)", async () => {
+    const model: Model = { generate: async () => { throw new Error("model down"); } };
+    const memory = fakeMemory();
+    const history = Array.from({ length: 20 }, (_, i) => turn(i));
+    const result = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
+    expect(result.recentTurns).toHaveLength(20);
+    expect(result.summary).toBeUndefined(); // no prior summary existed, and nothing was persisted now
+  });
+
+  test("the model returning empty text is treated the same as a thrown error — no persistence", async () => {
     const model: Model = { generate: async () => ({ text: "" }) };
     const memory = fakeMemory();
     const history = Array.from({ length: 20 }, (_, i) => turn(i));
     const result = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
-    expect(result.summary).toBeTruthy();
+    expect(result.recentTurns).toHaveLength(20);
+    expect(result.summary).toBeUndefined();
+  });
+
+  test("nothing is appended to Memory on a summarizer failure", async () => {
+    const model: Model = { generate: async () => { throw new Error("model down"); } };
+    const memory = fakeMemory();
+    const history = Array.from({ length: 20 }, (_, i) => turn(i));
+    await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
+    expect(memory.turns).toHaveLength(0);
+  });
+
+  test("a transient failure doesn't block a later successful summarization — the next call retries from scratch", async () => {
+    const memory = fakeMemory();
+    let calls = 0;
+    const model: Model = {
+      generate: async () => {
+        calls++;
+        if (calls === 1) throw new Error("model down");
+        return { text: "recovered summary" };
+      },
+    };
+    const history = Array.from({ length: 20 }, (_, i) => turn(i));
+    const first = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
+    expect(first.summary).toBeUndefined();
+    expect(calls).toBe(1);
+
+    const second = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
+    expect(calls).toBe(2); // retried — no placeholder was persisted to short-circuit this
+    expect(second.summary).toBe("recovered summary");
+    expect(second.recentTurns).toHaveLength(5);
+  });
+
+  test("an existing PRIOR summary is preserved (not wiped) when a later rolling summarization attempt fails", async () => {
+    const memory = fakeMemory();
+    let calls = 0;
+    const model: Model = {
+      generate: async () => {
+        calls++;
+        if (calls === 1) return { text: "first summary" };
+        throw new Error("model down");
+      },
+    };
+    const history1 = Array.from({ length: 20 }, (_, i) => turn(i));
+    const first = await windowHistory({ model, memory, contactId: "c1", history: history1, maxRecentTurns: 5, clock });
+    expect(first.summary).toBe("first summary");
+
+    const historyAfterFirst = await memory.load("c1");
+    const moreTurns = Array.from({ length: 10 }, (_, i) => turn(20 + i));
+    const history2 = [...historyAfterFirst, ...moreTurns];
+    const second = await windowHistory({ model, memory, contactId: "c1", history: history2, maxRecentTurns: 5, clock });
+    expect(second.summary).toBe("first summary"); // the earlier, still-persisted summary survives
   });
 });

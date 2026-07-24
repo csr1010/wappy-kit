@@ -69,6 +69,8 @@ export interface ModelToolCall {
 
 export interface ModelRequest {
   prompt: string;
+  /** Sent as a system-role message when the underlying adapter supports it — kept separate from `prompt` so structured role separation survives even when the caller has already assembled everything into one deterministic prompt string (T6.2). */
+  system?: string;
   history?: Turn[];
   tools?: Tool[];
   /** e.g. smartMessageJsonSchema, when the model must emit a SmartMessage (§6.3). */

@@ -1,4 +1,4 @@
-import type { Clock, Memory, Model, Turn } from "@wappy/core";
+import type { Clock, Memory, Model, Tracer, Turn } from "@wappy/core";
 
 const SUMMARY_KIND = "wappy.summary";
 
@@ -11,6 +11,9 @@ export interface WindowHistoryOptions {
   /** Turns kept verbatim; anything older than this, past the last summary, gets summarized. */
   maxRecentTurns: number;
   clock: Clock;
+  /** Optional — when set, a real summarizer model call is recorded under "llm" (T6.9) so it isn't
+   * invisible next to the compose call's own trace event. */
+  tracer?: Tracer;
 }
 
 export interface WindowedHistory {
@@ -22,16 +25,23 @@ function isSummaryTurn(t: Turn): boolean {
   return t.meta?.kind === SUMMARY_KIND;
 }
 
-function fallbackSummary(turns: Turn[]): string {
-  return `(${turns.length} earlier message${turns.length === 1 ? "" : "s"} — summarization unavailable, showing only recent history)`;
+function trace(tracer: Tracer | undefined, event: string, data?: unknown): void {
+  if (!tracer) return;
+  try {
+    tracer.record("llm", event, data);
+  } catch {
+    // observability must never cost the user their reply
+  }
 }
 
 /**
  * History windowing + rolling summarization (§10 "prompt/token overflow -> tool retrieval +
  * curation"): once unsummarized history exceeds `maxRecentTurns`, the oldest excess is summarized
  * via a cheap model call and the summary persisted to Memory as a turn (so a later call reusing the
- * same history sees it and doesn't re-summarize already-covered turns). On summarizer failure,
- * degrades to plain truncation rather than losing the reply (§10).
+ * same history sees it and doesn't re-summarize already-covered turns). On summarizer failure (a
+ * thrown error, or a degenerate empty response), NOTHING is persisted — marking those turns as
+ * "covered" by a content-free placeholder would be permanent and unrecoverable, whereas returning the
+ * full unsummarized set for just this call lets the very next call retry summarization from scratch.
  */
 export async function windowHistory(opts: WindowHistoryOptions): Promise<WindowedHistory> {
   const summaryTurns = opts.history.filter(isSummaryTurn);
@@ -60,9 +70,15 @@ export async function windowHistory(opts: WindowHistoryOptions): Promise<Windowe
   let summaryText: string;
   try {
     const result = await opts.model.generate({ prompt });
-    summaryText = result.text || fallbackSummary(toSummarize);
+    if (!result.text) {
+      trace(opts.tracer, "summarize", { ok: false });
+      return { summary: latestSummary?.text, recentTurns: unsummarized };
+    }
+    summaryText = result.text;
+    trace(opts.tracer, "summarize", { ok: true });
   } catch {
-    summaryText = fallbackSummary(toSummarize);
+    trace(opts.tracer, "summarize", { ok: false });
+    return { summary: latestSummary?.text, recentTurns: unsummarized };
   }
 
   const summaryTurnId = `summary:${lastSummarizedTurn.id}`;

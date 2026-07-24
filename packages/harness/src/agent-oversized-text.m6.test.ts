@@ -82,6 +82,24 @@ describe("createAgent — oversized inbound text (§10 T6.7)", () => {
     expect(result.status).toBe("sent");
   });
 
+  test("invokeTools receives the BOUNDED text, not the raw oversized message (review fix #2)", async () => {
+    let seenText: string | undefined;
+    const agent = createAgent({
+      channel: fakeChannel("whatsapp"),
+      memory: fakeMemory(),
+      router: fakeRouter([{ intent: "order-status", needsRAG: false, needsTool: true, escalate: false, confidence: 0.9 }]),
+      model: { generate: async () => ({ text: "ok" }) },
+      clock: systemClock,
+      tracer: createInMemoryTracer(),
+      inboundTextLimits: { maxChars: 20, refuseChars: 1000 },
+      invokeTools: async ({ message }) => { seenText = message.text; return []; },
+    });
+    await agent.handle(msg({ text: "y".repeat(500) }));
+    expect(seenText).toBeDefined();
+    expect(seenText!.length).toBeLessThan(500);
+    expect(seenText).toContain("truncated");
+  });
+
   test("a textless (media-only) message is never bounded/refused, regardless of limits", async () => {
     const channel = fakeChannel("whatsapp");
     const agent = createAgent({

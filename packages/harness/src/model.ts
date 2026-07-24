@@ -26,7 +26,11 @@ export function createVercelModel(opts: VercelModelOptions): Model {
   return {
     async generate(req: ModelRequest): Promise<ModelResult> {
       const abortSignal = opts.timeoutMs !== undefined ? AbortSignal.timeout(opts.timeoutMs) : undefined;
-      const messages: ModelMessage[] = [...toModelMessages(req.history ?? []), { role: "user", content: req.prompt }];
+      const messages: ModelMessage[] = [
+        ...(req.system ? [{ role: "system" as const, content: req.system }] : []),
+        ...toModelMessages(req.history ?? []),
+        { role: "user", content: req.prompt },
+      ];
 
       if (req.responseSchema) {
         try {
