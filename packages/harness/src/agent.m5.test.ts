@@ -202,6 +202,25 @@ describe("createAgent — confidence gate", () => {
   });
 });
 
+describe("createAgent — out-of-scope decline (§10)", () => {
+  test("the compose prompt always includes a standing instruction to honestly decline out-of-scope requests", async () => {
+    let seenPrompt = "";
+    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { text: "ok" } }; } };
+    const agent = createAgent({ channel: fakeChannel("whatsapp"), memory: fakeMemory(), router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
+    await agent.handle(msg());
+    expect(seenPrompt).toContain("say so honestly");
+  });
+
+  test("when the model honestly declines an out-of-scope request, the Agent sends that decline as-is", async () => {
+    const channel = fakeChannel("whatsapp");
+    const model = textModel("I'm a store support assistant, so I can't help with that — happy to answer store questions though!");
+    const agent = createAgent({ channel, memory: fakeMemory(), router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
+    const result = await agent.handle(msg({ text: "what's the capital of France?" }));
+    expect(result.status).toBe("sent");
+    expect(channel.sent[0]?.message.text).toBe("I'm a store support assistant, so I can't help with that — happy to answer store questions though!");
+  });
+});
+
 describe("createAgent — escalate", () => {
   test("escalate=true calls the onEscalate hook and still sends a reply", async () => {
     let escalated: { message: InboundMessage; decision: RouterDecision } | undefined;
@@ -265,6 +284,17 @@ describe("createAgent — per-contact serialization", () => {
     // If unserialized, msg2's load() could race ahead and see none of msg1's turns.
     expect(secondCallHistory?.some((t) => t.id === "m1")).toBe(true);
     expect(memory.turns).toHaveLength(4); // 2 user + 2 agent, no dupes, no lost writes
+  });
+});
+
+describe("createAgent — model error/timeout (§10)", () => {
+  test("the model failing on both compose attempts still results in an honest reply being sent, not a crash or silence", async () => {
+    const channel = fakeChannel("whatsapp");
+    const model: Model = { generate: async () => { throw new Error("upstream timeout"); } };
+    const agent = createAgent({ channel, memory: fakeMemory(), router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
+    const result = await agent.handle(msg());
+    expect(result.status).toBe("sent");
+    expect(channel.sent[0]?.message.text).toMatch(/try again shortly/i);
   });
 });
 

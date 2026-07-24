@@ -2,6 +2,8 @@ import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memo
 import { composeSmartMessage } from "./compose.js";
 import type { SkillRegistry } from "./skills.js";
 
+const SCOPE_GUARDRAIL = "If the user's request is genuinely unrelated to what you're configured to help with, say so honestly and directly rather than guessing or making something up.";
+
 export interface AgentDeps {
   channel: MessageChannel;
   memory: Memory;
@@ -89,7 +91,10 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
   }
 
   const confident = decision.confidence >= (deps.confidenceThreshold ?? 0.3);
-  const promptParts: string[] = [message.text ?? "(no text)"];
+  // §10 "out-of-scope ask -> honest decline": a standing instruction, not special-cased branching —
+  // the model is trusted to say so plainly rather than guess when a request is genuinely unrelated
+  // to what it's configured to help with.
+  const promptParts: string[] = [SCOPE_GUARDRAIL, message.text ?? "(no text)"];
 
   if (confident && decision.skill) {
     const skill = deps.skills?.get(decision.skill);
