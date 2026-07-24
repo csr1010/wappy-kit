@@ -95,25 +95,27 @@ describe("windowHistory — summarizer success, prompt content", () => {
   });
 });
 
-// On summarizer failure (thrown error or degenerate empty response), nothing is persisted to Memory:
-// marking those turns as permanently "covered" by a content-free placeholder would be unrecoverable,
-// whereas returning the full unsummarized set for just this call lets the next call retry from scratch.
-describe("windowHistory — summarizer failure: no persistence, retry-able", () => {
-  test("the model throwing never crashes, returns the FULL unsummarized set (not capped to maxRecentTurns)", async () => {
+// On summarizer failure (thrown error or degenerate empty response), falls back to plain truncation
+// (§10/T6.3): recentTurns is still capped to maxRecentTurns, exactly like the success path — but
+// nothing is persisted to Memory, since marking the older turns "covered" by a content-free
+// placeholder would be permanent and unrecoverable. The next call therefore retries from scratch.
+describe("windowHistory — summarizer failure: plain truncation, no persistence, retry-able", () => {
+  test("the model throwing never crashes, falls back to plain truncation (capped to maxRecentTurns)", async () => {
     const model: Model = { generate: async () => { throw new Error("model down"); } };
     const memory = fakeMemory();
     const history = Array.from({ length: 20 }, (_, i) => turn(i));
     const result = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
-    expect(result.recentTurns).toHaveLength(20);
+    expect(result.recentTurns).toHaveLength(5);
+    expect(result.recentTurns[0]?.id).toBe("t15"); // the 5 most recent, same slice the success path would keep
     expect(result.summary).toBeUndefined(); // no prior summary existed, and nothing was persisted now
   });
 
-  test("the model returning empty text is treated the same as a thrown error — no persistence", async () => {
+  test("the model returning empty text is treated the same as a thrown error — plain truncation, no persistence", async () => {
     const model: Model = { generate: async () => ({ text: "" }) };
     const memory = fakeMemory();
     const history = Array.from({ length: 20 }, (_, i) => turn(i));
     const result = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
-    expect(result.recentTurns).toHaveLength(20);
+    expect(result.recentTurns).toHaveLength(5);
     expect(result.summary).toBeUndefined();
   });
 
@@ -138,6 +140,7 @@ describe("windowHistory — summarizer failure: no persistence, retry-able", () 
     const history = Array.from({ length: 20 }, (_, i) => turn(i));
     const first = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
     expect(first.summary).toBeUndefined();
+    expect(first.recentTurns).toHaveLength(5); // plain truncation fallback, not the full unsummarized set
     expect(calls).toBe(1);
 
     const second = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 5, clock });
