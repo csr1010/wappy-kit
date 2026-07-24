@@ -209,6 +209,22 @@ importers:
         specifier: ^5.0.1
         version: 5.0.1(@types/node@26.6.2)(vite@8.3.0(@types/node@26.6.2))
 
+  packages/e2e:
+    dependencies:
+      '@wappy/testkit':
+        specifier: workspace:*
+        version: link:../testkit
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.2
+        version: 26.6.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.1
+        version: 5.0.1(@types/node@26.6.2)(vite@8.3.0(@types/node@26.6.2))
+
   packages/harness:
     devDependencies:
       '@types/node':
