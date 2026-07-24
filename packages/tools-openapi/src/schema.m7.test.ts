@@ -97,6 +97,30 @@ describe("resolveSchema — allOf merge", () => {
     );
     expect(result?.properties).toEqual({ status: { type: "string", enum: ["b"] } });
   });
+
+  test("a non-object type on an allOf member overrides the default object type", () => {
+    const result = resolveSchema(
+      { allOf: [{ type: "string", format: "email" }] } as unknown as OpenAPIV3.SchemaObject,
+      { document: doc({}) },
+    );
+    expect(result?.type).toBe("string");
+  });
+
+  test("a scalar keyword (e.g. description) directly on an allOf member is merged in", () => {
+    const result = resolveSchema(
+      { allOf: [{ type: "object", properties: { id: { type: "string" } } }, { description: "a combined thing" }] } as unknown as OpenAPIV3.SchemaObject,
+      { document: doc({}) },
+    );
+    expect(result?.description).toBe("a combined thing");
+  });
+
+  test("an allOf where no member declares properties ends up with no properties key at all", () => {
+    const result = resolveSchema(
+      { allOf: [{ type: "string", minLength: 1 }, { maxLength: 10 }] } as unknown as OpenAPIV3.SchemaObject,
+      { document: doc({}) },
+    );
+    expect(result?.properties).toBeUndefined();
+  });
 });
 
 describe("resolveSchema — oneOf/anyOf pass-through", () => {
@@ -158,5 +182,17 @@ describe("resolveSchema — deep nesting cap (non-circular)", () => {
       hops++;
     }
     expect(hops).toBeLessThan(9); // never reached the true 10-level-deep leaf
+  });
+});
+
+describe("resolveSchema — additionalProperties", () => {
+  test("a schema-valued additionalProperties is itself recursively resolved", () => {
+    const result = resolveSchema({ type: "object", additionalProperties: { type: "string" } } as OpenAPIV3.SchemaObject, { document: doc({}) });
+    expect(result?.additionalProperties).toEqual({ type: "string" });
+  });
+
+  test("a boolean additionalProperties is passed through as-is", () => {
+    const result = resolveSchema({ type: "object", additionalProperties: false } as OpenAPIV3.SchemaObject, { document: doc({}) });
+    expect(result?.additionalProperties).toBe(false);
   });
 });

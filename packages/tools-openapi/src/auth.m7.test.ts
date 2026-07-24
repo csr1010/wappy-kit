@@ -26,6 +26,12 @@ describe("resolveAuth — no security required", () => {
     const result = resolveAuth(op([]), doc({ apiKeyAuth: { type: "apiKey", name: "X-Api-Key", in: "header" } }, [{ apiKeyAuth: [] }]), "MYAPI_");
     expect(result).toEqual({ auth: { kind: "none" } });
   });
+
+  test("an individual empty requirement object ({}) among non-empty alternatives means auth is optional", () => {
+    const document = doc({ apiKeyAuth: { type: "apiKey", name: "k", in: "header" } });
+    const result = resolveAuth(op([{}]), document, "MYAPI_");
+    expect(result).toEqual({ auth: { kind: "none" } });
+  });
 });
 
 describe("resolveAuth — apiKey", () => {
@@ -92,6 +98,20 @@ describe("resolveAuth — unsupported schemes skip with an explicit reason", () 
     const document = doc({ oidc: { type: "openIdConnect", openIdConnectUrl: "https://example.com" } }, [{ oidc: [] }]);
     const result = resolveAuth(op(), document, "MYAPI_");
     expect("skip" in result).toBe(true);
+  });
+
+  test("an http scheme other than bearer/basic (e.g. digest) is unsupported", () => {
+    const document = doc({ digestAuth: { type: "http", scheme: "digest" } }, [{ digestAuth: [] }]);
+    const result = resolveAuth(op(), document, "MYAPI_");
+    expect("skip" in result).toBe(true);
+    expect((result as { skip: { reason: string } }).skip.reason).toMatch(/digest/i);
+  });
+
+  test("a security scheme type this v0.1 doesn't recognize at all is unsupported, not a crash", () => {
+    const document = doc({ mtls: { type: "mutualTLS" } } as never, [{ mtls: [] }]);
+    const result = resolveAuth(op(), document, "MYAPI_");
+    expect("skip" in result).toBe(true);
+    expect((result as { skip: { reason: string } }).skip.reason).toMatch(/mutualTLS/);
   });
 
   test("a security requirement combining multiple schemes (AND semantics) is unsupported", () => {

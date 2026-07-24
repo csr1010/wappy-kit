@@ -37,6 +37,16 @@ describe("loadSpec — Swagger 2.0 → OpenAPI 3.x normalization", () => {
     const params = result.document.paths["/pets"].get.parameters;
     expect(params.some((p: { name: string; in: string }) => p.name === "limit" && p.in === "query")).toBe(true);
   });
+
+  test("a Swagger 2.0 spec swagger2openapi itself can't convert fails loudly as a SpecLoadError", async () => {
+    const spec = {
+      swagger: "2.0",
+      info: { title: "x", version: "1" },
+      paths: { "/x": { get: { responses: { "200": { description: "ok", schema: { $ref: "#/definitions/DoesNotExist" } } } } } },
+    };
+    await expect(loadSpec(spec)).rejects.toThrow(SpecLoadError);
+    await expect(loadSpec(spec)).rejects.toThrow(/convert/i);
+  });
 });
 
 describe("loadSpec — file loading", () => {
@@ -69,6 +79,21 @@ describe("loadSpec — validation errors with pointers", () => {
   test("a spec with neither swagger nor openapi version fields fails loudly, not silently treated as 3.x", async () => {
     await expect(loadSpec({ info: { title: "x", version: "1" }, paths: {} })).rejects.toThrow(SpecLoadError);
   });
+
+  test("a validation failure with no ajv .details (e.g. a broken $ref) still fails loudly, with an empty (not crashing) errors array", async () => {
+    const spec = readFixture("petstore-3.0.json") as Record<string, unknown>;
+    const clone = structuredClone(spec);
+    (clone.paths as Record<string, unknown>)["/broken"] = {
+      get: { operationId: "brokenOp", parameters: [{ name: "x", in: "query", schema: { $ref: "#/components/schemas/DoesNotExist" } }], responses: { "200": { description: "ok" } } },
+    };
+    try {
+      await loadSpec(clone);
+      throw new Error("must not reach here");
+    } catch (e) {
+      expect(e).toBeInstanceOf(SpecLoadError);
+      expect((e as SpecLoadError).errors).toEqual([]); // no ajv .details on this error shape — degrades gracefully, not a crash
+    }
+  });
 });
 
 describe("loadSpec — URL loading goes through the SSRF guard (T7.8)", () => {
@@ -97,6 +122,30 @@ describe("loadSpec — URL loading goes through the SSRF guard (T7.8)", () => {
     const spec = readFixture("petstore-3.0.json");
     const fetchImpl = async () => jsonResponse(spec);
     const result = await loadSpec("http://127.0.0.1:4010/openapi.json", { allowPrivateNetworks: true, fetchImpl });
+    expect(result.document.paths["/pets"].get.operationId).toBe("listPets");
+  });
+
+  test("a non-OK HTTP response fetching the spec URL fails loudly with the status code", async () => {
+    const fetchImpl = async () => ({ ok: false, status: 404, headers: new Headers(), text: async () => "not found" }) as Response;
+    await expect(loadSpec("https://spec.example.com/missing.json", { resolveHostname: async () => ["93.184.216.34"], fetchImpl })).rejects.toThrow(/404/);
+  });
+
+  test("a spec URL serving YAML (not JSON) is parsed correctly", async () => {
+    const yaml = [
+      "openapi: 3.0.3",
+      "info:",
+      "  title: x",
+      "  version: '1'",
+      "paths:",
+      "  /pets:",
+      "    get:",
+      "      operationId: listPets",
+      "      responses:",
+      "        '200':",
+      "          description: ok",
+    ].join("\n");
+    const fetchImpl = async () => ({ ok: true, status: 200, headers: new Headers(), text: async () => yaml }) as Response;
+    const result = await loadSpec("https://spec.example.com/openapi.yaml", { resolveHostname: async () => ["93.184.216.34"], fetchImpl });
     expect(result.document.paths["/pets"].get.operationId).toBe("listPets");
   });
 });

@@ -95,6 +95,11 @@ export function resolveSchema(schema: SchemaOrRef | undefined, opts: ResolveSche
   return resolveInner(schema, opts, new Set<string>(), 0);
 }
 
+// Every recursive resolveInner() call below passes a schema value that's already known non-undefined
+// (an array element from .map() over a real array, a property value from Object.entries(), a
+// truthy-checked `items`/`additionalProperties`) — resolveInner() only ever returns undefined for a
+// literal `undefined` input (its very first check), so none of these recursive calls can produce
+// undefined; the `!` assertions below reflect that, not a fallback that's actually reachable.
 function resolveInner(schema: SchemaOrRef | undefined, opts: ResolveSchemaOptions, seenRefs: Set<string>, depth: number): JsonSchema | undefined {
   if (schema === undefined) return undefined;
   if (depth > (opts.maxDepth ?? DEFAULT_MAX_DEPTH)) return {};
@@ -108,16 +113,16 @@ function resolveInner(schema: SchemaOrRef | undefined, opts: ResolveSchemaOption
   }
 
   if (Array.isArray(schema.allOf) && schema.allOf.length > 0) {
-    const members = schema.allOf.map((m) => resolveInner(m as SchemaOrRef, opts, seenRefs, depth + 1) ?? {});
+    const members = schema.allOf.map((m) => resolveInner(m as SchemaOrRef, opts, seenRefs, depth + 1)!);
     return mergeAllOf(members);
   }
 
   if (Array.isArray(schema.oneOf) && schema.oneOf.length > 0) {
-    return { oneOf: schema.oneOf.map((m) => resolveInner(m as SchemaOrRef, opts, seenRefs, depth + 1) ?? {}) };
+    return { oneOf: schema.oneOf.map((m) => resolveInner(m as SchemaOrRef, opts, seenRefs, depth + 1)!) };
   }
 
   if (Array.isArray(schema.anyOf) && schema.anyOf.length > 0) {
-    return { anyOf: schema.anyOf.map((m) => resolveInner(m as SchemaOrRef, opts, seenRefs, depth + 1) ?? {}) };
+    return { anyOf: schema.anyOf.map((m) => resolveInner(m as SchemaOrRef, opts, seenRefs, depth + 1)!) };
   }
 
   const out: JsonSchema = {};
@@ -128,7 +133,7 @@ function resolveInner(schema: SchemaOrRef | undefined, opts: ResolveSchemaOption
   if (schema.properties) {
     const properties: Record<string, unknown> = {};
     for (const [name, propSchema] of Object.entries(schema.properties)) {
-      properties[name] = resolveInner(propSchema as SchemaOrRef, opts, seenRefs, depth + 1) ?? {};
+      properties[name] = resolveInner(propSchema as SchemaOrRef, opts, seenRefs, depth + 1)!;
     }
     out.properties = properties;
     out.type = out.type ?? "object";
@@ -137,12 +142,12 @@ function resolveInner(schema: SchemaOrRef | undefined, opts: ResolveSchemaOption
 
   const items = (schema as { items?: SchemaOrRef }).items;
   if (items) {
-    out.items = resolveInner(items, opts, seenRefs, depth + 1) ?? {};
+    out.items = resolveInner(items, opts, seenRefs, depth + 1)!;
     out.type = out.type ?? "array";
   }
 
   if (typeof schema.additionalProperties === "object" && schema.additionalProperties !== null) {
-    out.additionalProperties = resolveInner(schema.additionalProperties as SchemaOrRef, opts, seenRefs, depth + 1) ?? {};
+    out.additionalProperties = resolveInner(schema.additionalProperties as SchemaOrRef, opts, seenRefs, depth + 1)!;
   } else if (typeof schema.additionalProperties === "boolean") {
     out.additionalProperties = schema.additionalProperties;
   }

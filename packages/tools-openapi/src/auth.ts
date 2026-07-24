@@ -46,6 +46,9 @@ export function resolveAuth(operation: OpenAPIV3.OperationObject, document: Open
   if (requirements.length === 0) return { auth: { kind: "none" } };
 
   const schemes = document.components?.securitySchemes ?? {};
+  // Placeholder only — every requirement (requirements.length > 0 here) either returns early or
+  // overwrites this below, so its text is never actually the one returned; TS still requires an
+  // initializer since it can't prove the loop always assigns before the final `return`.
   let lastSkip: AuthSkip = { reason: "No security requirement could be satisfied." };
 
   for (const requirement of requirements) {

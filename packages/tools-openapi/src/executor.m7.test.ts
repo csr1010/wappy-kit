@@ -301,3 +301,171 @@ describe("buildExecutor — never throws", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe("buildExecutor — cookie params and cookie auth", () => {
+  test("a cookie-location parameter is sent as a real Cookie header", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const t = tool({ path: "/x", parameters: { type: "object", properties: { session: { type: "string", "x-wappy-in": "cookie" } } } });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ session: "abc123" });
+    expect(activeServer.requests[0]?.headers.cookie).toContain("session=abc123");
+  });
+
+  test("apiKey-in-cookie auth is sent as a real Cookie header", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const execute = buildExecutor(tool(), {
+      baseUrl: activeServer.url,
+      auth: { kind: "apiKey", in: "cookie", paramName: "session_id", envVar: "SID" },
+      envReader: (k) => (k === "SID" ? "xyz" : undefined),
+      ssrf: { allowPrivateNetworks: true },
+    });
+    await execute({ id: "x" });
+    expect(activeServer.requests[0]?.headers.cookie).toContain("session_id=xyz");
+  });
+
+  test("apiKey-in-query auth is appended to the request URL", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const execute = buildExecutor(tool(), {
+      baseUrl: activeServer.url,
+      auth: { kind: "apiKey", in: "query", paramName: "api_key", envVar: "AK" },
+      envReader: (k) => (k === "AK" ? "qk" : undefined),
+      ssrf: { allowPrivateNetworks: true },
+    });
+    await execute({ id: "x" });
+    expect(activeServer.requests[0]?.path).toContain("api_key=qk");
+  });
+});
+
+describe("buildExecutor — explicit undefined values are skipped, not sent as literal 'undefined'", () => {
+  test("an explicit undefined query value is omitted from the URL", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const t = tool({ path: "/x", parameters: { type: "object", properties: { limit: { type: "integer", "x-wappy-in": "query" } } } });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ limit: undefined });
+    expect(activeServer.requests[0]?.path).toBe("/x");
+  });
+
+  test("an explicit undefined header value is omitted, not sent as the string 'undefined'", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const t = tool({ path: "/x", parameters: { type: "object", properties: { "X-Trace": { type: "string", "x-wappy-in": "header" } } } });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ "X-Trace": undefined });
+    expect(activeServer.requests[0]?.headers["x-trace"]).toBeUndefined();
+  });
+});
+
+describe("buildExecutor — response body edge cases", () => {
+  test("a response with no body (e.g. 204 No Content) is reported as ok:true with a null body", async () => {
+    activeServer = await startServer(() => ({ status: 204 }));
+    const t = tool({ method: "delete" });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    const result = await execute({ id: "x" });
+    expect(result).toMatchObject({ ok: true, data: { status: 204, body: null } });
+  });
+
+  test("a HEAD response (no body at all) is reported as ok:true with a null body", async () => {
+    activeServer = await startServer(() => ({ status: 200 }));
+    const t = tool({ method: "head" });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    const result = await execute({ id: "x" });
+    expect(result.ok).toBe(true);
+  });
+
+  test("a response with no Content-Type header at all is treated as text, not binary", async () => {
+    activeServer = await startServer(() => ({ status: 200, body: "hello" }));
+    const execute = buildExecutor(tool(), { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    const result = await execute({ id: "x" });
+    expect(result).toMatchObject({ ok: true, data: { body: "hello" } });
+  });
+});
+
+describe("buildExecutor — a header param already setting Content-Type is not overridden by the body default", () => {
+  test("an explicit Content-Type header param is preserved when a body is also sent", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const t = tool({
+      method: "post",
+      path: "/x",
+      parameters: { type: "object", properties: { "Content-Type": { type: "string", "x-wappy-in": "header" }, body: { type: "object", "x-wappy-in": "body" } } },
+    });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ "Content-Type": "application/json; charset=utf-8", body: { x: 1 } });
+    expect(activeServer.requests[0]?.headers["content-type"]).toBe("application/json; charset=utf-8");
+  });
+});
+
+describe("buildExecutor — default envReader falls back to process.env", () => {
+  test("when no envReader is supplied, the real process.env is used", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    process.env.WAPPY_TEST_EXECUTOR_TOKEN = "real-env-value";
+    try {
+      const execute = buildExecutor(tool(), {
+        baseUrl: activeServer.url,
+        auth: { kind: "bearer", envVar: "WAPPY_TEST_EXECUTOR_TOKEN" },
+        ssrf: { allowPrivateNetworks: true },
+      });
+      await execute({ id: "x" });
+      expect(activeServer.requests[0]?.headers.authorization).toBe("Bearer real-env-value");
+    } finally {
+      delete process.env.WAPPY_TEST_EXECUTOR_TOKEN;
+    }
+  });
+});
+
+describe("buildExecutor — remaining edge cases", () => {
+  test("a tool with no 'properties' at all in its parameters schema doesn't crash", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const t = tool({ path: "/x", parameters: { type: "object" } });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    const result = await execute({ anything: "ignored" });
+    expect(result.ok).toBe(true);
+  });
+
+  test("a property with no recognized x-wappy-in location is silently ignored, not sent anywhere", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const t = tool({ path: "/x", parameters: { type: "object", properties: { mystery: { type: "string" } } } });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ mystery: "value" });
+    expect(activeServer.requests[0]?.path).toBe("/x");
+    expect(activeServer.requests[0]?.headers.mystery).toBeUndefined();
+  });
+
+  test("an explicit undefined cookie-param value is omitted, not sent as 'undefined'", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const t = tool({ path: "/x", parameters: { type: "object", properties: { session: { type: "string", "x-wappy-in": "cookie" } } } });
+    const execute = buildExecutor(t, { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ session: undefined });
+    expect(activeServer.requests[0]?.headers.cookie).toBeUndefined();
+  });
+
+  test("a non-Error value rejected from the fetch layer is still normalized into a failed ToolResult", async () => {
+    activeServer = await startServer(() => ({ status: 200, body: "{}" }));
+    const fetchImpl = () => Promise.reject("a plain string rejection, not an Error instance");
+    const execute = buildExecutor(tool(), { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true, fetchImpl } });
+    const result = await execute({ id: "x" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("plain string rejection");
+  });
+
+  test("a non-ok response with a completely empty body falls back to the HTTP status text in the error", async () => {
+    activeServer = await startServer(() => ({ status: 400 }));
+    const execute = buildExecutor(tool(), { baseUrl: activeServer.url, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    const result = await execute({ id: "x" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("400");
+  });
+
+  test("a non-Error value thrown before any network call (e.g. from a hostile envReader) is still normalized", async () => {
+    activeServer = await startServer(() => ({ status: 200, body: "{}" }));
+    const execute = buildExecutor(tool(), {
+      baseUrl: activeServer.url,
+      auth: { kind: "bearer", envVar: "X" },
+      envReader: () => {
+        throw "a plain string throw from envReader";
+      },
+      ssrf: { allowPrivateNetworks: true },
+    });
+    const result = await execute({ id: "x" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("plain string throw");
+  });
+});

@@ -92,7 +92,11 @@ function buildUrl(baseUrl: string, pathTemplate: string, pathParams: Record<stri
   return url;
 }
 
-function buildHeaders(headerParams: Record<string, unknown>, authFragment: { headers?: Record<string, string>; cookies?: Record<string, string> }): Headers {
+function buildHeaders(
+  headerParams: Record<string, unknown>,
+  cookieParams: Record<string, unknown>,
+  authFragment: { headers?: Record<string, string>; cookies?: Record<string, string> },
+): Headers {
   const headers = new Headers();
   for (const [name, value] of Object.entries(headerParams)) {
     if (value === undefined) continue;
@@ -102,6 +106,10 @@ function buildHeaders(headerParams: Record<string, unknown>, authFragment: { hea
     for (const [name, value] of Object.entries(authFragment.headers)) headers.set(name, safeHeaderOrCookieValue(name, value));
   }
   const cookiePairs: string[] = [];
+  for (const [name, value] of Object.entries(cookieParams)) {
+    if (value === undefined) continue;
+    cookiePairs.push(`${name}=${encodeURIComponent(safeHeaderOrCookieValue(name, String(value)))}`);
+  }
   if (authFragment.cookies) {
     for (const [name, value] of Object.entries(authFragment.cookies)) cookiePairs.push(`${name}=${encodeURIComponent(safeHeaderOrCookieValue(name, value))}`);
   }
@@ -133,13 +141,16 @@ async function readBodyCapped(response: Response, maxBytes: number): Promise<Cap
   let total = 0;
   let truncated = false;
   for (;;) {
+    // ReadableStreamReadResult<Uint8Array> guarantees `value` is present whenever `done` is false
+    // (only a `done: true` result may omit it) — no separate falsy-value guard needed.
     const { done, value } = await reader.read();
     if (done) break;
-    if (!value) continue;
     total += value.byteLength;
     if (total > maxBytes) {
       truncated = true;
-      await reader.cancel().catch(() => undefined);
+      // The outer buildExecutor() try/catch is the safety net for a rejected cancel() too, so no
+      // separate swallow is needed here.
+      await reader.cancel();
       break;
     }
     chunks.push(value);
@@ -177,7 +188,7 @@ export function buildExecutor(tool: GeneratedTool, opts: ExecutorOptions): (args
       const url = buildUrl(opts.baseUrl, tool.path, split.path, split.query);
       const authFragment = applyAuth(opts.auth, envReader);
       if (authFragment.query) for (const [k, v] of Object.entries(authFragment.query)) url.searchParams.set(k, v);
-      const headers = buildHeaders(split.header, authFragment);
+      const headers = buildHeaders(split.header, split.cookie, authFragment);
 
       let body: string | undefined;
       if (split.hasBody) {
@@ -234,7 +245,9 @@ export function buildExecutor(tool: GeneratedTool, opts: ExecutorOptions): (args
         return { toolName: tool.name, ok: true, data: { status: response.status, contentType, sizeBytes: capped.totalBytes, note: "binary content omitted" } };
       }
 
-      return { toolName: tool.name, ok: false, error: lastError ?? "Request failed for an unknown reason." };
+      // lastError is always set before the loop can exit here: every path that falls through to the
+      // next iteration (a caught network/SSRF error, or a retryable 5xx) sets it first.
+      return { toolName: tool.name, ok: false, error: lastError! };
     } catch (e) {
       // Absolute last resort — e.g. a missing required path param, a missing auth secret, or an
       // encoding error thrown before any network call. Still never escapes as a thrown exception.

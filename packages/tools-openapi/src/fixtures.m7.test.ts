@@ -15,7 +15,9 @@ function readFixture(name: string): unknown {
 
 function toolSnapshot(tools: ReturnType<typeof generateTools>["tools"]) {
   // Strip the raw `operation` object (verbose, not the interesting/stable part) for a readable golden.
-  return tools.map(({ operation: _operation, ...rest }) => rest).sort((a, b) => a.name.localeCompare(b.name));
+  return tools
+    .map((t) => ({ name: t.name, description: t.description, method: t.method, path: t.path, operationId: t.operationId, parameters: t.parameters }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 describe("T7.10 fixtures — golden snapshots of generated tools", () => {

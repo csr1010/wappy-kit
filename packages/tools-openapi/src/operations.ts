@@ -1,6 +1,6 @@
 import type { OpenAPIV3 } from "openapi-types";
 import type { JsonSchema } from "@wappy/core";
-import { resolveJsonPointer, resolveSchema, SchemaUnmappableError } from "./schema.js";
+import { resolveJsonPointer, resolveSchema } from "./schema.js";
 
 const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"] as const;
 type HttpMethod = (typeof HTTP_METHODS)[number];
@@ -49,9 +49,11 @@ function resolveParam(p: ParamOrRef, document: OpenAPIV3.Document): OpenAPIV3.Pa
 }
 
 function sanitizeName(raw: string): string {
+  // A 1-for-1 character replace can never shrink the string, and both call sites only invoke this
+  // with a non-empty string (generateTools() only calls it when operationId is truthy; deriveName()
+  // always includes a literal "_" plus a non-empty method name) — so `cleaned` is always non-empty.
   const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const nonEmpty = cleaned.length > 0 ? cleaned : "op";
-  return nonEmpty.slice(0, MAX_NAME_LENGTH);
+  return cleaned.slice(0, MAX_NAME_LENGTH);
 }
 
 function deriveName(method: string, path: string): string {
@@ -161,8 +163,9 @@ export function generateTools(document: OpenAPIV3.Document): GenerateToolsResult
       const parameters = buildParametersSchema(operation, pathItemParameters, document);
       tools.push({ name, description, parameters, method, path, operationId: operation.operationId, operation });
     } catch (e) {
-      const reason = e instanceof SchemaUnmappableError ? e.message : e instanceof Error ? e.message : String(e);
-      skipped.push({ method, path, operationId: operation.operationId, reason });
+      // The only thing that can throw inside the try block is resolveSchema/resolveJsonPointer,
+      // which only ever throw SchemaUnmappableError — always an Error, so `.message` is always safe.
+      skipped.push({ method, path, operationId: operation.operationId, reason: (e as Error).message });
     }
   }
 

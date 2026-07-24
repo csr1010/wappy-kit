@@ -42,7 +42,9 @@ export function applyPolicy(tool: GeneratedTool, opts: PolicyOptions = {}): Poli
     const candidates = [tool.operationId, tool.name, ...tags].filter((v): v is string => Boolean(v));
     const matched = candidates.some((c) => matchesAny(opts.allowList!, c));
     if (!matched) {
-      return { included: false, readOnly, confirmBefore, reason: `Not in allowList (checked: ${candidates.join(", ") || "operationId/name/tags all missing"}).` };
+      // candidates always includes tool.name (operations.ts's generateTools() guarantees a non-empty
+      // name), so this list is never actually empty.
+      return { included: false, readOnly, confirmBefore, reason: `Not in allowList (checked: ${candidates.join(", ")}).` };
     }
   }
 
