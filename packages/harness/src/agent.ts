@@ -1,8 +1,12 @@
 import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, SmartMessage, TracedSystem, Tracer, Turn } from "@wappy/core";
+import { boundInboundText, DEFAULT_INBOUND_TEXT_LIMITS, type InboundTextLimits } from "./bound-inbound-text.js";
 import { composeSmartMessage } from "./compose.js";
 import type { SkillRegistry } from "./skills.js";
 
 const SCOPE_GUARDRAIL = "If the user's request is genuinely unrelated to what you're configured to help with, say so honestly and directly rather than guessing or making something up.";
+
+const REFUSAL_TEXT = "That message is too long for me to process — could you send it as a shorter message?";
+const OVERSIZED_PLACEHOLDER = "(the user sent a message too large to process)";
 
 /** TracedSystem values a MessageChannel is allowed to be traced under — deliberately closed (not
  * `channel.name` verbatim) so a customized channel name can't inject an out-of-union label into
@@ -28,6 +32,9 @@ export interface AgentDeps {
    * `message.id` (and unique across contacts), since it's also the idempotency marker a replay is
    * checked against. Default: `${message.id}:reply`. */
   idGenerator?: (message: InboundMessage) => string;
+  /** Thresholds for an oversized inbound message.text (§10) — truncated with a notice below
+   * `refuseChars`, politely declined (no routing/compose, still exactly one reply) above it. */
+  inboundTextLimits?: InboundTextLimits;
 }
 
 /**
@@ -131,6 +138,13 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     return { status: "sent" }; // already fully answered in a prior attempt — never re-send
   }
 
+  // An oversized message.text is bounded BEFORE anything else uses it: truncated (with a notice) for
+  // normal processing, or — beyond refuseChars — skips routing/compose entirely for a fixed, honest
+  // decline (§10 "extremely large -> polite refusal, still one reply"). Never store the raw oversized
+  // text in Memory either, or a huge blob just moves from "in the prompt" to "in the next prompt."
+  const bounded = message.text !== undefined ? boundInboundText(message.text, deps.inboundTextLimits ?? DEFAULT_INBOUND_TEXT_LIMITS) : undefined;
+  const effectiveText = bounded ? (bounded.refuse ? OVERSIZED_PLACEHOLDER : bounded.text) : message.text;
+
   // Guarded the same way as the reply turn below: a retry of a message whose PREVIOUS attempt
   // persisted the user turn but failed before sending must not re-append it. This can't rely on the
   // Memory backend itself being idempotent-by-id (that's an implementation detail of
@@ -138,52 +152,57 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
   // otherwise accumulate duplicate turns in history across every retry before an eventual success.
   if (!history.some((t) => t.id === message.id)) {
     const now = deps.clock.now();
-    await safeAppend(deps.memory, { id: message.id, contactId: message.contactId, role: "user", text: message.text, timestamp: now });
+    await safeAppend(deps.memory, { id: message.id, contactId: message.contactId, role: "user", text: effectiveText, timestamp: now });
   }
 
-  trace(deps.tracer, "router", "route");
-  let decision: RouterDecision;
-  try {
-    decision = await deps.router.route({ message, history, availableSkills: deps.skills?.names() ?? [], availableTools: [] });
-  } catch {
-    decision = { intent: "general", needsRAG: false, needsTool: false, escalate: false, confidence: 0 };
-  }
-
-  const confident = decision.confidence >= (deps.confidenceThreshold ?? 0.3);
-  // §10 "out-of-scope ask -> honest decline": a standing instruction, not special-cased branching —
-  // the model is trusted to say so plainly rather than guess when a request is genuinely unrelated
-  // to what it's configured to help with.
-  const promptParts: string[] = [SCOPE_GUARDRAIL, message.text ?? "(no text)"];
-
-  if (confident && decision.skill) {
-    const skill = await safeCall(async () => deps.skills?.get(decision.skill!), undefined);
-    if (skill) {
-      trace(deps.tracer, "skill", "selected", { skill: skill.name });
-      promptParts.unshift(skill.promptFragment);
+  let reply: SmartMessage;
+  if (bounded?.refuse) {
+    reply = { text: REFUSAL_TEXT };
+  } else {
+    trace(deps.tracer, "router", "route");
+    let decision: RouterDecision;
+    try {
+      decision = await deps.router.route({ message: { ...message, text: effectiveText }, history, availableSkills: deps.skills?.names() ?? [], availableTools: [] });
+    } catch {
+      decision = { intent: "general", needsRAG: false, needsTool: false, escalate: false, confidence: 0 };
     }
-  }
 
-  if (confident && decision.needsRAG && deps.retrieveRag) {
-    trace(deps.tracer, "rag", "retrieve");
-    const snippets = await safeCall(() => deps.retrieveRag!({ contactId: message.contactId, query: message.text ?? "" }), []);
-    if (snippets.length > 0) promptParts.push(`Relevant context:\n${snippets.join("\n")}`);
-  }
+    const confident = decision.confidence >= (deps.confidenceThreshold ?? 0.3);
+    // §10 "out-of-scope ask -> honest decline": a standing instruction, not special-cased branching —
+    // the model is trusted to say so plainly rather than guess when a request is genuinely unrelated
+    // to what it's configured to help with.
+    const promptParts: string[] = [SCOPE_GUARDRAIL, effectiveText ?? "(no text)"];
 
-  if (confident && decision.needsTool && deps.invokeTools) {
-    trace(deps.tracer, "tools", "invoke");
-    const findings = await safeCall(() => deps.invokeTools!({ message, decision }), []);
-    if (findings.length > 0) promptParts.push(`Tool results:\n${findings.join("\n")}`);
-  }
+    if (confident && decision.skill) {
+      const skill = await safeCall(async () => deps.skills?.get(decision.skill!), undefined);
+      if (skill) {
+        trace(deps.tracer, "skill", "selected", { skill: skill.name });
+        promptParts.unshift(skill.promptFragment);
+      }
+    }
 
-  if (decision.escalate && deps.onEscalate) {
-    await safeCall(async () => {
-      await deps.onEscalate!(message, decision);
-      return undefined;
-    }, undefined);
-  }
+    if (confident && decision.needsRAG && deps.retrieveRag) {
+      trace(deps.tracer, "rag", "retrieve");
+      const snippets = await safeCall(() => deps.retrieveRag!({ contactId: message.contactId, query: effectiveText ?? "" }), []);
+      if (snippets.length > 0) promptParts.push(`Relevant context:\n${snippets.join("\n")}`);
+    }
 
-  trace(deps.tracer, "llm", "compose");
-  const reply = await composeSmartMessage({ model: deps.model, prompt: promptParts.join("\n\n"), history });
+    if (confident && decision.needsTool && deps.invokeTools) {
+      trace(deps.tracer, "tools", "invoke");
+      const findings = await safeCall(() => deps.invokeTools!({ message, decision }), []);
+      if (findings.length > 0) promptParts.push(`Tool results:\n${findings.join("\n")}`);
+    }
+
+    if (decision.escalate && deps.onEscalate) {
+      await safeCall(async () => {
+        await deps.onEscalate!(message, decision);
+        return undefined;
+      }, undefined);
+    }
+
+    trace(deps.tracer, "llm", "compose");
+    reply = await composeSmartMessage({ model: deps.model, prompt: promptParts.join("\n\n"), history });
+  }
 
   const channelSystem = KNOWN_TRACED_CHANNELS.has(deps.channel.name) ? (deps.channel.name as TracedSystem) : undefined;
   if (channelSystem) trace(deps.tracer, channelSystem, "send");
