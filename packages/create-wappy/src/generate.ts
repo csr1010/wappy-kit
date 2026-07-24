@@ -15,8 +15,8 @@ import {
   type StepDef,
   type StepResult,
 } from "@wappy/core";
-import type { CompleteInterviewAnswers, ReferenceSkillName } from "./interview.js";
-import { collectEnvVars, renderProject, type GeneratedFile, type PartVersions, type StoreSkillDraft } from "./templates.js";
+import type { CompleteInterviewAnswers } from "./interview.js";
+import { collectEnvVars, renderProject, type GeneratedFile, type PartVersions } from "./templates.js";
 
 /**
  * T9.3's "ledger-driven" half: takes `renderProject()`'s pure output and actually writes it to
@@ -47,7 +47,6 @@ export interface GenerateProjectOptions {
    * `.wappy/state.json` + the lock file live under it too. */
   projectRoot: string;
   projectName?: string;
-  storeSkillDrafts?: Partial<Record<ReferenceSkillName, StoreSkillDraft>>;
   clock?: Clock;
 }
 
@@ -95,7 +94,7 @@ export async function generateProject(opts: GenerateProjectOptions): Promise<Gen
         throw new StateLoadError(`${statePath}: state was written by a newer @wappy/core (schemaVersion ${loaded.foundVersion} > ${loaded.supportedVersion}) — run "wappy reset" to start over.`);
       }
 
-      const files = renderProject({ answers: opts.answers, versions: opts.versions, projectName: opts.projectName, storeSkillDrafts: opts.storeSkillDrafts });
+      const files = renderProject({ answers: opts.answers, versions: opts.versions, projectName: opts.projectName });
       const envVarNames = collectEnvVars({ answers: opts.answers, versions: opts.versions }).map((v) => v.name);
       const manifest = buildManifest(files, envVarNames);
 

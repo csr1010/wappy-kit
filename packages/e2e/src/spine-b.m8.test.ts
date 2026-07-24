@@ -7,7 +7,7 @@ import { cleanupAllTmpProjects, mockModel, mockWhatsAppCloud } from "@wappy/test
 import { createInMemoryTracer, systemClock } from "@wappy/core";
 import type { Memory, Turn } from "@wappy/core";
 import { createWhatsAppChannel } from "@wappy/whatsapp";
-import { createAgent, createKnowledge, createKnowledgeRag, createLlmRouter, createSkillRegistry, STORE_INFO_SKILL } from "@wappy/harness";
+import { createAgent, createKnowledge, createKnowledgeRag, createLlmRouter } from "@wappy/harness";
 
 afterEach(() => cleanupAllTmpProjects());
 
@@ -33,26 +33,27 @@ function inMemoryMemory(): Memory {
 
 /**
  * Spine B (§9 Scenario B): "what are your store hours?" — the knowledge/RAG path. Real
- * @wappy/whatsapp + real @wappy/harness (createAgent, the store-info reference skill, a REAL
- * `Knowledge` store ingested with a distinctively-markered chunk) + a scripted mockModel +
- * mockWhatsAppCloud. Proves: `tools` is never touched, the router/skill/RAG pipeline actually runs,
- * and the retrieved chunk's own distinctive marker reaches the compose prompt verbatim (grounding —
- * not a paraphrase or a hallucinated answer).
+ * @wappy/whatsapp + real @wappy/harness (createAgent, ZERO skills registered — M12 removed the
+ * reference skills; this is the milestone's own proof that RAG works fine without a skill wrapper,
+ * a REAL `Knowledge` store ingested with a distinctively-markered chunk) + a scripted mockModel +
+ * mockWhatsAppCloud. Proves: `tools`/`skill` are never touched, the router/RAG pipeline actually
+ * runs on `needsRAG` alone, and the retrieved chunk's own distinctive marker reaches the compose
+ * prompt verbatim (grounding — not a paraphrase or a hallucinated answer).
  */
-test('Spine B — "what are your store hours?" touches exactly {whatsapp, memory, router, skill, rag, llm}, grounded in the retrieved chunk, tools never touched', async () => {
+test('Spine B — "what are your store hours?" touches exactly {whatsapp, memory, router, rag, llm} with zero skills registered (M12), grounded in the retrieved chunk, tools/skill never touched', async () => {
   const whatsapp = await mockWhatsAppCloud();
   const knowledge = createKnowledge({ client: createClient({ url: ":memory:" }) });
   await knowledge.ingest("hours-policy", "CHUNK-HOURS-001: Our store is open 9am to 6pm, Monday through Saturday. We are closed on Sundays and public holidays.");
   const retrieveRag = createKnowledgeRag({ knowledge });
 
   const model = mockModel([
-    { structured: { intent: "hours", skill: "store-info", needsRAG: true, needsTool: false, escalate: false, confidence: 0.9 } }, // router's decision
+    { structured: { intent: "hours", needsRAG: true, needsTool: false, escalate: false, confidence: 0.9 } }, // router's decision — no skill (M12: none registered)
     { structured: { formatRationale: "test rationale", message: { text: "We're open 9am–6pm, Monday to Saturday, and closed Sundays and holidays." } } }, // the grounded compose reply
   ]);
   const tracer = createInMemoryTracer();
   const memory = inMemoryMemory();
-  const skills = createSkillRegistry();
-  skills.register(STORE_INFO_SKILL);
+  // M12: `deps.skills` omitted entirely — T12.8's own verification that the agent works with no
+  // skills param at all, not just an empty registry.
 
   const channel = createWhatsAppChannel({
     phoneNumberId: "106540352242922",
@@ -61,7 +62,7 @@ test('Spine B — "what are your store hours?" touches exactly {whatsapp, memory
     clock: systemClock,
   });
   const router = createLlmRouter({ model });
-  const agent = createAgent({ channel, memory, router, model, clock: systemClock, tracer, skills, retrieveRag });
+  const agent = createAgent({ channel, memory, router, model, clock: systemClock, tracer, retrieveRag });
 
   tracer.record("whatsapp", "receive");
   const messages = await channel.receive(INBOUND_STORE_HOURS);
@@ -74,9 +75,10 @@ test('Spine B — "what are your store hours?" touches exactly {whatsapp, memory
   expect(whatsapp.sent).toHaveLength(1);
   expect(model.calls).toHaveLength(2); // one router classification + one grounded compose — no tool-decision call
 
-  expect(tracer.touched()).toEqual(new Set(["whatsapp", "memory", "router", "skill", "rag", "llm"]));
+  expect(tracer.touched()).toEqual(new Set(["whatsapp", "memory", "router", "rag", "llm"]));
   expect(tracer.events().filter((e) => e.system === "llm")).toHaveLength(1);
   expect(tracer.events().filter((e) => e.system === "tools")).toHaveLength(0);
+  expect(tracer.events().filter((e) => e.system === "skill")).toHaveLength(0);
 
   // The compose call actually saw the retrieved chunk's distinctive marker — grounded, not guessed.
   const composePrompt = model.calls[1]!.prompt as string;
@@ -92,17 +94,16 @@ test("Spine B — an empty Knowledge store recalls nothing; the compose prompt c
   const retrieveRag = createKnowledgeRag({ knowledge });
 
   const model = mockModel([
-    { structured: { intent: "hours", skill: "store-info", needsRAG: true, needsTool: false, escalate: false, confidence: 0.9 } },
+    { structured: { intent: "hours", needsRAG: true, needsTool: false, escalate: false, confidence: 0.9 } },
     { structured: { formatRationale: "test rationale", message: { text: "I don't have that information on hand — I'll have the team follow up with the exact hours." } } },
   ]);
   const tracer = createInMemoryTracer();
   const memory = inMemoryMemory();
-  const skills = createSkillRegistry();
-  skills.register(STORE_INFO_SKILL);
+  // M12: zero skills registered here too.
 
   const channel = createWhatsAppChannel({ phoneNumberId: "106540352242922", accessToken: "test-token", graphApiBaseUrl: whatsapp.url, clock: systemClock });
   const router = createLlmRouter({ model });
-  const agent = createAgent({ channel, memory, router, model, clock: systemClock, tracer, skills, retrieveRag });
+  const agent = createAgent({ channel, memory, router, model, clock: systemClock, tracer, retrieveRag });
 
   const messages = await channel.receive(INBOUND_STORE_HOURS);
   await Promise.all(messages.map((m) => agent.handle(m)));

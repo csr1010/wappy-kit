@@ -16,7 +16,7 @@ const SCOPE_GUARDRAIL = "If the user's request is genuinely unrelated to what yo
  * a cognitive question series, not a flat command, per the design this milestone settled on.
  * Runs on every compose call, including the cheapest path ("hi") — a deliberate trade against the
  * router's own cheapest-path principle, made explicitly, not by accident. */
-const FORMAT_REASONING = `Before you reply, work through these questions about how to present it, not just what to say:
+export const FORMAT_REASONING = `Before you reply, work through these questions about how to present it, not just what to say:
 1. What formats can I actually use? Plain text. Up to 3 quick-reply buttons. A list of up to 10 options. A single link as a tappable button. An image, video, or document, optionally paired with buttons or a list.
 2. Does this reply have 2 or more distinct things the person could choose between? If yes, a list or buttons let them tap instead of type.
 3. Is there exactly one clear next action, like opening a link? A tappable link button beats a raw URL in text.
@@ -26,7 +26,7 @@ const FORMAT_REASONING = `Before you reply, work through these questions about h
 
 /** M12: the single, generic honesty rule that replaced three near-identical, hand-written
  * sentences (store-info/orders/products' own skill fragments each said this in different words). */
-const GROUNDING_HONESTY =
+export const GROUNDING_HONESTY =
   "Only state what a tool call or retrieved document actually returned. Never invent a detail, a value, or a status that wasn't actually provided. If nothing relevant was found, or a tool call failed, say so honestly rather than guessing.";
 
 const REFUSAL_TEXT = "That message is too long for me to process — could you send it as a shorter message?";

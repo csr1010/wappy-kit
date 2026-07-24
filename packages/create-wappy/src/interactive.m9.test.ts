@@ -5,14 +5,17 @@ import { describe, expect, test, vi } from "vitest";
  * testing is the SEQUENCING (does it ask the right question next, in order, re-prompting on an
  * invalid answer) and the ANSWER MAPPING (does a clack pick turn into the right typed `Answer`
  * shape), not clack's own rendering. Both are fully testable by mocking `@clack/prompts` with a
- * scripted response queue (including a CANCEL sentinel at any position), no
- * real TTY required.
+ * scripted response queue (including a CANCEL sentinel at any position), no real TTY required.
+ *
+ * M12 removed the interview's "skills" step (`@wappy/harness` ships no reference skills anymore) —
+ * rewritten accordingly (`--allow-test-change`, SPEC.md decisions log). The `multiselect` mock/tests
+ * are gone with it — only `model`/`tools` remain, both plain `select()`s.
  */
 
 const CANCEL = Symbol("cancel");
 type Scripted<T> = (T | typeof CANCEL)[];
 
-const state: { select: Scripted<string>; multiselect: Scripted<string[]> } = { select: [], multiselect: [] };
+const state: { select: Scripted<string> } = { select: [] };
 
 function shift<T>(queue: Scripted<T>): T | typeof CANCEL {
   if (queue.length === 0) throw new Error("test setup: prompt queue exhausted");
@@ -26,7 +29,6 @@ vi.mock("@clack/prompts", () => ({
   isCancel: (v: unknown) => v === CANCEL,
   log: { error: vi.fn() },
   select: vi.fn(async () => shift(state.select)),
-  multiselect: vi.fn(async () => shift(state.multiselect)),
 }));
 
 async function importFresh() {
@@ -36,11 +38,10 @@ async function importFresh() {
 
 function reset() {
   state.select = [];
-  state.multiselect = [];
 }
 
 describe("runInteractiveInterview — sequencing + answer mapping (clack mocked)", () => {
-  test("no store: asks only model and tools, then finishes — skills are never asked, no credential is asked", async () => {
+  test("no store: asks only model and tools, then finishes — no credential is asked", async () => {
     reset();
     state.select = ["anthropic", "none"];
 
@@ -49,28 +50,17 @@ describe("runInteractiveInterview — sequencing + answer mapping (clack mocked)
 
     expect(answers).toEqual({ model: { provider: "anthropic" }, tools: { kind: "none" } });
     expect(state.select).toHaveLength(0);
-    expect(state.multiselect).toHaveLength(0);
   });
 
-  test("Shopify: skills multiselect follows the tools step; no store domain or token is asked", async () => {
+  test("Shopify: the interview finishes right after tools too — no store domain or token is asked", async () => {
     reset();
     state.select = ["openai", "shopify"];
-    state.multiselect = [["store-info", "orders"]];
 
     const { runInteractiveInterview } = await importFresh();
     const answers = await runInteractiveInterview();
 
-    expect(answers).toEqual({ model: { provider: "openai" }, tools: { kind: "shopify" }, skills: { skills: ["store-info", "orders"] } });
+    expect(answers).toEqual({ model: { provider: "openai" }, tools: { kind: "shopify" } });
     expect(state.select).toHaveLength(0);
-    expect(state.multiselect).toHaveLength(0);
-  });
-
-  test("picking no skills (empty multiselect) is valid", async () => {
-    reset();
-    state.select = ["gemini", "shopify"];
-    state.multiselect = [[]];
-    const { runInteractiveInterview } = await importFresh();
-    expect((await runInteractiveInterview()).skills).toEqual({ skills: [] });
   });
 
   test("an answer the state machine rejects is reported and the same step is asked again", async () => {
@@ -112,13 +102,6 @@ describe("runInteractiveInterview — cancellation (clack's isCancel) exits rath
   test("cancelling the tools select()", async () => {
     reset();
     state.select = ["openai", CANCEL];
-    await expectCancelExit();
-  });
-
-  test("cancelling the skills multiselect()", async () => {
-    reset();
-    state.select = ["openai", "shopify"];
-    state.multiselect = [CANCEL];
     await expectCancelExit();
   });
 });

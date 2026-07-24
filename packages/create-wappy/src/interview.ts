@@ -9,31 +9,22 @@
  * (secrets go in `.env`, filled in from the generated `.env.sample`):
  *   1. model provider
  *   2. tools — none, or a Shopify store (the one connector we ship)
- *   3. skills — ONLY when Shopify is chosen. Skills are grounded in what the connected API offers,
- *      so offering store skills before we know the domain would break the "no domain logic in the
- *      OS" rule (§1.1, §13). With no API there is nothing domain-neutral to offer yet.
+ * A "skills" step used to sit here (M8/M9) offering three hand-authored, Shopify-flavored
+ * reference skills. M12 removed it: `@wappy/harness` ships no reference skills anymore — the
+ * generic format-reasoning + grounding-honesty prompting (SPEC §6.1/§6.3) applies to every reply
+ * regardless of domain, so there's nothing left for this step to offer.
  * Memory (local SQLite/LibSQL), the router (LLM) and the agent framework (Vercel AI SDK) are fixed
  * in v0.1: the alternatives aren't implemented, and an option that can't be generated shouldn't be
  * in the menu.
  *
  * Design note: `step` is not an explicit parameter — which step comes next is fully determined by
- * which steps in `answers` are already filled (and which apply), so `nextStep(answers)` derives it
- * fresh every call rather than carrying a cursor that could drift out of sync after `goBack`.
+ * which steps in `answers` are already filled, so `nextStep(answers)` derives it fresh every call
+ * rather than carrying a cursor that could drift out of sync after `goBack`.
  */
 
 export type ModelProvider = "openai" | "anthropic" | "gemini" | "ollama";
 export interface ModelAnswer {
   provider: ModelProvider;
-}
-
-/** The reference skills v0.1 actually ships — matches `@wappy/harness`'s
- * `STORE_INFO_SKILL`/`createOrdersSkill` exactly; NOT an open-ended list (no downloading external
- * skills yet, per spec). They are Shopify-flavored examples, offered only on the Shopify path. */
-export const REFERENCE_SKILLS = ["store-info", "orders", "products"] as const;
-export type ReferenceSkillName = (typeof REFERENCE_SKILLS)[number];
-export interface SkillsAnswer {
-  /** Empty array = "none". */
-  skills: ReferenceSkillName[];
 }
 
 /** No store domain here on purpose: it's configuration, not an interview answer — it lives in
@@ -43,10 +34,9 @@ export type ToolsAnswer = { kind: "none" } | { kind: "shopify" };
 export interface InterviewAnswers {
   model?: ModelAnswer;
   tools?: ToolsAnswer;
-  skills?: SkillsAnswer;
 }
 
-export const INTERVIEW_STEP_ORDER = ["model", "tools", "skills"] as const;
+export const INTERVIEW_STEP_ORDER = ["model", "tools"] as const;
 export type InterviewStepId = (typeof INTERVIEW_STEP_ORDER)[number];
 
 export interface InterviewQuestionMeta {
@@ -74,15 +64,6 @@ const QUESTIONS: Record<InterviewStepId, InterviewQuestionMeta> = {
       { value: "shopify", label: "Shopify" },
     ],
   },
-  skills: {
-    step: "skills",
-    prompt: "Which skills should your Shopify agent have?",
-    choices: [
-      { value: "store-info", label: "Store info (hours, location, policies via RAG)" },
-      { value: "orders", label: "Orders (order status via tools)" },
-      { value: "products", label: "Products (catalog browsing + stock via tools)" },
-    ],
-  },
 };
 
 /** Pure per-step data for a thin prompts layer to render — never does any I/O itself. */
@@ -90,17 +71,12 @@ export function questionFor(step: InterviewStepId): InterviewQuestionMeta {
   return QUESTIONS[step];
 }
 
-/** Whether `step` is part of this interview given the answers so far — skills only make sense once
- * a store is connected. */
-export function isApplicable(step: InterviewStepId, answers: InterviewAnswers): boolean {
-  return step !== "skills" || answers.tools?.kind === "shopify";
-}
-
-/** The first applicable step in canonical order whose answer isn't filled yet, or `null` once
- * every applicable step is answered (the interview is done). */
+/** The first step in canonical order whose answer isn't filled yet, or `null` once every step is
+ * answered (the interview is done). Both remaining steps (`model`, `tools`) always apply — the M9
+ * "skills" step this used to skip conditionally on was removed in M12, along with the
+ * `isApplicable` indirection that existed only to support that conditional. */
 export function nextStep(answers: InterviewAnswers): InterviewStepId | null {
   for (const step of INTERVIEW_STEP_ORDER) {
-    if (!isApplicable(step, answers)) continue;
     if (answers[step] === undefined) return step;
   }
   return null;
@@ -116,16 +92,10 @@ export function isComplete(answers: InterviewAnswers): boolean {
   return nextStep(answers) === null;
 }
 
-/** What the generators (T9.3) require. `skills` is present only on the Shopify path. */
+/** What the generators (T9.3) require. */
 export interface CompleteInterviewAnswers {
   model: ModelAnswer;
   tools: ToolsAnswer;
-  skills?: SkillsAnswer;
-}
-
-/** The chosen skills, `[]` when the step didn't apply or was skipped. */
-export function skillsOf(answers: CompleteInterviewAnswers): ReferenceSkillName[] {
-  return answers.skills?.skills ?? [];
 }
 
 /** Narrows `answers` to `CompleteInterviewAnswers`, throwing a clear error if any applicable step
@@ -146,12 +116,6 @@ function validateAnswer(step: InterviewStepId, value: InterviewAnswers[Interview
       if (v.kind === "none" || v.kind === "shopify") return [];
       return [`tools: unknown kind "${(v as { kind: string }).kind}".`];
     }
-    case "skills": {
-      const v = value as SkillsAnswer | undefined;
-      if (!v || !Array.isArray(v.skills)) return ["skills: an array (possibly empty) is required."];
-      const unknown = v.skills.filter((s) => !(REFERENCE_SKILLS as readonly string[]).includes(s));
-      return unknown.length > 0 ? [`skills: unknown skill(s): ${unknown.join(", ")}.`] : [];
-    }
   }
 }
 
@@ -167,15 +131,10 @@ export interface ApplyAnswerError {
 /**
  * Applies one answer for `step`. Allowed when `step` is the interview's current `nextStep`
  * (answering forward) OR `step` is already answered (revising after a `goBack`) — answering a step
- * that hasn't been reached yet is rejected, as is answering `skills` when no store is connected.
- * Invalid values are rejected with a clear error and `answers` is returned unchanged — this
- * function never produces a partially-invalid state. Changing `tools` away from Shopify drops any
- * previously chosen skills, since they no longer apply.
+ * that hasn't been reached yet is rejected. Invalid values are rejected with a clear error and
+ * `answers` is returned unchanged — this function never produces a partially-invalid state.
  */
 export function applyAnswer(answers: InterviewAnswers, step: InterviewStepId, value: InterviewAnswers[InterviewStepId]): ApplyAnswerOk | ApplyAnswerError {
-  if (!isApplicable(step, answers)) {
-    return { ok: false, errors: [`"${step}" only applies when a Shopify store is connected.`] };
-  }
   const current = nextStep(answers);
   const alreadyAnswered = answers[step] !== undefined;
   if (step !== current && !alreadyAnswered) {
@@ -184,7 +143,6 @@ export function applyAnswer(answers: InterviewAnswers, step: InterviewStepId, va
   const errors = validateAnswer(step, value);
   if (errors.length > 0) return { ok: false, errors };
   const next: InterviewAnswers = { ...answers, [step]: value };
-  if (!isApplicable("skills", next)) delete next.skills;
   return { ok: true, answers: next };
 }
 
@@ -202,7 +160,6 @@ export function goBack(answers: InterviewAnswers, fromStep: InterviewStepId): In
 export const DEFAULT_ANSWERS: { [S in InterviewStepId]: NonNullable<InterviewAnswers[S]> } = {
   model: { provider: "openai" },
   tools: { kind: "none" },
-  skills: { skills: [] },
 };
 
 /** Applies `step`'s default answer (see `DEFAULT_ANSWERS`) — the pure implementation of "skip". */

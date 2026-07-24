@@ -3,13 +3,10 @@ import {
   assertComplete,
   DEFAULT_ANSWERS,
   INTERVIEW_STEP_ORDER,
-  isApplicable,
-  REFERENCE_SKILLS,
   type CompleteInterviewAnswers,
   type InterviewAnswers,
   type InterviewStepId,
   type ModelProvider,
-  type ReferenceSkillName,
 } from "./interview.js";
 
 /**
@@ -26,17 +23,12 @@ export interface NonInteractiveFlags {
   model?: string;
   /** "none" | "shopify". */
   api?: string;
-  /** Comma-separated skill names, or "none". Only valid with `--api shopify`. */
-  skills?: string;
 }
 
 export type NonInteractiveResult = { ok: true; answers: CompleteInterviewAnswers } | { ok: false; errors: string[] };
 
 function isModelProvider(v: string): v is ModelProvider {
   return v === "openai" || v === "anthropic" || v === "gemini" || v === "ollama";
-}
-function isReferenceSkillName(v: string): v is ReferenceSkillName {
-  return (REFERENCE_SKILLS as readonly string[]).includes(v);
 }
 
 /** One step's raw-flag-to-typed-answer mapping. `undefined` = the flag wasn't given; a pushed error
@@ -59,17 +51,6 @@ function resolveStepAnswer(step: InterviewStepId, flags: NonInteractiveFlags, er
       errors.push(`--api must be one of none|shopify, got "${flags.api}".`);
       return undefined;
     }
-    case "skills": {
-      if (flags.skills === undefined) return undefined;
-      if (flags.skills === "none" || flags.skills.trim() === "") return { skills: [] };
-      const names = flags.skills.split(",").map((s) => s.trim());
-      const unknown = names.filter((n) => !isReferenceSkillName(n));
-      if (unknown.length > 0) {
-        errors.push(`--skills has unknown skill(s): ${unknown.join(", ")}. Valid: ${REFERENCE_SKILLS.join(", ")}, or "none".`);
-        return undefined;
-      }
-      return { skills: names as ReferenceSkillName[] };
-    }
   }
 }
 
@@ -83,12 +64,6 @@ export function resolveNonInteractiveAnswers(flags: NonInteractiveFlags): NonInt
   let answers: InterviewAnswers = {};
 
   for (const step of INTERVIEW_STEP_ORDER) {
-    if (!isApplicable(step, answers)) {
-      if (step === "skills" && flags.skills !== undefined && flags.skills !== "none") {
-        errors.push("--skills only applies with --api shopify (skills are chosen once a store is connected).");
-      }
-      continue;
-    }
     const errorCountBefore = errors.length;
     const parsed = resolveStepAnswer(step, flags, errors);
     if (errors.length > errorCountBefore) continue; // already recorded a specific error for this step

@@ -157,3 +157,27 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
   M	packages/harness/src/agent.m5.test.ts
   M	packages/harness/src/compose-with-budget.m6.test.ts
   M	packages/whatsapp/src/send/render.m4.test.ts
+
+- 2026-09-23: gate M8 --allow-test-change: M12 T12.7-T12.12: reference skills removed entirely (harness+create-wappy), interview/generator/spine tests updated accordingly
+  M	packages/e2e/src/spine-a.m5.test.ts
+  M	packages/harness/src/agent-context-management.m6.test.ts
+  M	packages/harness/src/agent-oversized-text.m6.test.ts
+  M	packages/harness/src/agent.m5.test.ts
+  M	packages/harness/src/compose-with-budget.m6.test.ts
+  M	packages/whatsapp/src/send/render.m4.test.ts
+
+- 2026-09-23: gate M8 --allow-test-change: M12 T12.7-T12.12: reference skills removed entirely (harness+create-wappy), interview/generator/spine tests updated accordingly; dead isApplicable indirection removed
+  M	packages/e2e/src/spine-a.m5.test.ts
+  M	packages/harness/src/agent-context-management.m6.test.ts
+  M	packages/harness/src/agent-oversized-text.m6.test.ts
+  M	packages/harness/src/agent.m5.test.ts
+  M	packages/harness/src/compose-with-budget.m6.test.ts
+  M	packages/whatsapp/src/send/render.m4.test.ts
+
+- 2026-09-23: gate M8 --allow-test-change: M12 T12.7-T12.12: reference skills removed entirely (harness+create-wappy), interview/generator/spine tests updated accordingly; dead isApplicable indirection removed
+  M	packages/e2e/src/spine-a.m5.test.ts
+  M	packages/harness/src/agent-context-management.m6.test.ts
+  M	packages/harness/src/agent-oversized-text.m6.test.ts
+  M	packages/harness/src/agent.m5.test.ts
+  M	packages/harness/src/compose-with-budget.m6.test.ts
+  M	packages/whatsapp/src/send/render.m4.test.ts

@@ -3,8 +3,8 @@ import { ArgvError, parseArgv, STEP_FLAG_KEYS } from "./argv.js";
 
 describe("parseArgv", () => {
   test("parses the milestone brief's own example invocation", () => {
-    const parsed = parseArgv(["--yes", "--model", "openai", "--api", "shopify", "--skills", "orders"]);
-    expect(parsed).toEqual({ yes: true, model: "openai", api: "shopify", skills: "orders" });
+    const parsed = parseArgv(["--yes", "--model", "openai", "--api", "shopify"]);
+    expect(parsed).toEqual({ yes: true, model: "openai", api: "shopify" });
   });
 
   test("--yes and -y both set the yes flag; --help and -h both set help", () => {
@@ -19,12 +19,12 @@ describe("parseArgv", () => {
   });
 
   test("parses every documented flag, including --dir", () => {
-    const parsed = parseArgv(["--model", "anthropic", "--api", "shopify", "--skills", "store-info,orders", "--dir", "./my-bot"]);
-    expect(parsed).toEqual({ model: "anthropic", api: "shopify", skills: "store-info,orders", dir: "./my-bot" });
+    const parsed = parseArgv(["--model", "anthropic", "--api", "shopify", "--dir", "./my-bot"]);
+    expect(parsed).toEqual({ model: "anthropic", api: "shopify", dir: "./my-bot" });
   });
 
   test("flags for steps that no longer exist are rejected, not silently ignored", () => {
-    for (const gone of ["--framework", "--memory", "--router", "--whatsapp", "--shopify-store-domain", "--whatsapp-access-token"]) {
+    for (const gone of ["--framework", "--memory", "--router", "--whatsapp", "--shopify-store-domain", "--whatsapp-access-token", "--skills"]) {
       expect(() => parseArgv([gone, "x"])).toThrow(/Unrecognized flag/);
     }
   });
@@ -43,7 +43,7 @@ describe("parseArgv", () => {
     expect(() => parseArgv(["--model", "--api", "none"])).toThrow(ArgvError);
   });
 
-  test("STEP_FLAG_KEYS lists exactly the 3 interview-step flags, excluding --dir/--yes/--help", () => {
-    expect([...STEP_FLAG_KEYS].sort()).toEqual(["api", "model", "skills"]);
+  test("STEP_FLAG_KEYS lists exactly the 2 interview-step flags, excluding --dir/--yes/--help", () => {
+    expect([...STEP_FLAG_KEYS].sort()).toEqual(["api", "model"]);
   });
 });

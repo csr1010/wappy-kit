@@ -40,9 +40,9 @@ export function shopifyToolsSetup(tools: ToolsAnswer): ShopifyToolsSetup | undef
   };
 }
 
-/** Renders `tools/shopify.ts` — the one Shopify-specific generated FILE (separate from
- * `skills/*.ts`, which are generic tool-skills that happen to be backed by this provider, not
- * Shopify-specific themselves; see reference-skills.ts's own doc comment on that). */
+/** Renders `tools/shopify.ts` — the one Shopify-specific generated file. M12 removed the
+ * generic `skills/*.ts` files that used to sit alongside it (`@wappy/harness` ships no reference
+ * skills anymore); this is the only per-connector file a generated project gets now. */
 export function renderShopifyToolsFile(tools: ToolsAnswer): GeneratedFile | undefined {
   const setup = shopifyToolsSetup(tools);
   if (!setup) return undefined;

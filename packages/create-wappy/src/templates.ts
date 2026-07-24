@@ -1,17 +1,17 @@
-import type { CompleteInterviewAnswers, ModelProvider, ReferenceSkillName } from "./interview.js";
+import type { CompleteInterviewAnswers, ModelProvider } from "./interview.js";
 import { renderShopifyToolsFile, shopifyToolsSetup } from "./shopify.js";
-import { assertComplete, skillsOf } from "./interview.js";
+import { assertComplete } from "./interview.js";
 
 /**
- * T9.3 generators (SPEC.md §4.1 output: `index.ts`, `tools/*.ts`, `skills/*.ts`, `.env.sample`,
- * `.gitignore`, `README.md`, `package.json`) — see the session decision this follows: enum-driven
- * choices (model/framework/memory/router) are rendered by picking between pre-written, already-
- * shipped code paths (a `switch` selecting a one-line adapter constructor), never freshly invented
- * per choice; API-shape-driven tools (OpenAPI/Shopify) are a thin config wrapper around the real
- * runtime engines built in M7/M8 (parsing happens when the GENERATED app boots, not here); the one
- * genuinely dynamic piece (a store-specific skill draft) is passed in as an already-computed value
- * via `storeSkillDrafts`, keeping this whole module pure — no I/O, no model calls, fully
- * snapshot-testable (T9.8 builds on this).
+ * T9.3 generators (SPEC.md §4.1 output: `index.ts`, `tools/*.ts`, `.env.sample`, `.gitignore`,
+ * `README.md`, `package.json`) — see the session decision this follows: enum-driven choices
+ * (model/framework/memory/router) are rendered by picking between pre-written, already-shipped code
+ * paths (a `switch` selecting a one-line adapter constructor), never freshly invented per choice;
+ * API-shape-driven tools (OpenAPI/Shopify) are a thin config wrapper around the real runtime engines
+ * built in M7/M8 (parsing happens when the GENERATED app boots, not here). This module is pure — no
+ * I/O, no model calls, fully snapshot-testable (T9.8 builds on this). M12 removed the one dynamic
+ * piece that used to sit here (a store-specific skill draft, `storeSkillDrafts`) along with the
+ * reference skills themselves — `@wappy/harness` ships none, so there's nothing left to draft.
  *
  * Memory (local LibSQL file) and the router (LLM) are fixed in v0.1 — the interview no longer offers
  * alternatives that aren't implemented, so there is nothing here that can fail at generation time
@@ -45,20 +45,10 @@ export interface PartVersions {
   createWappy: string;
 }
 
-/** A store-specific skill draft, e.g. from `@wappy/harness`'s `generateStoreSkill()` — computed
- * once, by the CALLER, before rendering; this module only ever embeds the already-computed string. */
-export interface StoreSkillDraft {
-  description?: string;
-  promptFragment: string;
-}
-
 export interface RenderProjectOptions {
   answers: CompleteInterviewAnswers;
   versions: PartVersions;
   projectName?: string;
-  /** Keyed by reference skill name (e.g. "store-info"). A skill with no draft here renders its
-   * static reference-skill text verbatim (imported from `@wappy/harness`, not inlined). */
-  storeSkillDrafts?: Partial<Record<ReferenceSkillName, StoreSkillDraft>>;
 }
 
 interface ModelSetup {
@@ -104,30 +94,12 @@ const MEMORY_ENV: EnvVarSpec = {
   description: "LibSQL URL for conversation memory. Default: a local file at .wappy/memory.db (nothing to set).",
 };
 
-const SKILL_IMPORT_NAMES: Record<ReferenceSkillName, string> = { "store-info": "STORE_INFO_SKILL", orders: "createOrdersSkill", products: "createProductsSkill" };
-
-/** Per-skill rendering: `store-info` is a static import (STORE_INFO_SKILL is a plain object, not a
- * factory), `orders`/`products` are factory calls — one small table instead of an if/else chain
- * that only knew about two skills. */
-const SKILL_RENDER: Record<ReferenceSkillName, { varName: string; isFactory: boolean }> = {
-  "store-info": { varName: "storeInfoSkill", isFactory: false },
-  orders: { varName: "ordersSkill", isFactory: true },
-  products: { varName: "productsSkill", isFactory: true },
-};
-
 function renderIndexTs(opts: RenderProjectOptions): string {
   const { answers } = opts;
   const model = modelSetup(answers.model.provider);
   const tools = shopifyToolsSetup(answers.tools);
-  const skills = skillsOf(answers);
 
   const harnessImports = new Set<string>(["createAgent", "createVercelModel", "createLibsqlMemory", "createLlmRouter"]);
-  if (skills.length > 0) harnessImports.add("createSkillRegistry");
-  for (const s of skills) harnessImports.add(SKILL_IMPORT_NAMES[s]);
-  if (skills.includes("store-info")) {
-    harnessImports.add("createKnowledge");
-    harnessImports.add("createKnowledgeRag");
-  }
   if (tools) {
     harnessImports.add("createToolInvoker");
   }
@@ -135,7 +107,6 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   const lines: string[] = [];
   lines.push('import "dotenv/config";');
   lines.push('import { createInMemoryTracer, systemClock } from "@wappy/core";');
-  if (skills.includes("store-info")) lines.push('import { createClient } from "@libsql/client";');
   lines.push(`import { ${[...harnessImports].sort().join(", ")} } from "@wappy/harness";`);
   lines.push('import { createWhatsAppChannel } from "@wappy/whatsapp";');
   lines.push(model.importLine);
@@ -155,24 +126,6 @@ function renderIndexTs(opts: RenderProjectOptions): string {
     lines.push("");
   }
 
-  if (skills.includes("store-info")) {
-    lines.push('const knowledge = createKnowledge({ client: createClient({ url: process.env.KNOWLEDGE_DB_URL ?? "file:.wappy/knowledge.db" }) });');
-    lines.push("const retrieveRag = createKnowledgeRag({ knowledge });");
-    lines.push("");
-  }
-
-  if (skills.length > 0) {
-    lines.push("const skills = createSkillRegistry();");
-    for (const s of skills) {
-      const draft = opts.storeSkillDrafts?.[s];
-      const { isFactory } = SKILL_RENDER[s];
-      const importName = SKILL_IMPORT_NAMES[s];
-      const baseExpr = isFactory ? `${importName}()` : importName;
-      lines.push(draft ? `skills.register(${renderInlineSkill(draft, baseExpr)});` : `skills.register(${baseExpr});`);
-    }
-    lines.push("");
-  }
-
   // Exported (not just used locally): `wappy dev` (T9.7) needs channel.receive() to turn a raw
   // webhook into InboundMessages before it can call agent.handle() on each one — the Agent itself
   // only exposes handle(), not receive(), since receiving isn't an agent concern.
@@ -186,8 +139,6 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("export const agent = createAgent({");
   lines.push("  channel, memory, router, model, tracer,");
   lines.push("  clock: systemClock,");
-  if (skills.length > 0) lines.push("  skills,");
-  if (skills.includes("store-info")) lines.push("  retrieveRag,");
   if (tools) {
     lines.push("  tools,");
     lines.push("  invokeTools,");
@@ -196,15 +147,6 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("");
 
   return lines.join("\n");
-}
-
-/** Embeds an already-computed skill draft (e.g. from `generateStoreSkill()`) as an inline object
- * literal — spreads over the static reference skill's `tools`/`memorySchema` (via the base
- * expression, when given) so only `description`/`promptFragment` actually change. */
-function renderInlineSkill(draft: StoreSkillDraft, baseExpr: string): string {
-  const overrides: string[] = [`promptFragment: ${JSON.stringify(draft.promptFragment)}`];
-  if (draft.description) overrides.push(`description: ${JSON.stringify(draft.description)}`);
-  return `{ ...${baseExpr}, ${overrides.join(", ")} }`;
 }
 
 /** WhatsApp Cloud API credentials — never asked in the interview; always listed in `.env.sample`. */
@@ -224,9 +166,6 @@ export function collectEnvVars(opts: RenderProjectOptions): EnvVarSpec[] {
   const tools = shopifyToolsSetup(answers.tools);
   if (tools) vars.push(...tools.envVars);
   vars.push(MEMORY_ENV);
-  if (skillsOf(answers).includes("store-info")) {
-    vars.push({ name: "KNOWLEDGE_DB_URL", required: false, group: "Memory", description: "LibSQL URL for the store-info knowledge base. Default: a local file at .wappy/knowledge.db (nothing to set)." });
-  }
   return vars;
 }
 
@@ -280,9 +219,6 @@ function renderPackageJson(opts: RenderProjectOptions): string {
   if (answers.tools.kind !== "none") {
     deps["@wappy/tools-openapi"] = versions.toolsOpenapi;
   }
-  if (skillsOf(answers).includes("store-info")) {
-    deps["@libsql/client"] = "^0.18.0";
-  }
   const pkg = {
     name: projectName ?? "wappy-bot",
     version: "0.1.0",
@@ -297,7 +233,6 @@ function renderPackageJson(opts: RenderProjectOptions): string {
 function renderReadme(opts: RenderProjectOptions): string {
   const { answers } = opts;
   const vars = collectEnvVars(opts);
-  const skills = skillsOf(answers);
   const lines: string[] = [];
   lines.push(`# ${opts.projectName ?? "wappy-bot"}`);
   lines.push("");
@@ -325,30 +260,12 @@ function renderReadme(opts: RenderProjectOptions): string {
   lines.push(`- **Model:** ${answers.model.provider}`);
   lines.push("- **Memory:** local SQLite file (`.wappy/memory.db`)");
   lines.push(`- **Tools:** ${answers.tools.kind === "shopify" ? "Shopify" : "none"}`);
-  lines.push(`- **Skills:** ${skills.length > 0 ? skills.join(", ") : "none"}`);
   lines.push("");
   lines.push("Run `wappy status` any time to see what's done vs. pending, and `wappy doctor` to validate your env + connectivity.");
   lines.push("");
   return lines.join("\n");
 }
 
-
-function renderSkillFiles(opts: RenderProjectOptions): GeneratedFile[] {
-  const files: GeneratedFile[] = [];
-  for (const s of skillsOf(opts.answers)) {
-    const draft = opts.storeSkillDrafts?.[s];
-    const { varName, isFactory } = SKILL_RENDER[s];
-    const importName = SKILL_IMPORT_NAMES[s];
-    const baseExpr = isFactory ? `${importName}()` : importName;
-    const content = draft
-      ? `import type { Skill } from "@wappy/core";\nimport { ${importName} } from "@wappy/harness";\n\nexport const ${varName}: Skill = ${renderInlineSkill(draft, baseExpr)};\n`
-      : isFactory
-        ? `import { ${importName} } from "@wappy/harness";\n\nexport const ${varName} = ${baseExpr};\n`
-        : `export { ${importName} as ${varName} } from "@wappy/harness";\n`;
-    files.push({ path: `skills/${s}.ts`, content });
-  }
-  return files;
-}
 
 /**
  * Renders every project file for a completed interview (§4.1's output list). Throws
@@ -368,6 +285,5 @@ export function renderProject(opts: RenderProjectOptions): GeneratedFile[] {
   ];
   const toolsFile = renderShopifyToolsFile(opts.answers.tools);
   if (toolsFile) files.push(toolsFile);
-  files.push(...renderSkillFiles(opts));
   return files;
 }
