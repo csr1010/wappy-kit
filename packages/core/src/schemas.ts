@@ -17,6 +17,9 @@ export const InboundMediaSchema = z.object({
   url: z.string().optional(),
   mimeType: z.string().optional(),
   caption: z.string().optional(),
+  /** Only meaningful when kind === "location". */
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 export type InboundMedia = z.infer<typeof InboundMediaSchema>;
 
@@ -29,6 +32,12 @@ export const InboundMessageSchema = z.object({
   channel: z.string().min(1),
   text: z.string().optional(),
   media: InboundMediaSchema.optional(),
+  /**
+   * The stable id of whatever discrete option the user picked (a button/list-row id, a quick-reply
+   * payload, ...) — distinct from `text`, which carries the human-readable title and may be
+   * duplicated, localized, or renamed. Routing must key off this, never off `text`.
+   */
+  selectionId: z.string().optional(),
   /** Epoch milliseconds. */
   timestamp: z.number(),
   /** Channel-native payload, kept for debugging/replay; never parsed by core. */

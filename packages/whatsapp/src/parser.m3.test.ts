@@ -17,14 +17,16 @@ describe("parseWebhookPayload — one scenario per fixture", () => {
     ]);
   });
 
-  test("interactive button reply -> text is the button title", () => {
+  test("interactive button reply -> text is the title, selectionId is the routing key", () => {
     const { messages } = parseWebhookPayload(fixture("button-reply.json"));
     expect(messages[0]?.text).toBe("Store hours");
+    expect(messages[0]?.selectionId).toBe("store_hours");
   });
 
-  test("interactive list reply -> text is the row title", () => {
+  test("interactive list reply -> text is the row title, selectionId is the row id", () => {
     const { messages } = parseWebhookPayload(fixture("list-reply.json"));
     expect(messages[0]?.text).toBe("Order #8842");
+    expect(messages[0]?.selectionId).toBe("order_8842");
   });
 
   test("image -> media.kind=image, url is the Graph API media id (not yet downloaded)", () => {
@@ -37,9 +39,21 @@ describe("parseWebhookPayload — one scenario per fixture", () => {
     expect(messages[0]?.media?.kind).toBe("voice");
   });
 
-  test("location -> media.kind=location", () => {
+  test("location -> media.kind=location, carries lat/long plus the venue name", () => {
     const { messages } = parseWebhookPayload(fixture("location.json"));
-    expect(messages[0]?.media).toEqual({ kind: "location", caption: "Palo Alto store", url: undefined, mimeType: undefined });
+    expect(messages[0]?.media).toEqual({ kind: "location", caption: "Palo Alto store", latitude: 37.4419, longitude: -122.143, url: undefined, mimeType: undefined });
+  });
+
+  test("a location with missing/non-numeric latitude or longitude leaves them undefined", () => {
+    const payload = { entry: [{ changes: [{ field: "messages", value: { messages: [{ id: "x", from: "y", type: "location", location: { name: "no coords", latitude: "not-a-number" } }] } }] }] };
+    const { messages } = parseWebhookPayload(payload);
+    expect(messages[0]?.media).toEqual({ kind: "location", caption: "no coords", latitude: undefined, longitude: undefined, url: undefined, mimeType: undefined });
+  });
+
+  test("a pinned location with no venue name still carries lat/long", () => {
+    const payload = { entry: [{ changes: [{ field: "messages", value: { messages: [{ id: "x", from: "y", type: "location", location: { latitude: 1.5, longitude: 2.5 } }] } }] }] };
+    const { messages } = parseWebhookPayload(payload);
+    expect(messages[0]?.media).toMatchObject({ kind: "location", latitude: 1.5, longitude: 2.5 });
   });
 
   test("reaction -> text is the emoji", () => {
