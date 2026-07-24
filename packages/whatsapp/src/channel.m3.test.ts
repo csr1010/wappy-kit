@@ -59,6 +59,27 @@ describe("createWhatsAppChannel — reliability", () => {
     expect(events).toHaveLength(1);
   });
 
+  test("a throwing onStatus leaves the status retryable, not permanently lost", async () => {
+    const events: StatusEvent[] = [];
+    let shouldThrow = true;
+    const channel = createWhatsAppChannel({
+      phoneNumberId: "pn1",
+      accessToken: "t",
+      onStatus: (e) => {
+        if (shouldThrow) throw new Error("transient DB error");
+        events.push(e);
+      },
+    });
+
+    await expect(channel.receive(statusOnlyWebhook)).rejects.toThrow("transient DB error");
+    expect(events).toEqual([]);
+
+    // Meta retries the same webhook delivery; this time the handler succeeds.
+    shouldThrow = false;
+    await channel.receive(statusOnlyWebhook);
+    expect(events).toHaveLength(1);
+  });
+
   test("distinct statuses for the same message (sent -> delivered -> read) all fire, not deduped against each other", async () => {
     const events: StatusEvent[] = [];
     const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", onStatus: (e) => events.push(e) });

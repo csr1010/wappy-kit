@@ -11,6 +11,12 @@ export interface SeenStore {
    * efficient expiry bookkeeping.
    */
   checkAndSet(id: string, now: number): Promise<boolean>;
+  /**
+   * Peek without marking. For callers that must only mark an id seen AFTER something that can fail
+   * has succeeded (e.g. a status-update handler) — check `has()`, do the work, then `checkAndSet()`
+   * once it succeeds, so a failure leaves the id retryable instead of permanently swallowed.
+   */
+  has(id: string, now: number): Promise<boolean>;
 }
 
 export interface MemorySeenStoreOptions {
@@ -21,23 +27,31 @@ export function createMemorySeenStore(opts: MemorySeenStoreOptions = {}): SeenSt
   const ttlMs = opts.ttlMs ?? 24 * 60 * 60 * 1000;
   const expiresAt = new Map<string, number>();
 
+  // Opportunistic sweep so this stays bounded to "unique ids within the TTL window" instead of
+  // growing for the life of the process. ttlMs is constant per store, so insertion order is also
+  // expiry order (Map iterates in insertion order) — sweep from the front and stop at the first
+  // still-live entry, instead of scanning the whole map every call.
+  function sweep(now: number): void {
+    for (const [seenId, expiry] of expiresAt) {
+      if (expiry > now) break;
+      expiresAt.delete(seenId);
+    }
+  }
+
   return {
     size: () => expiresAt.size,
+
+    async has(id, now) {
+      const existing = expiresAt.get(id);
+      return existing !== undefined && existing > now;
+    },
+
     // No `await` between the read/sweep and the write below, so this is atomic even under
     // concurrent callers racing on the same event-loop turn — exactly one observes `true`.
     async checkAndSet(id, now) {
       const existing = expiresAt.get(id);
       if (existing !== undefined && existing > now) return false;
-
-      // Opportunistic sweep so this stays bounded to "unique ids within the TTL window" instead
-      // of growing for the life of the process. ttlMs is constant per store, so insertion order
-      // is also expiry order (Map iterates in insertion order) — sweep from the front and stop at
-      // the first still-live entry, instead of scanning the whole map every call.
-      for (const [seenId, expiry] of expiresAt) {
-        if (expiry > now) break;
-        expiresAt.delete(seenId);
-      }
-
+      sweep(now);
       expiresAt.set(id, now + ttlMs);
       return true;
     },
