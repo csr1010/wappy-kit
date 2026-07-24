@@ -40,3 +40,8 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
 
 - 2026-09-21: gate M4 --allow-test-change: M4 replaces M3's documented placeholder send() with the required smart-send + window-guard behavior (already logged for this milestone; re-running gate after fifth review-driven fix round; see also new SPEC.md Decisions Log entry)
   M	packages/whatsapp/src/channel.m3.test.ts
+
+- 2026-09-21: gate M4 --allow-test-change (logged twice identically by two gate runs in the same session; deduped to one entry here): M4 replaces M3's documented placeholder send() with the required smart-send + window-guard behavior (already logged for this milestone; re-running gate after sixth review-driven fix round: removed synchronous existsSync from queue.ts's loadQueueFile)
+  M	packages/whatsapp/src/channel.m3.test.ts
+
+- 2026-09-21: coverage-baseline.json branches force-lowered 97.935% → 97.923% (`ratchet.mjs update --force`). Root cause: the sixth M4 review round's fix (queue.ts's `loadQueueFile` — replacing sync `existsSync` + async `readFile` with a single try/catch around `readFile`) legitimately collapsed two previously-covered branches into one, shrinking whatsapp's total branch count. `@wappy/whatsapp` itself stayed at 100% branches; the aggregate ratchet is a weighted average across all packages, so removing fully-covered branches from one package mechanically shrinks the denominator and gives the pre-existing (already <100%, unrelated to this change) gaps in `testkit`/`e2e` slightly more weight — a measurement artifact, not a real drop in tested behavior. Confirmed via per-package coverage: whatsapp 357/357 branches both before and after relative to its own total.

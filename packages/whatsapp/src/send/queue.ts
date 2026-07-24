@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { CloudApiOutboundPayload } from "./render.js";
@@ -39,13 +38,15 @@ export interface OutboundQueue {
 }
 
 async function loadQueueFile(path: string): Promise<QueueItem[]> {
-  if (!existsSync(path)) return [];
+  let raw: unknown;
   try {
-    const raw = JSON.parse(await readFile(path, "utf8"));
-    return Array.isArray(raw?.items) ? raw.items : [];
+    raw = JSON.parse(await readFile(path, "utf8"));
   } catch {
-    return []; // a corrupt queue file starts fresh rather than crashing the process — outbound sends are re-derived from the agent, not the sole record of truth
+    // No file yet (ENOENT) or a corrupt one (bad JSON) — both start fresh rather than crashing the
+    // process; outbound sends are re-derived from the agent, not the sole record of truth.
+    return [];
   }
+  return Array.isArray((raw as { items?: unknown } | null)?.items) ? ((raw as { items: QueueItem[] }).items) : [];
 }
 
 async function saveQueueFile(path: string, items: QueueItem[]): Promise<void> {
