@@ -83,6 +83,27 @@ describe("buildExecutor — happy path: path/query/header/body mapping", () => {
     expect(activeServer.requests[0]?.path).toBe("/things/abc123");
   });
 
+  test("a baseUrl carrying a path prefix (e.g. an API version, the common real-world shape) is preserved, not replaced", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const execute = buildExecutor(tool(), { baseUrl: `${activeServer.url}/v1`, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ id: "abc123" });
+    expect(activeServer.requests[0]?.path).toBe("/v1/things/abc123");
+  });
+
+  test("a baseUrl path prefix WITH a trailing slash is also preserved correctly (no double slash)", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const execute = buildExecutor(tool(), { baseUrl: `${activeServer.url}/v1/`, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ id: "abc123" });
+    expect(activeServer.requests[0]?.path).toBe("/v1/things/abc123");
+  });
+
+  test("a multi-segment baseUrl path prefix is preserved", async () => {
+    activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
+    const execute = buildExecutor(tool(), { baseUrl: `${activeServer.url}/admin/api/2024-01`, auth: NO_AUTH, ssrf: { allowPrivateNetworks: true } });
+    await execute({ id: "abc123" });
+    expect(activeServer.requests[0]?.path).toBe("/admin/api/2024-01/things/abc123");
+  });
+
   test("a query parameter is appended as a URL search param", async () => {
     activeServer = await startServer(() => ({ status: 200, headers: { "content-type": "application/json" }, body: "{}" }));
     const t = tool({ path: "/things", parameters: { type: "object", properties: { limit: { type: "integer", "x-wappy-in": "query" } } } });

@@ -83,8 +83,15 @@ function buildPath(pathTemplate: string, pathParams: Record<string, unknown>): s
   });
 }
 
+/** Joins `baseUrl`'s own path (e.g. an API version prefix like `/v1`, common in `servers[].url`)
+ * with the operation's path — NOT `new URL(operationPath, baseUrl)` alone, since an operation path
+ * always starts with `/`, and per WHATWG URL resolution an absolute path REPLACES the base's path
+ * rather than appending to it, which would silently drop `baseUrl`'s prefix on every real call. */
 function buildUrl(baseUrl: string, pathTemplate: string, pathParams: Record<string, unknown>, query: Record<string, unknown>): URL {
-  const url = new URL(buildPath(pathTemplate, pathParams), baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
+  const base = new URL(baseUrl);
+  const basePath = base.pathname.endsWith("/") ? base.pathname.slice(0, -1) : base.pathname;
+  const fullPath = `${basePath}${buildPath(pathTemplate, pathParams)}`;
+  const url = new URL(fullPath, base);
   for (const [name, value] of Object.entries(query)) {
     if (value === undefined) continue;
     url.searchParams.set(name, String(value));
