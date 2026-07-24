@@ -71,6 +71,36 @@ describe("loadSpec — validation errors with pointers", () => {
   });
 });
 
+describe("loadSpec — URL loading goes through the SSRF guard (T7.8)", () => {
+  function jsonResponse(body: unknown): Response {
+    return { ok: true, status: 200, headers: new Headers(), text: async () => JSON.stringify(body) } as Response;
+  }
+
+  test("a spec fetched from a URL is loaded through fetchSafely, not SwaggerParser's own unguarded HTTP resolver", async () => {
+    const spec = readFixture("petstore-3.0.json");
+    const fetchImpl = async () => jsonResponse(spec);
+    const result = await loadSpec("https://spec.example.com/openapi.json", { resolveHostname: async () => ["93.184.216.34"], fetchImpl });
+    expect(result.document.paths["/pets"].get.operationId).toBe("listPets");
+  });
+
+  test("a spec URL that resolves to a private/internal address is rejected loudly, never fetched", async () => {
+    let called = false;
+    const fetchImpl = async () => {
+      called = true;
+      return jsonResponse({});
+    };
+    await expect(loadSpec("http://internal.example.com/openapi.json", { resolveHostname: async () => ["10.0.0.5"], fetchImpl })).rejects.toThrow(SpecLoadError);
+    expect(called).toBe(false);
+  });
+
+  test("allowPrivateNetworks can be explicitly passed through for a local dev spec server", async () => {
+    const spec = readFixture("petstore-3.0.json");
+    const fetchImpl = async () => jsonResponse(spec);
+    const result = await loadSpec("http://127.0.0.1:4010/openapi.json", { allowPrivateNetworks: true, fetchImpl });
+    expect(result.document.paths["/pets"].get.operationId).toBe("listPets");
+  });
+});
+
 describe("loadSpec — $ref bundling", () => {
   test("internal $refs to components/schemas are preserved (bundle, not fully dereferenced) so T7.3 controls flattening depth", async () => {
     const spec = readFixture("petstore-3.0.json");

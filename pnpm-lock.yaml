@@ -293,10 +293,19 @@ importers:
       '@wappy/core':
         specifier: workspace:*
         version: link:../core
+      ipaddr.js:
+        specifier: ^2.5.0
+        version: 2.5.0
+      js-yaml:
+        specifier: ^5.4.2
+        version: 5.4.2
       swagger2openapi:
         specifier: ^7.0.8
         version: 7.0.8
     devDependencies:
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
       '@types/node':
         specifier: ^26.6.2
         version: 26.6.2
@@ -675,6 +684,9 @@ packages:
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
+  '@types/js-yaml@4.0.9':
+    resolution: {integrity: sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg==}
+
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
@@ -1029,6 +1041,10 @@ packages:
   imurmurhash@0.1.4:
     resolution: {integrity: sha512-JmXMZ6wuvDmLiHEml9ykzqO6lwFbof0GG4IkcGaENdCRDDmMVnny7s5HsIgHCbaq0w2MyPhDqkhTUgS2LU2PHA==}
     engines: {node: '>=0.8.19'}
+
+  ipaddr.js@2.5.0:
+    resolution: {integrity: sha512-aq+t5NAc+cS6rZQQVWC2x98CPqGtKKTMDd4Gaodv0wShnItdKg/51djkGJ1hqH+Oy0ivDftCbSLCQob8zso01w==}
+    engines: {node: '>= 10'}
 
   is-extglob@2.1.1:
     resolution: {integrity: sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ==}
@@ -1812,6 +1828,8 @@ snapshots:
 
   '@types/estree@1.0.9': {}
 
+  '@types/js-yaml@4.0.9': {}
+
   '@types/json-schema@7.0.15': {}
 
   '@types/node@26.6.2':
@@ -2181,6 +2199,8 @@ snapshots:
   ignore@7.0.9: {}
 
   imurmurhash@0.1.4: {}
+
+  ipaddr.js@2.5.0: {}
 
   is-extglob@2.1.1: {}
 
