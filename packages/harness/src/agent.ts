@@ -131,8 +131,15 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     return { status: "sent" }; // already fully answered in a prior attempt — never re-send
   }
 
-  const now = deps.clock.now();
-  await safeAppend(deps.memory, { id: message.id, contactId: message.contactId, role: "user", text: message.text, timestamp: now });
+  // Guarded the same way as the reply turn below: a retry of a message whose PREVIOUS attempt
+  // persisted the user turn but failed before sending must not re-append it. This can't rely on the
+  // Memory backend itself being idempotent-by-id (that's an implementation detail of
+  // createLibsqlMemory, not part of the Memory interface's contract) — a non-deduping backend would
+  // otherwise accumulate duplicate turns in history across every retry before an eventual success.
+  if (!history.some((t) => t.id === message.id)) {
+    const now = deps.clock.now();
+    await safeAppend(deps.memory, { id: message.id, contactId: message.contactId, role: "user", text: message.text, timestamp: now });
+  }
 
   trace(deps.tracer, "router", "route");
   let decision: RouterDecision;
