@@ -353,6 +353,53 @@ describe("createAgent — per-step fallbacks", () => {
     expect(result.status).toBe("sent");
   });
 
+  test("an unguarded dependency (e.g. a throwing idGenerator) is still caught by the outer safety net, not left as an unhandled rejection", async () => {
+    const channel = fakeChannel("whatsapp");
+    const agent = createAgent({
+      channel,
+      memory: fakeMemory(),
+      router: fakeRouter([GREETING]),
+      model: textModel(),
+      clock: systemClock,
+      tracer: createInMemoryTracer(),
+      idGenerator: () => { throw new Error("id generator misconfigured"); },
+    });
+    const result = await agent.handle(msg());
+    expect(result).toEqual({ status: "failed", reason: "id generator misconfigured" });
+  });
+
+  test("an unguarded dependency throwing a non-Error value is still stringified into a readable reason", async () => {
+    const agent = createAgent({
+      channel: fakeChannel("whatsapp"),
+      memory: fakeMemory(),
+      router: fakeRouter([GREETING]),
+      model: textModel(),
+      clock: systemClock,
+      tracer: createInMemoryTracer(),
+      idGenerator: () => { throw "not an Error instance"; },
+    });
+    const result = await agent.handle(msg());
+    expect(result).toEqual({ status: "failed", reason: "not an Error instance" });
+  });
+
+  test("a channel with a customized, non-standard name is never traced under a garbage TracedSystem label", async () => {
+    const tracer = createInMemoryTracer();
+    const agent = createAgent({
+      channel: fakeChannel("my-custom-channel"),
+      memory: fakeMemory(),
+      router: fakeRouter([GREETING]),
+      model: textModel(),
+      clock: systemClock,
+      tracer,
+    });
+    const result = await agent.handle(msg());
+    expect(result.status).toBe("sent");
+    // Only the known TracedSystem union members should ever appear — "my-custom-channel" must not.
+    for (const system of tracer.touched()) {
+      expect(["whatsapp", "memory", "router", "skill", "rag", "tools", "llm"]).toContain(system);
+    }
+  });
+
   test("onEscalate() throwing doesn't prevent the reply from being sent", async () => {
     const channel = fakeChannel("whatsapp");
     const agent = createAgent({

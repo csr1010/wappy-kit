@@ -1,11 +1,13 @@
 import { createClient, type Client } from "@libsql/client";
 import type { Memory, Turn } from "@wappy/core";
 
-export interface LibsqlMemoryOptions {
-  /** `:memory:`, a local `file:...` path, or a remote `libsql://...`/`https://...` URL. */
-  url: string;
-  authToken?: string;
-}
+export type LibsqlMemoryOptions =
+  | {
+      /** `:memory:`, a local `file:...` path, or a remote `libsql://...`/`https://...` URL. */
+      url: string;
+      authToken?: string;
+    }
+  | { client: Client };
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS turns (
@@ -32,9 +34,17 @@ function rowToTurn(row: Record<string, unknown>): Turn {
 
 /** LibSQL-backed Memory (§2.1 "default memory = LibSQL/SQLite local file"). Works with a local file, `:memory:`, or a remote libsql URL — same client either way. */
 export function createLibsqlMemory(opts: LibsqlMemoryOptions): Memory {
-  const client: Client = createClient({ url: opts.url, authToken: opts.authToken });
+  const client: Client = "client" in opts ? opts.client : createClient({ url: opts.url, authToken: opts.authToken });
   let ready: Promise<void> | undefined;
-  const ensureSchema = (): Promise<void> => (ready ??= client.executeMultiple(SCHEMA));
+  const ensureSchema = (): Promise<void> => {
+    if (!ready) {
+      ready = client.executeMultiple(SCHEMA).catch((e: unknown) => {
+        ready = undefined; // let the next call retry instead of permanently caching a transient failure
+        throw e;
+      });
+    }
+    return ready;
+  };
 
   return {
     async load(contactId) {

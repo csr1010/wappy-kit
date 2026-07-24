@@ -90,10 +90,12 @@ describe("createLlmRouter — malformed output handling", () => {
     expect(calls).toBe(2); // one repair attempt, then give up
   });
 
-  test("a repair attempt that succeeds on the second try is used", async () => {
+  test("a repair attempt that succeeds on the second try is used, and its prompt differs from the original (not a blind identical retry)", async () => {
     let calls = 0;
-    const model = scriptedModel(() => {
+    const seenPrompts: string[] = [];
+    const model = scriptedModel((req) => {
       calls++;
+      seenPrompts.push(req.prompt);
       if (calls === 1) return { structured: { garbage: true } };
       return { structured: { intent: "hours", needsRAG: true, needsTool: false, escalate: false, confidence: 0.7 } };
     });
@@ -101,6 +103,8 @@ describe("createLlmRouter — malformed output handling", () => {
     const decision = await router.route(baseInput());
     expect(decision).toEqual({ intent: "hours", needsRAG: true, needsTool: false, escalate: false, confidence: 0.7 });
     expect(calls).toBe(2);
+    expect(seenPrompts[1]).not.toBe(seenPrompts[0]);
+    expect(seenPrompts[1]).toContain(seenPrompts[0]);
   });
 
   test("no structured field at all (model ignored the schema) is also treated as malformed", async () => {

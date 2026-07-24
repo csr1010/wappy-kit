@@ -101,6 +101,30 @@ describe("createVercelModel — structured output", () => {
   });
 });
 
+describe("createVercelModel — structured output failure", () => {
+  test("when the model's output doesn't parse as the schema, generateObject's NoObjectGeneratedError is translated into `text` (the model's raw attempt), not lost behind a generic throw", async () => {
+    const mock = new MockLanguageModelV4({
+      doGenerate: async () => ({
+        content: [{ type: "text", text: "Sorry, I'm not sure how to answer that in the requested format." }],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: { inputTokens: {}, outputTokens: {} },
+        warnings: [],
+      }),
+    });
+    const model = createVercelModel({ model: mock });
+    const result = await model.generate({ prompt: "hi", responseSchema: { type: "object", properties: { intent: { type: "string" } }, required: ["intent"] } });
+    expect(result).toEqual({ text: "Sorry, I'm not sure how to answer that in the requested format." });
+  });
+
+  test("a non-schema failure (e.g. a real network/API error) still propagates, not swallowed", async () => {
+    const mock = new MockLanguageModelV4({
+      doGenerate: async () => { throw new Error("ECONNRESET"); },
+    });
+    const model = createVercelModel({ model: mock });
+    await expect(model.generate({ prompt: "hi", responseSchema: { type: "object" } })).rejects.toThrow("ECONNRESET");
+  });
+});
+
 describe("createVercelModel — tool loop", () => {
   function fakeTool(name: string, run: (args: unknown) => Promise<unknown>): Tool {
     return {
