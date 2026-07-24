@@ -273,10 +273,17 @@ importers:
         version: 5.0.1(@types/node@26.6.2)(@vitest/coverage-v8@5.0.1)(vite@8.3.0(@types/node@26.6.2))
 
   packages/whatsapp:
+    dependencies:
+      '@wappy/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^26.6.2
         version: 26.6.2
+      '@wappy/testkit':
+        specifier: workspace:*
+        version: link:../testkit
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
