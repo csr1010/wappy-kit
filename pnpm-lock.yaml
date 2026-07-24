@@ -218,9 +218,18 @@ importers:
 
   packages/e2e:
     dependencies:
+      '@wappy/core':
+        specifier: workspace:*
+        version: link:../core
+      '@wappy/harness':
+        specifier: workspace:*
+        version: link:../harness
       '@wappy/testkit':
         specifier: workspace:*
         version: link:../testkit
+      '@wappy/whatsapp':
+        specifier: workspace:*
+        version: link:../whatsapp
     devDependencies:
       '@types/node':
         specifier: ^26.6.2

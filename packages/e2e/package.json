@@ -11,7 +11,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@wappy/testkit": "workspace:*"
+    "@wappy/core": "workspace:*",
+    "@wappy/harness": "workspace:*",
+    "@wappy/testkit": "workspace:*",
+    "@wappy/whatsapp": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
