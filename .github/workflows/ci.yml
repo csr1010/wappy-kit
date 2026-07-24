@@ -18,6 +18,8 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Bump this number as each milestone lands (gate is cumulative). --allow-test-change is no
-      # longer needed as of M7: B2 diffs against m6-done, which already includes the M6 test edit.
-      - run: pnpm gate 8
+      # Bump this number as each milestone lands (gate is cumulative). --allow-test-change is
+      # required again here: render.m4.test.ts was corrected post-m7-done (Meta rejects an empty
+      # interactive.body.text; see SPEC.md v2.6), so B2's diff against m7-done flags it on every
+      # run until the gate number moves past 8 (M9's own m8-done baseline will include the fix).
+      - run: pnpm gate 8 --allow-test-change "SPEC.md v2.6: Meta rejects empty interactive.body.text, render.m4.test.ts corrected accordingly"
