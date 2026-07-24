@@ -15,6 +15,18 @@
     "kind": "FunctionDeclaration",
     "type": "(manifests: SetupManifest[]) => AggregatedSetup"
   },
+  "AppliedManifests": {
+    "kind": "InterfaceDeclaration",
+    "type": "AppliedManifests"
+  },
+  "applyManifests": {
+    "kind": "FunctionDeclaration",
+    "type": "(state: State, parts: StatePart[], manifests: SetupManifest[], clock?: Pick<Clock, \"now\">) => AppliedManifests"
+  },
+  "checkVersionSkew": {
+    "kind": "FunctionDeclaration",
+    "type": "(coreVersion: string, parts: {    name: string;    coreVersionRange: string;}[]) => VersionSkewWarning[]"
+  },
   "Clock": {
     "kind": "InterfaceDeclaration",
     "type": "Clock"
@@ -22,6 +34,10 @@
   "CORE_VERSION": {
     "kind": "VariableDeclaration",
     "type": "\"0.1.0\""
+  },
+  "createEmptyState": {
+    "kind": "FunctionDeclaration",
+    "type": "(runId: string, clock?: Pick<Clock, \"now\">) => State"
   },
   "createInMemoryTracer": {
     "kind": "FunctionDeclaration",
@@ -39,6 +55,34 @@
     "kind": "VariableDeclaration",
     "type": "z.ZodEnum<{    sent: \"sent\";    failed: \"failed\";    queued: \"queued\";    fellBack: \"fellBack\";}>"
   },
+  "detectDrift": {
+    "kind": "FunctionDeclaration",
+    "type": "(state: State, projectRoot: string) => DriftEntry[]"
+  },
+  "DriftEntry": {
+    "kind": "InterfaceDeclaration",
+    "type": "DriftEntry"
+  },
+  "DriftStatus": {
+    "kind": "TypeAliasDeclaration",
+    "type": "DriftStatus"
+  },
+  "EnvKeyState": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    name: string;    required: boolean;    filled: boolean;}"
+  },
+  "EnvKeyStateSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    name: z.ZodString;    required: z.ZodBoolean;    filled: z.ZodBoolean;}, z.core.$strip>"
+  },
+  "GeneratedFileHash": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    path: string;    part: string;    sha256: string;}"
+  },
+  "GeneratedFileHashSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    path: z.ZodString;    part: z.ZodString;    sha256: z.ZodString;}, z.core.$strip>"
+  },
   "InboundMedia": {
     "kind": "TypeAliasDeclaration",
     "type": "{    kind: \"image\" | \"document\" | \"video\" | \"audio\" | \"voice\" | \"location\";    url?: string | undefined;    mimeType?: string | undefined;    caption?: string | undefined;}"
@@ -55,9 +99,29 @@
     "kind": "VariableDeclaration",
     "type": "z.ZodObject<{    id: z.ZodString;    contactId: z.ZodString;    channel: z.ZodString;    text: z.ZodOptional<z.ZodString>;    media: z.ZodOptional<z.ZodObject<{        kind: z.ZodEnum<{            image: \"image\";            document: \"document\";            video: \"video\";            audio: \"audio\";            voice: \"voice\";            location: \"location\";        }>;        url: z.ZodOptional<z.ZodString>;        mimeType: z.ZodOptional<z.ZodString>;        caption: z.ZodOptional<z.ZodString>;    }, z.core.$strip>>;    timestamp: z.ZodNumber;    raw: z.ZodOptional<z.ZodUnknown>;}, z.core.$strip>"
   },
+  "isLockStale": {
+    "kind": "FunctionDeclaration",
+    "type": "(path: string, staleMs: number, clock?: Pick<Clock, \"now\">) => boolean"
+  },
   "JsonSchema": {
     "kind": "TypeAliasDeclaration",
     "type": "JsonSchema"
+  },
+  "LoadResult": {
+    "kind": "TypeAliasDeclaration",
+    "type": "LoadResult"
+  },
+  "loadState": {
+    "kind": "FunctionDeclaration",
+    "type": "(path: string) => LoadResult"
+  },
+  "LockOptions": {
+    "kind": "InterfaceDeclaration",
+    "type": "LockOptions"
+  },
+  "LockTimeoutError": {
+    "kind": "ClassDeclaration",
+    "type": "typeof LockTimeoutError"
   },
   "Logger": {
     "kind": "InterfaceDeclaration",
@@ -70,6 +134,10 @@
   "MessageChannel": {
     "kind": "InterfaceDeclaration",
     "type": "MessageChannel"
+  },
+  "migrate": {
+    "kind": "FunctionDeclaration",
+    "type": "(raw: unknown) => State"
   },
   "Model": {
     "kind": "InterfaceDeclaration",
@@ -107,9 +175,29 @@
     "kind": "ClassDeclaration",
     "type": "typeof PluginRegistry"
   },
+  "readRawState": {
+    "kind": "FunctionDeclaration",
+    "type": "(path: string) => unknown"
+  },
   "RegistryConfig": {
     "kind": "InterfaceDeclaration",
     "type": "RegistryConfig"
+  },
+  "releaseLock": {
+    "kind": "FunctionDeclaration",
+    "type": "(path: string) => void"
+  },
+  "reset": {
+    "kind": "FunctionDeclaration",
+    "type": "(state: State, scope: ResetScope, clock?: Pick<Clock, \"now\">) => ResetResult"
+  },
+  "ResetResult": {
+    "kind": "InterfaceDeclaration",
+    "type": "ResetResult"
+  },
+  "ResetScope": {
+    "kind": "TypeAliasDeclaration",
+    "type": "ResetScope"
   },
   "resolveEnabledPlugins": {
     "kind": "FunctionDeclaration",
@@ -130,6 +218,14 @@
   "RouterInput": {
     "kind": "InterfaceDeclaration",
     "type": "RouterInput"
+  },
+  "runStep": {
+    "kind": "FunctionDeclaration",
+    "type": "(state: State, def: StepDef, clock?: Pick<Clock, \"now\">) => Promise<{    state: State;    result: StepResult;}>"
+  },
+  "runSteps": {
+    "kind": "FunctionDeclaration",
+    "type": "(state: State, defs: StepDef[], clock?: Pick<Clock, \"now\">) => Promise<{    state: State;    results: StepResult[];}>"
   },
   "satisfiesRange": {
     "kind": "FunctionDeclaration",
@@ -187,6 +283,54 @@
     "kind": "VariableDeclaration",
     "type": "z.ZodObject<{    text: z.ZodOptional<z.ZodString>;    buttons: z.ZodOptional<z.ZodArray<z.ZodObject<{        id: z.ZodString;        title: z.ZodString;    }, z.core.$strip>>>;    list: z.ZodOptional<z.ZodObject<{        buttonText: z.ZodString;        sections: z.ZodArray<z.ZodObject<{            title: z.ZodOptional<z.ZodString>;            rows: z.ZodArray<z.ZodObject<{                id: z.ZodString;                title: z.ZodString;                description: z.ZodOptional<z.ZodString>;            }, z.core.$strip>>;        }, z.core.$strip>>;    }, z.core.$strip>>;    cta: z.ZodOptional<z.ZodObject<{        text: z.ZodString;        url: z.ZodString;    }, z.core.$strip>>;    media: z.ZodOptional<z.ZodObject<{        kind: z.ZodEnum<{            image: \"image\";            document: \"document\";            video: \"video\";            audio: \"audio\";            voice: \"voice\";        }>;        url: z.ZodString;        caption: z.ZodOptional<z.ZodString>;        mimeType: z.ZodOptional<z.ZodString>;        filename: z.ZodOptional<z.ZodString>;    }, z.core.$strip>>;    quoteId: z.ZodOptional<z.ZodString>;    flow: z.ZodOptional<z.ZodUnknown>;}, z.core.$strip>"
   },
+  "State": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    schemaVersion: 1;    runId: string;    parts: Array<{        name: string;        version: string;    }>;    steps: Array<{        id: string;        part: string;        status: \"failed\" | \"pending\" | \"done\";        error?: string | undefined;    }>;    envKeys: Array<{        name: string;        required: boolean;        filled: boolean;    }>;    lastStep: string | null;    generatedFiles: Array<{        path: string;        part: string;        sha256: string;    }>;    createdAt: number;    updatedAt: number;}"
+  },
+  "STATE_SCHEMA_VERSION": {
+    "kind": "VariableDeclaration",
+    "type": "1"
+  },
+  "StateCorruptError": {
+    "kind": "ClassDeclaration",
+    "type": "typeof StateCorruptError"
+  },
+  "StatePart": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    name: string;    version: string;}"
+  },
+  "StatePartSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    name: z.ZodString;    version: z.ZodString;}, z.core.$strip>"
+  },
+  "StateSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    schemaVersion: z.ZodLiteral<1>;    runId: z.ZodString;    parts: z.ZodArray<z.ZodObject<{        name: z.ZodString;        version: z.ZodString;    }, z.core.$strip>>;    steps: z.ZodArray<z.ZodObject<{        id: z.ZodString;        part: z.ZodString;        status: z.ZodEnum<{            failed: \"failed\";            pending: \"pending\";            done: \"done\";        }>;        error: z.ZodOptional<z.ZodString>;    }, z.core.$strip>>;    envKeys: z.ZodArray<z.ZodObject<{        name: z.ZodString;        required: z.ZodBoolean;        filled: z.ZodBoolean;    }, z.core.$strip>>;    lastStep: z.ZodNullable<z.ZodString>;    generatedFiles: z.ZodArray<z.ZodObject<{        path: z.ZodString;        part: z.ZodString;        sha256: z.ZodString;    }, z.core.$strip>>;    createdAt: z.ZodNumber;    updatedAt: z.ZodNumber;}, z.core.$strip>"
+  },
+  "StateStep": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    id: string;    part: string;    status: \"failed\" | \"pending\" | \"done\";    error?: string | undefined;}"
+  },
+  "StateStepSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    id: z.ZodString;    part: z.ZodString;    status: z.ZodEnum<{        failed: \"failed\";        pending: \"pending\";        done: \"done\";    }>;    error: z.ZodOptional<z.ZodString>;}, z.core.$strip>"
+  },
+  "StateVersionTooNewError": {
+    "kind": "ClassDeclaration",
+    "type": "typeof StateVersionTooNewError"
+  },
+  "StepDef": {
+    "kind": "InterfaceDeclaration",
+    "type": "StepDef"
+  },
+  "StepResult": {
+    "kind": "InterfaceDeclaration",
+    "type": "StepResult"
+  },
+  "StepStatusSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodEnum<{    failed: \"failed\";    pending: \"pending\";    done: \"done\";}>"
+  },
   "systemClock": {
     "kind": "VariableDeclaration",
     "type": "Clock"
@@ -219,6 +363,10 @@
     "kind": "InterfaceDeclaration",
     "type": "Tracer"
   },
+  "tryAcquireLock": {
+    "kind": "FunctionDeclaration",
+    "type": "(path: string, clock?: Pick<Clock, \"now\">) => boolean"
+  },
   "Turn": {
     "kind": "TypeAliasDeclaration",
     "type": "{    id: string;    contactId: string;    role: \"user\" | \"agent\" | \"system\";    timestamp: number;    text?: string | undefined;    meta?: Record<string, unknown> | undefined;}"
@@ -226,5 +374,17 @@
   "TurnSchema": {
     "kind": "VariableDeclaration",
     "type": "z.ZodObject<{    id: z.ZodString;    contactId: z.ZodString;    role: z.ZodEnum<{        user: \"user\";        agent: \"agent\";        system: \"system\";    }>;    text: z.ZodOptional<z.ZodString>;    timestamp: z.ZodNumber;    meta: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;}, z.core.$strip>"
+  },
+  "VersionSkewWarning": {
+    "kind": "InterfaceDeclaration",
+    "type": "VersionSkewWarning"
+  },
+  "withLock": {
+    "kind": "FunctionDeclaration",
+    "type": "<T>(path: string, fn: () => Promise<T> | T, opts?: LockOptions, clock?: Clock) => Promise<T>"
+  },
+  "writeStateAtomic": {
+    "kind": "FunctionDeclaration",
+    "type": "(path: string, state: State) => void"
   }
 }
