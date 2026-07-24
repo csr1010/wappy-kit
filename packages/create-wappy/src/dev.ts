@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { config as loadDotenv } from "dotenv";
 import type { Agent, MessageChannel } from "@wappy/core";
 import { createWebhookServer } from "@wappy/whatsapp";
 
@@ -11,10 +12,13 @@ import { createWebhookServer } from "@wappy/whatsapp";
  * reach it. Run from inside that project's directory (`npm run dev`, which resolves the `wappy`
  * bin from the project's own `create-wappy` dependency — see templates.ts's renderPackageJson).
  *
- * Deliberately dynamic-imports `<cwd>/index.ts` directly rather than requiring a build step: the
- * project's own `import "dotenv/config"` (its first statement) reads `<cwd>/.env` as a side effect
- * of that import, so env vars are in place before this module reads WHATSAPP_VERIFY_TOKEN/
- * WHATSAPP_APP_SECRET below — no separate .env-loading code needed here.
+ * Deliberately dynamic-imports `<cwd>/index.ts` directly rather than requiring a build step. Loads
+ * `<cwd>/.env` itself (via `dotenv`), explicitly and first — NOT by relying on the generated
+ * project's own `import "dotenv/config"` as a side effect of importing it: that import happens
+ * AFTER this module would otherwise need to read WHATSAPP_VERIFY_TOKEN/WHATSAPP_APP_SECRET,
+ * so relying on it made this file's own preflight check see an empty environment and report a
+ * false "missing" error even when `.env` was filled in correctly (caught by hand-testing the real
+ * CLI, not by a unit test — the unit tests all injected env directly).
  */
 
 export interface GeneratedProjectExports {
@@ -58,6 +62,10 @@ async function defaultOpenTunnel(port: number): Promise<{ url: string; close: ()
 }
 
 export async function runDev(opts: RunDevOptions): Promise<RunDevResult> {
+  // Only load .env from disk for the real (opts.env omitted) path — a test supplying its own env
+  // object is asserting on an exact, controlled environment and shouldn't have it silently
+  // augmented by whatever .env happens to exist in cwd.
+  if (!opts.env) loadDotenv({ path: resolve(opts.cwd, ".env") });
   const env = opts.env ?? process.env;
   const indexPath = resolve(opts.cwd, "index.ts");
   if (!existsSync(indexPath)) {

@@ -81,6 +81,33 @@ describe("runDev — preflight checks (fail loud, don't half-start)", () => {
   });
 });
 
+describe("runDev — loads .env from disk itself, BEFORE the preflight check (regression)", () => {
+  // Caught by hand-testing the real CLI, not by a unit test: runDev used to read
+  // WHATSAPP_VERIFY_TOKEN/WHATSAPP_APP_SECRET from process.env BEFORE importing index.ts, but
+  // .env was only ever loaded as a side effect of THAT import — so a correctly filled-in .env
+  // still produced a false "missing" error. This test uses real process.env (opts.env omitted)
+  // and a real .env file on disk, exactly like the actual CLI invocation that found the bug.
+  test("a real .env file on disk with valid values passes the preflight check", async () => {
+    const dir = projectDir();
+    writeFileSync(join(dir, ".env"), "WHATSAPP_VERIFY_TOKEN=vt-from-disk\nWHATSAPP_APP_SECRET=secret-from-disk\n");
+    const savedKeys = ["WHATSAPP_VERIFY_TOKEN", "WHATSAPP_APP_SECRET"] as const;
+    const saved = Object.fromEntries(savedKeys.map((k) => [k, process.env[k]]));
+    for (const k of savedKeys) delete process.env[k];
+    try {
+      const server = fakeServer();
+      const importProject = vi.fn(async () => ({ agent: fakeAgent(), channel: fakeChannel() }));
+      const result = await runDev({ cwd: dir, print: () => {}, createServer: () => server, importProject, tunnel: false });
+      expect(result.exitCode).toBe(0);
+      expect(process.env.WHATSAPP_VERIFY_TOKEN).toBe("vt-from-disk");
+    } finally {
+      for (const k of savedKeys) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
+  });
+});
+
 describe("runDev — defaultImportProject (no injected fake): a real dynamic import of index.ts", () => {
   test("imports the real file and picks up its agent/channel exports", async () => {
     const dir = projectDir(false);
