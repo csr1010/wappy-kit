@@ -176,14 +176,24 @@ export interface Knowledge {
 export interface KnowledgeOptions {
   client: Client;
   /** Optional embedding provider — "via the configured model provider" (§8 T8.3) means whatever
-   * embedding call the caller's own model setup provides (e.g. the Vercel AI SDK's `embedMany`),
-   * wired in here as a plain function so this module stays provider-agnostic (hub-and-spoke: no
-   * provider SDK imported here). Embeddings are computed once at ingest time and stored, not
-   * recomputed on every `recall()`. Unset (the default): BM25 only, no embedding computation at all. */
+   * embedding call the caller's own model setup provides (e.g. the Vercel AI SDK's `embedMany`, or
+   * `local-embedder.ts`'s `createLocalEmbedder()` for a fully local/offline option), wired in here
+   * as a plain function so this module stays provider-agnostic (hub-and-spoke: no provider SDK
+   * imported here). Embeddings are computed once at ingest time and stored, not recomputed on every
+   * `recall()`. Unset (the default): BM25 only, no embedding computation at all. */
   embed?: (texts: string[]) => Promise<number[][]>;
+  /** M14: the embedding model's fixed output width (e.g. `createLocalEmbedder()`'s own
+   * `.dimensions`). Only meaningful alongside `embed` — when both are set, embeddings are stored in
+   * a real LibSQL `F32_BLOB(N)` column with a `libsql_vector_idx` ANN index and `recall()` ranks via
+   * `vector_distance_cos()` in SQL, instead of loading every row into JS and computing cosine
+   * similarity by hand (what `embed` alone, without this, still does — kept exactly as-is for
+   * backward compatibility with an embedder that doesn't have a single fixed width, or a caller
+   * that hasn't set this yet). Set once, consistently, for a given database file — this module
+   * doesn't migrate an existing table that was created without it. */
+  embedDimensions?: number;
 }
 
-const SCHEMA = `
+const BASE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS knowledge_chunks (
   id TEXT PRIMARY KEY,
   sourceId TEXT NOT NULL,
@@ -193,6 +203,22 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_source ON knowledge_chunks(sourceId);
 `;
+
+function schemaFor(embedDimensions: number | undefined): string {
+  if (!embedDimensions) return BASE_SCHEMA;
+  // A separate table (not an added column on knowledge_chunks) since F32_BLOB(N)'s width is fixed
+  // at CREATE TABLE time and this module has no schema-migration story — a caller that starts
+  // without embedDimensions and adds it later against the same database file gets a fresh, empty
+  // vector table alongside their existing text-only one, not a silently-incompatible ALTER.
+  return `${BASE_SCHEMA}
+CREATE TABLE IF NOT EXISTS knowledge_vectors (
+  id TEXT PRIMARY KEY REFERENCES knowledge_chunks(id),
+  sourceId TEXT NOT NULL,
+  embedding F32_BLOB(${embedDimensions})
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_vec ON knowledge_vectors (libsql_vector_idx(embedding));
+`;
+}
 
 const DEFAULT_TOP_K = 5;
 const DEFAULT_SCORE_FLOOR = 0;
@@ -223,10 +249,11 @@ interface KnowledgeRow {
  */
 export function createKnowledge(opts: KnowledgeOptions): Knowledge {
   const client = opts.client;
+  const useNativeVectors = Boolean(opts.embed && opts.embedDimensions);
   let ready: Promise<void> | undefined;
   const ensureSchema = (): Promise<void> => {
     if (!ready) {
-      ready = client.executeMultiple(SCHEMA).catch((e: unknown) => {
+      ready = client.executeMultiple(schemaFor(opts.embedDimensions)).catch((e: unknown) => {
         ready = undefined; // let the next call retry instead of permanently caching a transient failure
         throw e;
       });
@@ -237,23 +264,42 @@ export function createKnowledge(opts: KnowledgeOptions): Knowledge {
   return {
     async ingest(sourceId, text, chunkOptions) {
       await ensureSchema();
+      // knowledge_vectors.id REFERENCES knowledge_chunks(id) — the child table's rows for this
+      // source must be deleted BEFORE the parent's, or the FK constraint rejects the parent delete.
+      if (useNativeVectors) await client.execute({ sql: "DELETE FROM knowledge_vectors WHERE sourceId = ?", args: [sourceId] });
       await client.execute({ sql: "DELETE FROM knowledge_chunks WHERE sourceId = ?", args: [sourceId] });
       const pieces = chunkText(text, chunkOptions);
       if (pieces.length === 0) return 0;
 
       const embeddings = opts.embed ? await opts.embed(pieces) : undefined;
+      const ids = pieces.map((_, i) => `${sourceId}:${i}`);
       await client.batch(
         pieces.map((piece, i) => ({
           sql: "INSERT INTO knowledge_chunks (id, sourceId, chunkIndex, text, embedding) VALUES (?, ?, ?, ?, ?)",
-          args: [`${sourceId}:${i}`, sourceId, i, piece, embeddings ? JSON.stringify(embeddings[i]) : null],
+          // Native-vector mode stores the real embedding in `knowledge_vectors` (below), not here —
+          // this TEXT column stays null in that mode rather than duplicating the same data twice.
+          args: [ids[i]!, sourceId, i, piece, embeddings && !useNativeVectors ? JSON.stringify(embeddings[i]) : null],
         })),
         "write",
       );
+      if (useNativeVectors && embeddings) {
+        await client.batch(
+          embeddings
+            .map((vec, i) => ({ vec, id: ids[i]! }))
+            .filter((e) => e.vec !== undefined)
+            .map(({ vec, id }) => ({
+              sql: "INSERT INTO knowledge_vectors (id, sourceId, embedding) VALUES (?, ?, vector32(?))",
+              args: [id, sourceId, JSON.stringify(vec)],
+            })),
+          "write",
+        );
+      }
       return pieces.length;
     },
 
     async remove(sourceId) {
       await ensureSchema();
+      if (useNativeVectors) await client.execute({ sql: "DELETE FROM knowledge_vectors WHERE sourceId = ?", args: [sourceId] });
       await client.execute({ sql: "DELETE FROM knowledge_chunks WHERE sourceId = ?", args: [sourceId] });
     },
 
@@ -261,6 +307,22 @@ export function createKnowledge(opts: KnowledgeOptions): Knowledge {
       await ensureSchema();
       const topK = recallOpts?.topK ?? DEFAULT_TOP_K;
       const scoreFloor = recallOpts?.scoreFloor ?? DEFAULT_SCORE_FLOOR;
+
+      if (useNativeVectors) {
+        const [queryEmbedding] = await opts.embed!([query]);
+        // No vector for the query (e.g. an embedder returning fewer results than asked) has nothing
+        // honest to rank against — returns no results, same "don't fabricate a match" posture as an
+        // empty store, rather than scoring everything arbitrarily.
+        if (!queryEmbedding) return [];
+        const result = await client.execute({
+          sql: "SELECT kv.id as id, kv.sourceId as sourceId, kc.text as text, vector_distance_cos(kv.embedding, vector32(?)) as dist FROM knowledge_vectors kv JOIN knowledge_chunks kc ON kc.id = kv.id ORDER BY dist ASC LIMIT ?",
+          args: [JSON.stringify(queryEmbedding), topK],
+        });
+        const rows = result.rows as unknown as { id: string; sourceId: string; text: string; dist: number }[];
+        return rows
+          .map((r) => ({ id: r.id, sourceId: r.sourceId, text: r.text, score: 1 - r.dist }))
+          .filter((r) => r.score > scoreFloor);
+      }
 
       const result = await client.execute("SELECT id, sourceId, text, embedding FROM knowledge_chunks");
       const rows = result.rows as unknown as KnowledgeRow[];

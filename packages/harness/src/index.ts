@@ -16,5 +16,6 @@ export * from "./skills.js";
 export * from "./tool-selector.js";
 export * from "./bm25.js";
 export * from "./knowledge.js";
+export * from "./local-embedder.js";
 export * from "./invoke-tools.js";
 export * from "./confirm.js";

@@ -1,2 +1,5 @@
 packages:
   - "packages/*"
+allowBuilds:
+  onnxruntime-node: true
+  protobufjs: true
