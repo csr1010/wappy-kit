@@ -4,6 +4,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "bin": {
     "create-wappy": "dist/bin.js"
   },
