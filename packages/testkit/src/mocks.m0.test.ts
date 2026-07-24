@@ -16,7 +16,7 @@ describe("mockWhatsAppCloud", () => {
     closers.push(wa.close);
     const r = await send(wa.url, { to: "1", type: "text", text: { body: "yo" } });
     expect(r.status).toBe(200);
-    expect(((await r.json()) as any).messages[0].id).toMatch(/^wamid\./);
+    expect(((await r.json()) as { messages: Array<{ id: string }> }).messages[0]!.id).toMatch(/^wamid\./);
     expect(wa.sent).toHaveLength(1);
     expect(wa.sent[0]!.body).toMatchObject({ to: "1" });
   });
@@ -30,7 +30,7 @@ describe("mockWhatsAppCloud", () => {
     for (let i = 0; i < 5; i++) statuses.push((await send(wa.url, { i })).status);
     expect(statuses).toEqual([400, 400, 429, 500, 200]);
     wa.failNext(1, { code: 131026 });
-    const r = (await (await send(wa.url, {})).json()) as any;
+    const r = (await (await send(wa.url, {})).json()) as { error: { code: number } };
     expect(r.error.code).toBe(131026);
     expect(wa.sent).toHaveLength(6); // failed attempts are recorded too
   });

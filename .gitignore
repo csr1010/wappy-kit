@@ -4,3 +4,4 @@ dist
 .env
 .wappy/
 *.log
+coverage
