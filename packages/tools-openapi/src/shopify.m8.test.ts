@@ -157,15 +157,19 @@ describe("createShopifyToolProvider — getOrder (by id or by display name)", ()
     fulfillments: [{ trackingInfo: [{ number: "1Z999", url: "https://track.example.com/1Z999" }] }],
   };
 
-  test("a numeric id queries order(id:) directly", async () => {
+  test("an already-fully-qualified gid queries order(id:) directly", async () => {
     let seenQuery = "";
+    let seenVars: unknown;
     const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
-      seenQuery = JSON.parse(init!.body as string).query;
+      const body = JSON.parse(init!.body as string);
+      seenQuery = body.query;
+      seenVars = body.variables;
       return jsonResponse({ data: { order: orderNode } });
     };
     const p = provider(fetchImpl as never);
-    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "8842" });
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "gid://shopify/Order/1" });
     expect(seenQuery).toContain("order(id:");
+    expect((seenVars as { id: string }).id).toBe("gid://shopify/Order/1");
     expect(result.ok).toBe(true);
     expect(result.data).toEqual({
       id: "gid://shopify/Order/1",
@@ -190,21 +194,36 @@ describe("createShopifyToolProvider — getOrder (by id or by display name)", ()
     const p = provider(fetchImpl as never);
     const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "#1001" });
     expect(seenQuery).toContain("orders(first: 1");
-    expect((seenVars as { q: string }).q).toBe("name:#1001");
+    expect((seenVars as { q: string }).q).toBe('name:"#1001"');
     expect(result.ok).toBe(true);
   });
 
-  test("a name-like id lacking # but containing non-digits is normalized before searching", async () => {
+  test('a BARE NUMERIC id (e.g. "8842", extracted from "where\'s my order 8842?") is searched by NAME, not treated as Shopify\'s internal opaque order id', async () => {
+    let seenQuery = "";
+    let seenVars: unknown;
+    const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
+      const body = JSON.parse(init!.body as string);
+      seenQuery = body.query;
+      seenVars = body.variables;
+      return jsonResponse({ data: { orders: { edges: [{ node: orderNode }] } } });
+    };
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "8842" });
+    expect(seenQuery).toContain("orders(first: 1");
+    expect(seenQuery).not.toContain("order(id:");
+    expect((seenVars as { q: string }).q).toBe('name:"#8842"');
+    expect(result.ok).toBe(true);
+  });
+
+  test("a name-like id lacking # is normalized (# prefixed) before searching", async () => {
     let seenVars: unknown;
     const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
       seenVars = JSON.parse(init!.body as string).variables;
       return jsonResponse({ data: { orders: { edges: [{ node: orderNode }] } } });
     };
     const p = provider(fetchImpl as never);
-    // A pure-digit string is treated as the internal numeric id (direct order(id:) lookup, covered
-    // by the "numeric id" test above) — only a non-pure-digit form falls through to the name search.
     await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "SP1001" });
-    expect((seenVars as { q: string }).q).toBe("name:#SP1001");
+    expect((seenVars as { q: string }).q).toBe('name:"#SP1001"');
   });
 
   test("no matching order by name fails honestly", async () => {
@@ -260,6 +279,17 @@ describe("createShopifyToolProvider — getInventoryLevels", () => {
     const p = provider(fetchImpl as never);
     const result = await p.listTools().find((t) => t.name === "getInventoryLevels")!.execute({ sku: "GHOST" });
     expect(result.ok).toBe(false);
+  });
+
+  test("a SKU containing Shopify search-filter syntax is quoted, not passed through as a raw filter widening the search", async () => {
+    let seenQ: string | undefined;
+    const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
+      seenQ = JSON.parse(init!.body as string).variables.q;
+      return jsonResponse({ data: { inventoryItems: { edges: [] } } });
+    };
+    const p = provider(fetchImpl as never);
+    await p.listTools().find((t) => t.name === "getInventoryLevels")!.execute({ sku: 'X" OR sku:*' });
+    expect(seenQ).toBe('sku:"X\\" OR sku:*"');
   });
 });
 
@@ -428,7 +458,7 @@ describe("createShopifyToolProvider — response shaping edge cases", () => {
         data: { order: { id: "1", name: "#1", fulfillments: [{ trackingInfo: [{ number: "", url: "https://x" }, { number: "1Z9", url: "https://y" }] }] } },
       });
     const p = provider(fetchImpl as never);
-    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "1" });
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "gid://shopify/Order/1" });
     expect(result.data).toMatchObject({ tracking: [{ number: "1Z9", url: "https://y" }] });
   });
 
@@ -472,10 +502,10 @@ describe("createShopifyToolProvider — remaining tools' missing-argument and tr
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  test("getOrder: a failed GraphQL call on the direct numeric-id path is reported honestly", async () => {
+  test("getOrder: a failed GraphQL call on the direct-gid path is reported honestly", async () => {
     const fetchImpl = async () => new Response("down", { status: 503 });
     const p = provider(fetchImpl as never);
-    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "8842" });
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "gid://shopify/Order/8842" });
     expect(result.ok).toBe(false);
     expect(result.error).toContain("503");
   });
@@ -531,10 +561,10 @@ describe("createShopifyToolProvider — remaining tools' missing-argument and tr
     expect(result.error).toContain("503");
   });
 
-  test("getOrder: a null order on the direct numeric-id path is reported as not found", async () => {
+  test("getOrder: a null order on the direct-gid path is reported as not found", async () => {
     const fetchImpl = async () => jsonResponse({ data: { order: null } });
     const p = provider(fetchImpl as never);
-    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "8842" });
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "gid://shopify/Order/8842" });
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/no order/i);
   });
@@ -614,7 +644,7 @@ describe("createShopifyToolProvider — responses missing an expected nested fie
   test("shapeOrder: a fulfillment with no `trackingInfo` field at all yields no tracking, not a crash", async () => {
     const fetchImpl = async () => jsonResponse({ data: { order: { id: "1", name: "#1", fulfillments: [{}] } } });
     const p = provider(fetchImpl as never);
-    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "1" });
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "gid://shopify/Order/1" });
     expect(result.ok).toBe(true);
     expect((result.data as { tracking?: unknown }).tracking).toBeUndefined();
   });

@@ -2,7 +2,7 @@ import type { InboundMessage, JsonSchema, Model, RouterDecision, Tool } from "@w
 import { selectTools } from "./tool-selector.js";
 import { boundToolResult, type BoundToolResultOptions } from "./bound-tool-result.js";
 import type { TokenEstimator } from "./context-budget.js";
-import type { ConfirmFlow } from "./confirm.js";
+import { cancelSelectionId, confirmSelectionId, type ConfirmFlow } from "./confirm.js";
 
 export interface CreateToolInvokerOptions {
   model: Model;
@@ -28,6 +28,12 @@ export interface CreateToolInvokerOptions {
 
 const DEFAULT_MAX_SCHEMA_TOKENS = 1000;
 const DEFAULT_BOUND_OPTIONS: BoundToolResultOptions = { maxBytes: 2000, maxArrayItems: 10 };
+/** Caps how much of `decision.args` (model-controlled) gets echoed into the confirmation-request
+ * summary/finding text — bounds a prompt-injection surface into the downstream compose call the
+ * same way every other model-adjacent value in this file is bounded, not because a legitimate tool
+ * call needs a long args description here (it's a one-line human-readable summary, not the args
+ * actually passed to `execute()`, which are unaffected by this cap). */
+const MAX_SUMMARY_ARGS_CHARS = 300;
 
 interface ToolDecision {
   toolName?: string;
@@ -91,10 +97,17 @@ export function createToolInvoker(opts: CreateToolInvokerOptions): (input: { mes
       if (!opts.confirmFlow) {
         return [`Tool "${tool.name}" requires confirmation before it can run, but no confirmation flow is configured — tell the user honestly that you can't complete this action right now.`];
       }
-      const summary = `${tool.name} with arguments ${JSON.stringify(decision.args ?? {})}`;
-      await opts.confirmFlow.request({ contactId: message.contactId, toolName: tool.name, args: decision.args ?? {}, summary });
+      const argsJson = JSON.stringify(decision.args ?? {});
+      const boundedArgsJson = argsJson.length > MAX_SUMMARY_ARGS_CHARS ? `${argsJson.slice(0, MAX_SUMMARY_ARGS_CHARS)}…` : argsJson;
+      const summary = `${tool.name} with arguments ${boundedArgsJson}`;
+      const pending = await opts.confirmFlow.request({ contactId: message.contactId, toolName: tool.name, args: decision.args ?? {}, summary });
+      // The button ids embed THIS SPECIFIC pending confirmation's id (confirmSelectionId/
+      // cancelSelectionId) rather than bare "confirm"/"cancel" — a later, different confirmation
+      // request for the same contact replaces this one, and a stale tap on THESE exact buttons must
+      // not be mistaken for a reply to whatever replaced them (agent.ts's resolvePendingConfirmation
+      // checks the embedded id against the current pending confirmation before acting on it).
       return [
-        `This action (${summary}) requires user confirmation before it can proceed. In your reply, briefly explain what will happen and ask the user to confirm, including exactly two buttons: one with id "confirm" and title "Confirm", and one with id "cancel" and title "Cancel". Do NOT say this has already been done — it has NOT been executed yet.`,
+        `This action (${summary}) requires user confirmation before it can proceed. In your reply, briefly explain what will happen and ask the user to confirm, including exactly two buttons: one with id "${confirmSelectionId(pending.id)}" and title "Confirm", and one with id "${cancelSelectionId(pending.id)}" and title "Cancel". Do NOT say this has already been done — it has NOT been executed yet.`,
       ];
     }
 

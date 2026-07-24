@@ -104,6 +104,19 @@ function toGid(resource: string, id: string): string {
   return id.startsWith("gid://") ? id : `gid://shopify/${resource}/${id}`;
 }
 
+/** Builds one `field:"value"` term for Shopify's search-filter mini-language (used by every
+ * `query:` GraphQL variable below) with `value` quoted and escaped — NOT raw string concatenation.
+ * Shopify's search syntax has its own operators (`OR`/`AND`/`-`/`*`/parentheses/other `field:`
+ * terms); passing a model-extracted value through unquoted (e.g. `sku:${sku}`) lets a value like
+ * `x OR sku:*` widen the filter to match arbitrary records instead of the one the caller asked
+ * about — a real scoping bug, not just a hardening exercise, since every value here (order name,
+ * SKU, email) ultimately traces back to text a model pulled out of a user's message. Quoting turns
+ * the whole value into one literal term; Shopify search syntax reserves only `"` and `\` inside a
+ * quoted term, both escaped here. */
+function searchFilter(field: string, value: string): string {
+  return `${field}:"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
 function money(node: unknown): string | undefined {
   const m = node as { amount?: string; currencyCode?: string } | undefined;
   if (!m?.amount) return undefined;
@@ -289,10 +302,16 @@ export function createShopifyToolProvider(opts: CreateShopifyToolProviderOptions
       async execute(args): Promise<ToolResult> {
         const { id } = (args ?? {}) as { id?: string };
         if (!id) return failed("getOrder", 'Missing required "id" argument.');
-        // A pure-digits id (or an id that already looks like a Shopify order gid) is fetched
-        // directly; anything else (a display name like "#1001" or "1001") is looked up via the
-        // search query filter instead, since order.name isn't a valid `order(id:)` argument.
-        if (/^\d+$/.test(id) || id.startsWith("gid://")) {
+        // Only an id that's ALREADY a fully-qualified Shopify gid is fetched directly — everything
+        // else, including a bare digit string, is treated as a customer-facing order NUMBER (looked
+        // up via the search query filter instead, since order.name isn't a valid `order(id:)`
+        // argument). This matters: a model extracting an order number from a message like "where's
+        // my order 8842?" produces the bare digits "8842", NOT Shopify's own opaque internal numeric
+        // id (typically a much larger, unrelated number) — treating bare digits as that internal id
+        // would send this tool's own flagship scenario to the wrong lookup and falsely report "not
+        // found" on every real call. A caller that already holds a genuine gid (e.g. from a prior
+        // listRecentOrders result) can still look it up directly via the gid branch below.
+        if (id.startsWith("gid://")) {
           const result = await call(`query($id: ID!) { order(id: $id) { id name displayFulfillmentStatus displayFinancialStatus createdAt totalPriceSet { shopMoney { amount currencyCode } } fulfillments { trackingInfo { number url } } } }`, {
             id: toGid("Order", id),
           });
@@ -304,7 +323,7 @@ export function createShopifyToolProvider(opts: CreateShopifyToolProviderOptions
         const name = id.startsWith("#") ? id : `#${id}`;
         const result = await call(
           `query($q: String!) { orders(first: 1, query: $q) { edges { node { id name displayFulfillmentStatus displayFinancialStatus createdAt totalPriceSet { shopMoney { amount currencyCode } } fulfillments { trackingInfo { number url } } } } } }`,
-          { q: `name:${name}` },
+          { q: searchFilter("name", name) },
         );
         if (!result.ok) return failed("getOrder", result.error);
         const edges = ((result.data as { orders?: { edges?: { node: OrderNode }[] } })?.orders?.edges ?? []) as { node: OrderNode }[];
@@ -349,7 +368,7 @@ export function createShopifyToolProvider(opts: CreateShopifyToolProviderOptions
         if (!sku) return failed("getInventoryLevels", 'Missing required "sku" argument.');
         const result = await call(
           `query($q: String!) { inventoryItems(first: 1, query: $q) { edges { node { sku inventoryLevels(first: 20) { edges { node { location { name } quantities(names: ["available"]) { name quantity } } } } } } } }`,
-          { q: `sku:${sku}` },
+          { q: searchFilter("sku", sku) },
         );
         if (!result.ok) return failed("getInventoryLevels", result.error);
         const edges = ((result.data as { inventoryItems?: { edges?: { node: { sku?: string; inventoryLevels?: { edges?: { node: InventoryLevelNode }[] } } }[] } })?.inventoryItems?.edges ?? []) as {
@@ -383,7 +402,7 @@ export function createShopifyToolProvider(opts: CreateShopifyToolProviderOptions
         }
         const result = await call(
           `query($q: String!) { customers(first: 1, query: $q) { edges { node { id displayName numberOfOrders amountSpent { amount currencyCode } tags } } } }`,
-          { q: `email:${email}` },
+          { q: searchFilter("email", email!) },
         );
         if (!result.ok) return failed("lookupCustomer", result.error);
         const edges = ((result.data as { customers?: { edges?: { node: CustomerNode }[] } })?.customers?.edges ?? []) as { node: CustomerNode }[];

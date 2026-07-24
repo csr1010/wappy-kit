@@ -55,14 +55,24 @@ test('Spine C — "where\'s my order 8842?" touches exactly {whatsapp, memory, r
     seenVariables = body.variables;
     return jsonResponse({
       data: {
-        order: {
-          id: "gid://shopify/Order/1",
-          name: "#8842",
-          displayFulfillmentStatus: "IN_TRANSIT",
-          displayFinancialStatus: "PAID",
-          createdAt: "2026-01-05T00:00:00Z",
-          totalPriceSet: { shopMoney: { amount: "42.00", currencyCode: "USD" } },
-          fulfillments: [{ trackingInfo: [{ number: "1Z999AA1", url: "https://track.example.com/1Z999AA1" }] }],
+        // A bare digit order id like "8842" (extracted from the user's own message) is a
+        // customer-facing order NUMBER, not Shopify's opaque internal numeric id — the connector
+        // looks it up via the orders search filter, not order(id:) directly (see shopify.ts's
+        // getOrder for why: a model-extracted bare number is never that internal id).
+        orders: {
+          edges: [
+            {
+              node: {
+                id: "gid://shopify/Order/1",
+                name: "#8842",
+                displayFulfillmentStatus: "IN_TRANSIT",
+                displayFinancialStatus: "PAID",
+                createdAt: "2026-01-05T00:00:00Z",
+                totalPriceSet: { shopMoney: { amount: "42.00", currencyCode: "USD" } },
+                fulfillments: [{ trackingInfo: [{ number: "1Z999AA1", url: "https://track.example.com/1Z999AA1" }] }],
+              },
+            },
+          ],
         },
       },
     });
@@ -107,9 +117,10 @@ test('Spine C — "where\'s my order 8842?" touches exactly {whatsapp, memory, r
   expect(tracer.events().filter((e) => e.system === "llm")).toHaveLength(1);
   expect(tracer.events().filter((e) => e.system === "rag")).toHaveLength(0);
 
-  // The real Shopify GraphQL call happened exactly once, with the order id extracted from the message.
+  // The real Shopify GraphQL call happened exactly once, searching by the order NUMBER extracted
+  // from the message (not misrouted to a direct id lookup by Shopify's own opaque internal id).
   expect(shopifyCalls).toBe(1);
-  expect(seenVariables).toEqual({ id: "gid://shopify/Order/8842" });
+  expect(seenVariables).toEqual({ q: 'name:"#8842"' });
 
   await whatsapp.close();
 });

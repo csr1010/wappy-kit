@@ -6,13 +6,14 @@ import { windowHistory } from "./history-window.js";
 import { selectTools } from "./tool-selector.js";
 import { TOOL_SCHEMAS_BUDGET_FRACTION } from "./assemble.js";
 import type { SkillRegistry } from "./skills.js";
-import { CANCEL_SELECTION_ID, CONFIRM_SELECTION_ID, type ConfirmFlow } from "./confirm.js";
+import { CANCEL_ACTION, parseConfirmSelection, type ConfirmFlow, type ParsedConfirmSelection } from "./confirm.js";
 
 const SCOPE_GUARDRAIL = "If the user's request is genuinely unrelated to what you're configured to help with, say so honestly and directly rather than guessing or making something up.";
 
 const REFUSAL_TEXT = "That message is too long for me to process — could you send it as a shorter message?";
 const OVERSIZED_PLACEHOLDER = "(the user sent a message too large to process)";
 const NOTHING_PENDING_TEXT = "There's nothing pending to confirm right now.";
+const STALE_CONFIRMATION_TEXT = "That confirmation isn't valid anymore — please ask again.";
 const CONFIRM_TOOL_UNAVAILABLE_TEXT = "Sorry, I couldn't complete that — please try again, or our team will follow up.";
 
 /** Used when the caller doesn't supply one — a conservative, safe-by-default budget (§10 T6.1). */
@@ -128,22 +129,33 @@ async function safeCall<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 
 /**
  * Resolves a contact's pending confirmation in response to a "confirm"/"cancel" button reply (T8.5).
+ * `parsed.pendingId` — embedded in the button's own selectionId by `confirmSelectionId()`/
+ * `cancelSelectionId()` when the confirmation was first requested — MUST match the CURRENT pending
+ * confirmation's own id before anything executes: WhatsApp buttons are static once sent, so if this
+ * contact was asked to confirm action A, didn't answer, and was later asked to confirm a different
+ * action B (which replaces A as their one pending confirmation), a stale tap on A's old "Confirm"
+ * button must not execute B — a confused-deputy replay, not hypothetical, since `request()`
+ * unconditionally supersedes an earlier unresolved confirmation for the same contact. A mismatch
+ * leaves the CURRENT pending confirmation untouched (it wasn't what the user actually replied to),
+ * so a genuine reply to it can still resolve it later.
+ *
  * `resolve()` is awaited BEFORE the tool ever runs (not after) so the pending state is gone the
  * instant this function starts acting on it — combined with `createAgent`'s own per-contact
  * serialization (two messages for the same contact are never handled concurrently), a duplicate
  * "confirm" delivered twice back-to-back can never execute the tool twice: the second one finds
  * nothing pending (§9 "confirm executes once even if 'yes' is delivered twice").
  */
-async function resolvePendingConfirmation(message: InboundMessage, confirmFlow: ConfirmFlow, deps: AgentDeps): Promise<SmartMessage> {
+async function resolvePendingConfirmation(message: InboundMessage, parsed: ParsedConfirmSelection, confirmFlow: ConfirmFlow, deps: AgentDeps): Promise<SmartMessage> {
   const pending = await safeCall(() => confirmFlow.getPending(message.contactId), undefined);
   if (!pending) return { text: NOTHING_PENDING_TEXT };
+  if (pending.id !== parsed.pendingId) return { text: STALE_CONFIRMATION_TEXT };
 
   await safeCall(async () => {
     await confirmFlow.resolve(message.contactId);
     return undefined;
   }, undefined);
 
-  if (message.selectionId === CANCEL_SELECTION_ID) {
+  if (parsed.action === CANCEL_ACTION) {
     trace(deps.tracer, "tools", "invoke", { toolName: pending.toolName, confirmOutcome: "canceled" });
     return { text: `Okay, I've canceled that — ${pending.summary} was not carried out.` };
   }
@@ -221,14 +233,19 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     await safeAppend(deps.memory, { id: message.id, contactId: message.contactId, role: "user", text: effectiveText, timestamp: now });
   }
 
+  // Only computed when a confirmFlow is configured at all — parseConfirmSelection() returning a
+  // result additionally requires the selectionId to carry a specific pending confirmation's id
+  // (confused-deputy protection; see resolvePendingConfirmation()'s own doc comment).
+  const parsedConfirm = deps.confirmFlow ? parseConfirmSelection(message.selectionId) : undefined;
+
   let reply: SmartMessage;
   if (bounded?.refuse) {
     reply = { text: REFUSAL_TEXT };
-  } else if (deps.confirmFlow && (message.selectionId === CONFIRM_SELECTION_ID || message.selectionId === CANCEL_SELECTION_ID)) {
+  } else if (parsedConfirm) {
     // A confirm/cancel button reply carries no routable intent of its own (a bare "confirm" means
     // nothing to the router without the pending-confirmation context) — resolved here, before
     // routing, instead of through the normal skill/RAG/tool/compose pipeline.
-    reply = await resolvePendingConfirmation(message, deps.confirmFlow, deps);
+    reply = await resolvePendingConfirmation(message, parsedConfirm, deps.confirmFlow!, deps);
   } else {
     trace(deps.tracer, "router", "route");
     let decision: RouterDecision;
