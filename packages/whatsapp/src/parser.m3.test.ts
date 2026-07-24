@@ -87,6 +87,25 @@ describe("parseWebhookPayload — one scenario per fixture", () => {
   });
 });
 
+describe("parseWebhookPayload — additional branch coverage", () => {
+  test("a change with a field other than 'messages' is skipped", () => {
+    const payload = { entry: [{ changes: [{ field: "message_template_status_update", value: { messages: [{ id: "x", from: "y", type: "text" }] } }] }] };
+    expect(parseWebhookPayload(payload)).toEqual({ messages: [], statuses: [] });
+  });
+
+  test("a message with a missing/non-string type falls back to the 'unknown' placeholder", () => {
+    const payload = { entry: [{ changes: [{ field: "messages", value: { messages: [{ id: "x", from: "y" }] } }] }] };
+    const { messages } = parseWebhookPayload(payload);
+    expect(messages[0]?.text).toBe("[unsupported WhatsApp message type: unknown]");
+  });
+
+  test("a status error with a numeric code but no title falls back to a generic error message", () => {
+    const payload = { entry: [{ changes: [{ field: "messages", value: { statuses: [{ id: "s1", status: "failed", recipient_id: "r1", errors: [{ code: 500 }] }] } }] }] };
+    const { statuses } = parseWebhookPayload(payload);
+    expect(statuses[0]?.error).toEqual({ code: 500, message: "error" });
+  });
+});
+
 describe("parseWebhookPayload — never throws on garbage input", () => {
   const garbage: unknown[] = [
     null,
