@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isLockStale, releaseLock, tryAcquireLock, withLock } from "./lock.js";
@@ -38,6 +38,16 @@ describe("tryAcquireLock / releaseLock", () => {
 
   test("releaseLock on a missing lock is a no-op", () => {
     expect(() => releaseLock(lockPath())).not.toThrow();
+  });
+
+  test("a non-EEXIST failure (e.g. missing parent directory) is not swallowed", () => {
+    expect(() => tryAcquireLock(join(lockPath(), "nested", "lock"))).toThrow(/ENOENT/);
+  });
+
+  test("a non-ENOENT release failure is not swallowed", () => {
+    const p = lockPath();
+    mkdirSync(p); // a directory, not a lock file — unlink fails with something other than ENOENT
+    expect(() => releaseLock(p)).toThrow();
   });
 });
 

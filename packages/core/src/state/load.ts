@@ -1,11 +1,13 @@
 import { readRawState } from "./io.js";
 import { migrate } from "./migrations.js";
-import { StateCorruptError, StateVersionTooNewError } from "./errors.js";
+import { StateVersionTooNewError } from "./errors.js";
 import type { State } from "./schema.js";
 
 /**
  * No interactive I/O here (MILESTONES.md B: core never prompts) — a not-ok result is the "offer",
- * for a CLI/caller to present and act on (e.g. call reset()).
+ * for a CLI/caller to present and act on (e.g. call reset()). Anything that goes wrong reading or
+ * migrating the file becomes `corrupt` except a too-new schemaVersion, which gets its own distinct
+ * result (the fix is "upgrade", not "reset").
  */
 export type LoadResult =
   | { ok: true; state: State | null } // null = no state file yet (fresh project)
@@ -17,8 +19,7 @@ export function loadState(path: string): LoadResult {
   try {
     raw = readRawState(path);
   } catch (e) {
-    if (e instanceof StateCorruptError) return { ok: false, corrupt: true, path, reason: e.message };
-    throw e;
+    return { ok: false, corrupt: true, path, reason: (e as Error).message };
   }
   if (raw === null) return { ok: true, state: null };
 
@@ -28,7 +29,6 @@ export function loadState(path: string): LoadResult {
     if (e instanceof StateVersionTooNewError) {
       return { ok: false, tooNew: true, path, foundVersion: e.foundVersion, supportedVersion: e.supportedVersion };
     }
-    if (e instanceof StateCorruptError) return { ok: false, corrupt: true, path, reason: e.message };
-    throw e;
+    return { ok: false, corrupt: true, path, reason: (e as Error).message };
   }
 }

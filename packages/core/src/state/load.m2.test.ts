@@ -37,6 +37,14 @@ describe("loadState", () => {
     expect(result).toMatchObject({ corrupt: true, path: f });
   });
 
+  test("valid JSON that fails migration (e.g. missing schemaVersion) -> not ok, corrupt offer (no throw)", () => {
+    const f = join(tmpDir(), "state.json");
+    writeFileSync(f, JSON.stringify({ runId: "r1" }));
+    const result = loadState(f);
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ corrupt: true, path: f });
+  });
+
   test("schemaVersion newer than supported -> not ok, tooNew offer (no throw)", () => {
     const f = join(tmpDir(), "state.json");
     writeFileSync(f, JSON.stringify({ schemaVersion: STATE_SCHEMA_VERSION + 1, runId: "r1" }));
