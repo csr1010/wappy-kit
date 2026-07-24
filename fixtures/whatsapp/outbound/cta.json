@@ -1,0 +1,18 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15550002222",
+  "type": "interactive",
+  "interactive": {
+    "type": "cta_url",
+    "body": {
+      "text": "Check out our new collection"
+    },
+    "action": {
+      "name": "cta_url",
+      "parameters": {
+        "display_text": "Shop now",
+        "url": "https://example.com/shop"
+      }
+    }
+  }
+}

@@ -117,24 +117,38 @@ describe("createWhatsAppChannel — reliability", () => {
     expect(await channel.receive(textWebhook("wamid.ttl"))).toHaveLength(1);
   });
 
+  // M4 note (--allow-test-change): these send() tests originally assumed M3's placeholder
+  // text-only, no-window-guard send(). M4 adds the mandatory 24h session-window guard (§6.2) and
+  // real SmartMessage rendering (§6.1), which M3 explicitly deferred (see channel.ts's M3 doc
+  // comment / PROGRESS.md). Updated to open the window first (as a real caller would, having
+  // received an inbound message) and, for the media-only case, to assert the now-correct rendered
+  // payload instead of the old always-type-text placeholder. A fast no-op-sleep clock keeps the
+  // now-retrying error-path tests instant instead of paying real backoff delays.
+  const instantClock = { now: () => 0, setTimeout: () => 0, clearTimeout: () => {}, sleep: async () => {} };
+  const withOpenWindow = () => {
+    const sessionWindow = createSessionWindowTracker();
+    sessionWindow.recordInbound("15550002222", 0); // must agree with the channel's own `now`/`clock` (also 0) so the window reads as open
+    return sessionWindow;
+  };
+
   test("send() posts text and returns sent + messageId on success", async () => {
-    const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", fetchImpl: fakeFetch(200, { messages: [{ id: "wamid.out1" }] }) });
+    const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", now: () => 0, sessionWindow: withOpenWindow(), fetchImpl: fakeFetch(200, { messages: [{ id: "wamid.out1" }] }) });
     expect(await channel.send("15550002222", { text: "hello there" })).toEqual({ status: "sent", messageId: "wamid.out1" });
   });
 
-  test("send() with no text (e.g. a media-only SmartMessage) posts an empty text body, not undefined", async () => {
+  test("send() with only media (no text) renders a real media message, not a text placeholder", async () => {
     let sentBody: unknown;
     const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
       sentBody = JSON.parse(String(init?.body));
       return new Response(JSON.stringify({ messages: [{ id: "wamid.out2" }] }), { status: 200 });
     }) as typeof fetch;
-    const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", fetchImpl });
+    const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", now: () => 0, sessionWindow: withOpenWindow(), fetchImpl });
     await channel.send("15550002222", { media: { kind: "image", url: "https://example.com/a.png" } });
-    expect(sentBody).toMatchObject({ text: { body: "" } });
+    expect(sentBody).toMatchObject({ type: "image", image: { link: "https://example.com/a.png" } });
   });
 
   test("send() maps a Meta error response to a failed DeliveryResult with a reason", async () => {
-    const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", fetchImpl: fakeFetch(400, { error: { code: 131026, message: "Message undeliverable" } }) });
+    const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", now: () => 0, sessionWindow: withOpenWindow(), fetchImpl: fakeFetch(400, { error: { code: 131026, message: "Message undeliverable" } }) });
     const result = await channel.send("15550002222", { text: "hi" });
     expect(result.status).toBe("failed");
     expect(result.reason).toMatch(/131026/);
@@ -144,6 +158,8 @@ describe("createWhatsAppChannel — reliability", () => {
     const channel = createWhatsAppChannel({
       phoneNumberId: "pn1",
       accessToken: "t",
+      sessionWindow: withOpenWindow(),
+      clock: instantClock,
       fetchImpl: (async () => new Response("<html>502 Bad Gateway</html>", { status: 502 })) as typeof fetch,
     });
     const result = await channel.send("15550002222", { text: "hi" });
@@ -154,6 +170,8 @@ describe("createWhatsAppChannel — reliability", () => {
     const channel = createWhatsAppChannel({
       phoneNumberId: "pn1",
       accessToken: "t",
+      sessionWindow: withOpenWindow(),
+      clock: instantClock,
       fetchImpl: (async () => {
         throw new Error("ECONNRESET");
       }) as typeof fetch,
