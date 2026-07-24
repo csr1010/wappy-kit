@@ -300,6 +300,9 @@ importers:
       '@types/swagger2openapi':
         specifier: ^7.0.4
         version: 7.0.4
+      openapi-types:
+        specifier: ^12.1.3
+        version: 12.1.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
