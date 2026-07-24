@@ -6,7 +6,9 @@
 export interface SeenStore {
   /**
    * Atomic check-and-set: true the FIRST time an id is seen (caller should process it), false on
-   * every repeat within the TTL (caller should skip it — Meta retries the same delivery).
+   * every repeat within the TTL (caller should skip it — Meta retries the same delivery). Callers
+   * should pass non-decreasing `now` across calls (wall-clock time) — impls may rely on that for
+   * efficient expiry bookkeeping.
    */
   checkAndSet(id: string, now: number): Promise<boolean>;
 }
@@ -28,10 +30,12 @@ export function createMemorySeenStore(opts: MemorySeenStoreOptions = {}): SeenSt
       if (existing !== undefined && existing > now) return false;
 
       // Opportunistic sweep so this stays bounded to "unique ids within the TTL window" instead
-      // of growing for the life of the process — a long-running receiver never reuses most ids
-      // after their TTL, so without this the map would only ever grow.
+      // of growing for the life of the process. ttlMs is constant per store, so insertion order
+      // is also expiry order (Map iterates in insertion order) — sweep from the front and stop at
+      // the first still-live entry, instead of scanning the whole map every call.
       for (const [seenId, expiry] of expiresAt) {
-        if (expiry <= now) expiresAt.delete(seenId);
+        if (expiry > now) break;
+        expiresAt.delete(seenId);
       }
 
       expiresAt.set(id, now + ttlMs);

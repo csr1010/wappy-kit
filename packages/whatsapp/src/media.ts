@@ -60,6 +60,13 @@ export async function downloadWhatsAppMedia(opts: MediaDownloadOptions): Promise
 
   const reader = fileRes.body?.getReader();
   if (!reader) {
+    // No stream to cap incrementally — reject on the declared Content-Length before buffering the
+    // whole thing (still not fully trusted, same as file_size above, but avoids the common case of
+    // allocating an oversized buffer just to reject it).
+    const declaredLength = Number(fileRes.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > opts.maxBytes) {
+      return { ok: false, error: { kind: "too_large", limitBytes: opts.maxBytes } };
+    }
     const buf = new Uint8Array(await fileRes.arrayBuffer());
     if (buf.byteLength > opts.maxBytes) return { ok: false, error: { kind: "too_large", limitBytes: opts.maxBytes } };
     return { ok: true, media: { bytes: buf, mimeType } };

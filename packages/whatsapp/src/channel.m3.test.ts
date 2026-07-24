@@ -51,6 +51,24 @@ describe("createWhatsAppChannel — reliability", () => {
     expect(events).toEqual([{ messageId: "s1", status: "sent", timestamp: 1000, recipientId: "x", error: undefined }]);
   });
 
+  test("a retried status delivery (same messageId+status) is deduped, fires onStatus once", async () => {
+    const events: StatusEvent[] = [];
+    const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", onStatus: (e) => events.push(e) });
+    await channel.receive(statusOnlyWebhook);
+    await channel.receive(statusOnlyWebhook); // Meta retries the same webhook delivery
+    expect(events).toHaveLength(1);
+  });
+
+  test("distinct statuses for the same message (sent -> delivered -> read) all fire, not deduped against each other", async () => {
+    const events: StatusEvent[] = [];
+    const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", onStatus: (e) => events.push(e) });
+    const webhookWith = (status: string) => ({ object: "whatsapp_business_account", entry: [{ id: "waba", changes: [{ field: "messages", value: { statuses: [{ id: "wamid.same", status, timestamp: "1", recipient_id: "x" }] } }] }] });
+    await channel.receive(webhookWith("sent"));
+    await channel.receive(webhookWith("delivered"));
+    await channel.receive(webhookWith("read"));
+    expect(events.map((e) => e.status)).toEqual(["sent", "delivered", "read"]);
+  });
+
   test("a fresh inbound message opens the session window for that contact", async () => {
     const sessionWindow = createSessionWindowTracker();
     const clockNow = 1_000_000;
