@@ -2,19 +2,16 @@ import { afterEach, describe, expect, test } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyAnswer, DEFAULT_ANSWERS, type CompleteInterviewAnswers, type InterviewAnswers } from "./interview.js";
+import { DEFAULT_ANSWERS, type CompleteInterviewAnswers, type InterviewAnswers } from "./interview.js";
 import { generateProject, StateLoadError, type GenerateProjectOptions } from "./generate.js";
 
 const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", toolsOpenapi: "0.1.0" };
 
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
-  let answers: InterviewAnswers = {};
-  for (const [step, value] of Object.entries(DEFAULT_ANSWERS)) {
-    const r = applyAnswer(answers, step as keyof InterviewAnswers, (overrides as InterviewAnswers)[step as keyof InterviewAnswers] ?? value);
-    if (!r.ok) throw new Error(`test setup: invalid answer for ${step}: ${r.errors.join(", ")}`);
-    answers = r.answers;
-  }
-  return answers as CompleteInterviewAnswers;
+  const model = overrides.model ?? DEFAULT_ANSWERS.model;
+  const tools = overrides.tools ?? DEFAULT_ANSWERS.tools;
+  // skills only exist on the Shopify path (the interview never asks otherwise)
+  return tools.kind === "shopify" ? { model, tools, skills: overrides.skills ?? DEFAULT_ANSWERS.skills } : { model, tools };
 }
 
 const dirs: string[] = [];
@@ -34,7 +31,7 @@ function fakeClock() {
 
 function baseOptions(projectRoot: string): GenerateProjectOptions {
   return {
-    answers: complete({ skills: { skills: ["store-info", "orders"] }, tools: { kind: "shopify", storeDomain: "luna-and-co.myshopify.com" } }),
+    answers: complete({ skills: { skills: ["store-info", "orders"] }, tools: { kind: "shopify" } }),
     versions: VERSIONS,
     projectRoot,
     projectName: "luna-and-co-bot",
@@ -53,7 +50,7 @@ describe("generateProject — defaults", () => {
 });
 
 describe("generateProject — writes every rendered file to disk", () => {
-  test("a fresh project directory gets index.ts, tools/, skills/, .env.example, .gitignore, package.json, README.md, and .wappy/state.json", async () => {
+  test("a fresh project directory gets index.ts, tools/, skills/, .env.sample, .gitignore, package.json, README.md, and .wappy/state.json", async () => {
     const root = tmpProjectRoot();
     const result = await generateProject(baseOptions(root));
 
@@ -100,15 +97,15 @@ describe("generateProject — resumable / idempotent", () => {
     // the next step (runStep marks done immediately after run() succeeds).
     await generateProject(opts);
     rmSync(join(root, "index.ts"));
-    rmSync(join(root, ".env.example"));
+    rmSync(join(root, ".env.sample"));
     const state = JSON.parse(readFileSync(join(root, ".wappy/state.json"), "utf8"));
-    state.steps = state.steps.filter((s: { id: string }) => s.id !== "generate:.env.example");
+    state.steps = state.steps.filter((s: { id: string }) => s.id !== "generate:.env.sample");
     writeFileSync(join(root, ".wappy/state.json"), JSON.stringify(state));
 
     const resumed = await generateProject(opts);
-    const envStep = resumed.results.find((r) => r.id === "generate:.env.example");
+    const envStep = resumed.results.find((r) => r.id === "generate:.env.sample");
     expect(envStep?.skipped).toBe(false);
-    expect(existsSync(join(root, ".env.example"))).toBe(true);
+    expect(existsSync(join(root, ".env.sample"))).toBe(true);
     // index.ts's step was still marked done from before, so it's skipped and NOT rewritten (stays deleted).
     const indexStep = resumed.results.find((r) => r.id === "generate:index.ts");
     expect(indexStep?.skipped).toBe(true);

@@ -60,16 +60,16 @@ export interface GenerateProjectResult {
 export class StateLoadError extends Error {}
 
 /** Builds the one `SetupManifest` `create-wappy`'s generator contributes — one step per rendered
- * file, `.env.example`'s step carrying the full required-env-key list (the ledger schema only
+ * file, `.env.sample`'s step carrying the full required-env-key list (the ledger schema only
  * tracks env keys as a flat required set, §5 — so per-key "optional" nuance from `EnvVarSpec` lives
- * in the richer README/.env.example text, not the ledger itself). */
+ * in the richer README/.env.sample text, not the ledger itself). */
 function buildManifest(files: GeneratedFile[], envVarNames: string[]): SetupManifest {
   return {
     part: "create-wappy",
     steps: files.map((f) => ({
       id: `generate:${f.path}`,
       description: `Generate ${f.path}`,
-      envKeys: f.path === ".env.example" ? envVarNames : undefined,
+      envKeys: f.path === ".env.sample" ? envVarNames : undefined,
     })),
   };
 }

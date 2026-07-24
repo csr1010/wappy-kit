@@ -24,24 +24,17 @@ Usage:
   create-wappy                      interactive interview
   create-wappy --yes                interactive interview, but every omitted step takes its default
   create-wappy [flags]              non-interactive, e.g.:
-    --model openai --framework none --skills store-info,orders \\
-    --api shopify --shopify-store-domain my-shop.myshopify.com \\
-    --memory local --router llm --whatsapp later
+    --model openai --api shopify --skills store-info,orders
 
 Flags:
   --model <openai|anthropic|gemini|ollama>
-  --framework <none|mastra|vercel-ai-sdk|langgraph>
-  --skills <comma-separated reference skill names, or "none">
-  --api <none|shopify|<OpenAPI spec URL or file path>>
-  --shopify-store-domain <domain>     (required with --api shopify)
-  --memory <local|mem0|cognee|postgres>
-  --router <llm|jev>
-  --jev-key-path <path>                (required with --router jev)
-  --whatsapp <now|later>
-  --whatsapp-phone-number-id / --whatsapp-access-token / --whatsapp-verify-token  (required with --whatsapp now)
+  --api <none|shopify>
+  --skills <comma-separated skill names, or "none">   (only with --api shopify)
   --dir <path>                        target directory (default: current directory)
   --yes, -y                           accept defaults for any omitted step
   --help, -h                          show this help
+
+No credentials are asked for: fill in the generated .env.sample (copy it to .env).
 `;
 
 export interface CliDeps {

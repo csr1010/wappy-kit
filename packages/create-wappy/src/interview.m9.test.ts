@@ -1,206 +1,168 @@
 import { describe, expect, test } from "vitest";
 import {
   applyAnswer,
+  assertComplete,
   DEFAULT_ANSWERS,
   goBack,
   INTERVIEW_STEP_ORDER,
+  isApplicable,
   isComplete,
-  type InterviewAnswers,
   nextQuestion,
   nextStep,
   questionFor,
   REFERENCE_SKILLS,
+  skillsOf,
   skipStep,
+  type InterviewAnswers,
 } from "./interview.js";
 
-describe("nextStep / nextQuestion / isComplete — pure position derivation", () => {
-  test("an empty answers object starts at 'model', the first §4.1 step", () => {
-    expect(nextStep({})).toBe("model");
-    expect(nextQuestion({})?.step).toBe("model");
-    expect(isComplete({})).toBe(false);
+function must(r: ReturnType<typeof applyAnswer>): InterviewAnswers {
+  if (!r.ok) throw new Error(`test setup: ${r.errors.join(", ")}`);
+  return r.answers;
+}
+
+const openai = { provider: "openai" } as const;
+
+describe("the interview asks only what changes the generated code, and never a credential", () => {
+  test("step order is model -> tools -> skills", () => {
+    expect([...INTERVIEW_STEP_ORDER]).toEqual(["model", "tools", "skills"]);
   });
 
-  test("walks all 7 steps in §4.1's exact order as each is answered", () => {
-    let answers: InterviewAnswers = {};
-    const seen: string[] = [];
-    for (const step of INTERVIEW_STEP_ORDER) {
-      expect(nextStep(answers)).toBe(step);
-      seen.push(step);
-      const result = applyAnswer(answers, step, DEFAULT_ANSWERS[step]);
-      expect(result.ok).toBe(true);
-      if (result.ok) answers = result.answers;
-    }
-    expect(seen).toEqual(["model", "framework", "skills", "tools", "memory", "router", "whatsapp"]);
-    expect(nextStep(answers)).toBeNull();
-    expect(nextQuestion(answers)).toBeNull();
-    expect(isComplete(answers)).toBe(true);
-  });
-
-  test("questionFor returns stable prompt/choices data for every step, with no I/O", () => {
+  test("questions carry prompts + choices; no free-text or credential questions exist", () => {
     for (const step of INTERVIEW_STEP_ORDER) {
       const q = questionFor(step);
       expect(q.step).toBe(step);
-      expect(q.prompt.length).toBeGreaterThan(0);
+      expect(q.choices?.length).toBeGreaterThan(0);
     }
+    expect(questionFor("tools").choices?.map((c) => c.value)).toEqual(["none", "shopify"]);
+    expect(questionFor("model").choices?.map((c) => c.value)).toEqual(["openai", "anthropic", "gemini", "ollama"]);
+  });
+
+  test("skills offered are the shipped reference skills, no 'none' entry (an empty pick means none)", () => {
+    expect(questionFor("skills").choices?.map((c) => c.value)).toEqual([...REFERENCE_SKILLS]);
   });
 });
 
-describe("applyAnswer — ordering discipline", () => {
-  test("rejects answering a step before its predecessors are answered (no skipping ahead)", () => {
-    const result = applyAnswer({}, "framework", DEFAULT_ANSWERS.framework);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]).toMatch(/next step is "model"/);
+describe("skills only apply once a Shopify store is connected", () => {
+  test("isApplicable: skills need tools=shopify; other steps always apply", () => {
+    expect(isApplicable("model", {})).toBe(true);
+    expect(isApplicable("tools", {})).toBe(true);
+    expect(isApplicable("skills", {})).toBe(false);
+    expect(isApplicable("skills", { tools: { kind: "none" } })).toBe(false);
+    expect(isApplicable("skills", { tools: { kind: "shopify" } })).toBe(true);
   });
 
-  test("allows re-answering an already-answered step (revising after a back)", () => {
-    const r1 = applyAnswer({}, "model", { provider: "openai" });
-    expect(r1.ok).toBe(true);
-    if (!r1.ok) throw new Error("unreachable");
-    const r2 = applyAnswer(r1.answers, "model", { provider: "anthropic" });
-    expect(r2.ok).toBe(true);
-    if (!r2.ok) throw new Error("unreachable");
-    expect(r2.answers.model).toEqual({ provider: "anthropic" });
+  test("no store: the interview is complete after model + tools (skills never asked)", () => {
+    let a: InterviewAnswers = {};
+    expect(nextStep(a)).toBe("model");
+    a = must(applyAnswer(a, "model", openai));
+    expect(nextQuestion(a)?.step).toBe("tools");
+    a = must(applyAnswer(a, "tools", { kind: "none" }));
+    expect(nextStep(a)).toBeNull();
+    expect(nextQuestion(a)).toBeNull();
+    expect(isComplete(a)).toBe(true);
   });
 
-  test("an invalid value leaves answers completely unchanged, not partially applied", () => {
-    const before: InterviewAnswers = {};
-    const result = applyAnswer(before, "model", undefined as never);
-    expect(result.ok).toBe(false);
-    expect(before).toEqual({});
-  });
-});
-
-describe("applyAnswer — invalid combos blocked", () => {
-  test("Jev router without a key path is rejected (the milestone brief's own named example)", () => {
-    let answers: InterviewAnswers = {};
-    for (const step of ["model", "framework", "skills", "tools", "memory"] as const) {
-      const r = applyAnswer(answers, step, DEFAULT_ANSWERS[step]);
-      if (r.ok) answers = r.answers;
-    }
-    const result = applyAnswer(answers, "router", { router: "jev", jevKeyPath: "" });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]).toMatch(/jevKeyPath/);
+  test("Shopify: skills are asked next, and the interview isn't complete until they're answered", () => {
+    let a = must(applyAnswer({}, "model", openai));
+    a = must(applyAnswer(a, "tools", { kind: "shopify" }));
+    expect(nextStep(a)).toBe("skills");
+    expect(isComplete(a)).toBe(false);
+    a = must(applyAnswer(a, "skills", { skills: ["orders"] }));
+    expect(isComplete(a)).toBe(true);
   });
 
-  test("Jev router WITH a key path is accepted", () => {
-    let answers: InterviewAnswers = {};
-    for (const step of ["model", "framework", "skills", "tools", "memory"] as const) {
-      const r = applyAnswer(answers, step, DEFAULT_ANSWERS[step]);
-      if (r.ok) answers = r.answers;
-    }
-    const result = applyAnswer(answers, "router", { router: "jev", jevKeyPath: "/keys/jev.json" });
-    expect(result.ok).toBe(true);
+  test("answering skills without a store is rejected with a clear reason", () => {
+    const a = must(applyAnswer({}, "model", openai));
+    const r = applyAnswer(must(applyAnswer(a, "tools", { kind: "none" })), "skills", { skills: [] });
+    expect(r).toEqual({ ok: false, errors: ['"skills" only applies when a Shopify store is connected.'] });
   });
 
-  test("tools=openapi without a source is rejected; tools=shopify without a storeDomain is rejected", () => {
-    const answers = fillThrough("skills");
-    expect(applyAnswer(answers, "tools", { kind: "openapi", source: "" }).ok).toBe(false);
-    expect(applyAnswer(answers, "tools", { kind: "openapi", source: "   " }).ok).toBe(false);
-    expect(applyAnswer(answers, "tools", { kind: "shopify", storeDomain: "" }).ok).toBe(false);
-    expect(applyAnswer(answers, "tools", { kind: "shopify", storeDomain: "my-shop.myshopify.com" }).ok).toBe(true);
-  });
-
-  test("skills answer rejects an unknown reference skill name", () => {
-    const answers = fillThrough("framework");
-    const result = applyAnswer(answers, "skills", { skills: ["not-a-real-skill" as never] });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]).toMatch(/unknown reference skill/);
-  });
-
-  test("skills answer accepts any combination of the real REFERENCE_SKILLS", () => {
-    const answers = fillThrough("framework");
-    expect(applyAnswer(answers, "skills", { skills: [...REFERENCE_SKILLS] }).ok).toBe(true);
-    expect(applyAnswer(answers, "skills", { skills: [] }).ok).toBe(true);
-  });
-
-  test("whatsapp mode=now without full credentials is rejected; each missing field surfaces its own error", () => {
-    const answers = fillThrough("router");
-    const result = applyAnswer(answers, "whatsapp", { mode: "now", phoneNumberId: "", accessToken: "", verifyToken: "" });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.errors).toHaveLength(3);
-      expect(result.errors.join(" ")).toMatch(/phoneNumberId/);
-      expect(result.errors.join(" ")).toMatch(/accessToken/);
-      expect(result.errors.join(" ")).toMatch(/verifyToken/);
-    }
-  });
-
-  test("whatsapp mode=now with full credentials is accepted", () => {
-    const answers = fillThrough("router");
-    const result = applyAnswer(answers, "whatsapp", { mode: "now", phoneNumberId: "106540352242922", accessToken: "EAAtest", verifyToken: "my-verify-token" });
-    expect(result.ok).toBe(true);
-  });
-
-  test("an explicit undefined value (e.g. a missing non-interactive flag) is rejected for every step that requires one", () => {
-    expect(applyAnswer(fillThrough("model"), "framework", undefined as never).ok).toBe(false);
-    expect(applyAnswer(fillThrough("framework"), "skills", undefined as never).ok).toBe(false);
-    expect(applyAnswer(fillThrough("skills"), "tools", undefined as never).ok).toBe(false);
-    expect(applyAnswer(fillThrough("tools"), "memory", undefined as never).ok).toBe(false);
-    expect(applyAnswer(fillThrough("memory"), "router", undefined as never).ok).toBe(false);
-    expect(applyAnswer(fillThrough("router"), "whatsapp", undefined as never).ok).toBe(false);
-  });
-
-  test("an unrecognized tools/router/whatsapp value (e.g. from malformed non-interactive input) is rejected, not silently accepted", () => {
-    const afterSkills = fillThrough("skills");
-    expect(applyAnswer(afterSkills, "tools", { kind: "carrier-pigeon" } as never).ok).toBe(false);
-
-    const afterMemory = fillThrough("memory");
-    expect(applyAnswer(afterMemory, "router", { router: "carrier-pigeon" } as never).ok).toBe(false);
-
-    const afterRouter = fillThrough("router");
-    expect(applyAnswer(afterRouter, "whatsapp", { mode: "carrier-pigeon" } as never).ok).toBe(false);
+  test("switching tools away from Shopify drops the skills chosen earlier", () => {
+    let a = must(applyAnswer({}, "model", openai));
+    a = must(applyAnswer(a, "tools", { kind: "shopify" }));
+    a = must(applyAnswer(a, "skills", { skills: ["store-info", "orders"] }));
+    a = must(applyAnswer(a, "tools", { kind: "none" }));
+    expect(a.skills).toBeUndefined();
+    expect(isComplete(a)).toBe(true);
   });
 });
 
-describe("goBack — revise an earlier answer", () => {
-  test("clears the target step and every step after it, keeping earlier steps intact", () => {
-    let answers: InterviewAnswers = {};
-    for (const step of INTERVIEW_STEP_ORDER) {
-      const r = applyAnswer(answers, step, DEFAULT_ANSWERS[step]);
-      if (r.ok) answers = r.answers;
-    }
-    expect(isComplete(answers)).toBe(true);
-
-    const rewound = goBack(answers, "memory");
-    expect(rewound.model).toEqual(DEFAULT_ANSWERS.model);
-    expect(rewound.framework).toEqual(DEFAULT_ANSWERS.framework);
-    expect(rewound.skills).toEqual(DEFAULT_ANSWERS.skills);
-    expect(rewound.tools).toEqual(DEFAULT_ANSWERS.tools);
-    expect(rewound.memory).toBeUndefined();
-    expect(rewound.router).toBeUndefined();
-    expect(rewound.whatsapp).toBeUndefined();
-    expect(nextStep(rewound)).toBe("memory");
+describe("assertComplete / skillsOf", () => {
+  test("assertComplete throws naming the first unanswered applicable step", () => {
+    expect(() => assertComplete({})).toThrow(/"model" hasn't been answered/);
+    expect(() => assertComplete({ model: openai, tools: { kind: "shopify" } })).toThrow(/"skills" hasn't been answered/);
   });
 
-  test("going back to the very first step clears everything", () => {
-    let answers: InterviewAnswers = {};
-    for (const step of INTERVIEW_STEP_ORDER) {
-      const r = applyAnswer(answers, step, DEFAULT_ANSWERS[step]);
-      if (r.ok) answers = r.answers;
-    }
-    expect(goBack(answers, "model")).toEqual({});
+  test("assertComplete passes for both complete shapes", () => {
+    expect(() => assertComplete({ model: openai, tools: { kind: "none" } })).not.toThrow();
+    expect(() => assertComplete({ model: openai, tools: { kind: "shopify" }, skills: { skills: [] } })).not.toThrow();
+  });
+
+  test("skillsOf returns [] when the step never applied, else the chosen skills", () => {
+    expect(skillsOf({ model: openai, tools: { kind: "none" } })).toEqual([]);
+    expect(skillsOf({ model: openai, tools: { kind: "shopify" }, skills: { skills: ["orders"] } })).toEqual(["orders"]);
   });
 });
 
-describe("skipStep — applies the spec-stated default for a step", () => {
-  test("skipping every step end to end completes the interview with all spec-stated defaults", () => {
-    let answers: InterviewAnswers = {};
-    for (const step of INTERVIEW_STEP_ORDER) {
-      const r = skipStep(answers, step);
-      expect(r.ok).toBe(true);
-      if (r.ok) answers = r.answers;
-    }
-    expect(answers).toEqual(DEFAULT_ANSWERS);
-    expect(isComplete(answers)).toBe(true);
+describe("applyAnswer validation", () => {
+  test("steps must be answered in order", () => {
+    const r = applyAnswer({}, "tools", { kind: "none" });
+    expect(r).toEqual({ ok: false, errors: ['Steps must be answered in order — next step is "model", not "tools".'] });
+  });
+
+  test("an already-answered step can be revised in place", () => {
+    const a = must(applyAnswer({}, "model", openai));
+    const revised = must(applyAnswer(a, "model", { provider: "anthropic" }));
+    expect(revised.model).toEqual({ provider: "anthropic" });
+  });
+
+  test("a missing model provider is rejected", () => {
+    const r = applyAnswer({}, "model", {} as never);
+    expect(r.ok).toBe(false);
+  });
+
+  test("tools: missing or unknown kind is rejected; openapi is no longer an option", () => {
+    const a = must(applyAnswer({}, "model", openai));
+    expect(applyAnswer(a, "tools", undefined)).toEqual({ ok: false, errors: ["tools: a choice is required."] });
+    expect(applyAnswer(a, "tools", { kind: "openapi", source: "x" } as never)).toEqual({ ok: false, errors: ['tools: unknown kind "openapi".'] });
+  });
+
+  test("skills: must be an array of real skills", () => {
+    let a = must(applyAnswer({}, "model", openai));
+    a = must(applyAnswer(a, "tools", { kind: "shopify" }));
+    expect(applyAnswer(a, "skills", undefined).ok).toBe(false);
+    expect(applyAnswer(a, "skills", { skills: "orders" } as never).ok).toBe(false);
+    expect(applyAnswer(a, "skills", { skills: ["nope"] } as never)).toEqual({ ok: false, errors: ["skills: unknown skill(s): nope."] });
+    expect(applyAnswer(a, "skills", { skills: [...REFERENCE_SKILLS] }).ok).toBe(true);
+    expect(applyAnswer(a, "skills", { skills: [] }).ok).toBe(true);
+  });
+
+  test("a rejected answer leaves answers untouched", () => {
+    const before: InterviewAnswers = { model: openai };
+    const r = applyAnswer(before, "tools", { kind: "bogus" } as never);
+    expect(r.ok).toBe(false);
+    expect(before).toEqual({ model: openai });
   });
 });
 
-function fillThrough(lastStep: (typeof INTERVIEW_STEP_ORDER)[number]): InterviewAnswers {
-  let answers: InterviewAnswers = {};
-  for (const step of INTERVIEW_STEP_ORDER) {
-    const r = applyAnswer(answers, step, DEFAULT_ANSWERS[step]);
-    if (r.ok) answers = r.answers;
-    if (step === lastStep) break;
-  }
-  return answers;
-}
+describe("goBack / skipStep / defaults", () => {
+  test("goBack clears the target step and everything after it, keeping earlier answers", () => {
+    let a = must(applyAnswer({}, "model", openai));
+    a = must(applyAnswer(a, "tools", { kind: "shopify" }));
+    a = must(applyAnswer(a, "skills", { skills: ["orders"] }));
+    const back = goBack(a, "tools");
+    expect(back).toEqual({ model: openai });
+    expect(nextStep(back)).toBe("tools");
+  });
+
+  test("defaults: openai, no store, no skills", () => {
+    expect(DEFAULT_ANSWERS).toEqual({ model: openai, tools: { kind: "none" }, skills: { skills: [] } });
+  });
+
+  test("skipping every applicable step completes the interview with the defaults", () => {
+    let a: InterviewAnswers = {};
+    while (!isComplete(a)) a = must(skipStep(a, nextStep(a)!));
+    expect(a).toEqual({ model: openai, tools: { kind: "none" } });
+  });
+});

@@ -2,7 +2,7 @@
 
 **STATUS:** Design-locked, pre-implementation. Green-lit for v0.1 build. This is the single source of truth for the project. On any session resume, READ `docs/PROGRESS.md` first, then use `pnpm ctx M<n>` to load only the spec sections you need. When plans change, UPDATE THIS FILE in place (bump the version + add to the Decisions Log).
 
-**Spec version:** 2.2
+**Spec version:** 2.3
 **Last updated:** 2026-09-21
 **Project:** Wappy Kit — an open-source WhatsApp Agent OS.
 **Repo:** This repository IS the entire project. It is a standalone open-source library published to npm.
@@ -60,7 +60,7 @@ Interop rule: the parts "all understand each other" because they all implement/c
 
 - Language: TypeScript, Node.js. Distributed via npm.
 - Agentic core: Vercel AI SDK (`ai`) — model + tool-calling loop, provider-agnostic (OpenAI / Anthropic / Gemini / local Ollama).
-- Orchestration/memory (optional): Mastra for durable workflows + memory. Default memory = LibSQL/SQLite local file. Advanced (opt-in, self-hostable, still local): Mem0 or Cognee.
+- Orchestration/memory (optional, future — not used in v0.1): Mastra for durable workflows + memory. v0.1 memory = LibSQL/SQLite local file only. Advanced (opt-in, self-hostable, still local): Mem0 or Cognee.
 - Router/decision layer: LLM-based default (works fully local/offline with the user's chosen model); Jev by TypeSafe AI as an optional System-One backend (see §7).
 - Interactive prompts in CLI: @clack/prompts (or equivalent).
 - OpenAPI parsing: a mature parser lib (e.g. an openapi/swagger parser) — do NOT hand-roll.
@@ -84,16 +84,20 @@ These interfaces are the whole ballgame. Draft precisely before building the thr
 
 ### 4.1 Install interview (order matters)
 
-1. Model? OpenAI / Anthropic / Gemini / local Ollama → writes provider config + .env placeholder key.
-2. Existing agent framework? None (we set up Vercel AI SDK/Mastra) / I use Mastra / Vercel AI SDK / LangGraph → if none, scaffold default; if they have one, generate an adapter stub (wrap, don't dictate).
-3. Skills? none / pick reference skills (v0.1 ships a couple; NO downloading external skills yet).
-4. Tools / existing APIs? "Do you have OpenAPI/Swagger or Shopify?" → paste spec URL/file or choose Shopify connector → generate tools. (No code-introspection in v0.1.)
-   - **Store-specific skill generation (v2.2):** if step 3 picked a reference skill AND step 4 wires a connector that can supply real store facts (v0.1: Shopify's policy fields, via `fetchShopifyPolicies`), the generator (§4.1 output, T9.3) runs ONE setup-time-only LLM call (`@wappy/harness`'s `generateStoreSkill`) to redraft that skill's `promptFragment` from the actual store's facts, still only referencing the already-fixed, already-reviewed tool set — never inventing a new capability. On failure (empty context, model error, empty response) the generator falls back to the static reference skill verbatim; this step never blocks or fails the install. Explicitly NOT in v0.1 scope: LLM-synthesized RAG content beyond the literal fetched policy text, and LLM-generated NEW tools from a connector's full schema — both considered and deferred (see Decisions Log).
-5. Memory? local file (default) / Mem0 / Cognee / Postgres → wire adapter + env keys.
-6. Router? LLM (default) / Jev → optional System-One backend.
-7. WhatsApp? enter Cloud API creds now / later → .env placeholders + webhook route.
+**The interview asks only what changes the generated code, and never asks for a credential** (v2.3). Every secret goes in `.env`, which the user fills in from the generated `.env.sample`.
 
-Output: a runnable project — `index.ts` (wires model+memory+router+tools+skills+WhatsApp), `tools/*.ts`, `skills/*.ts`, `.env.example`, `.wappy/state.json`, and a README that walks them through getting Meta creds + filling each env key.
+1. Model? OpenAI / Anthropic / Gemini / local Ollama → writes provider config + the matching env key into `.env.sample`.
+2. Tools? None / **Shopify** (the one connector v0.1 ships; the generic OpenAPI engine, §8, exists but is not offered in the interview yet). Choosing Shopify wires the connector; the store domain and access token are env keys, not interview answers.
+3. Skills? **Asked only if Shopify was chosen.** Skills are grounded in what the connected API offers; with no API there is nothing domain-neutral to offer yet (§1.1, §13), so the step is skipped. v0.1 ships two Shopify-flavored reference skills (store-info via RAG, orders via tools); NO downloading external skills yet.
+   - **Store-specific skill generation (v2.2):** if step 3 picked a reference skill AND step 2 wired a connector that can supply real store facts (v0.1: Shopify's policy fields, via `fetchShopifyPolicies`), the generator (§4.1 output, T9.3) runs ONE setup-time-only LLM call (`@wappy/harness`'s `generateStoreSkill`) to redraft that skill's `promptFragment` from the actual store's facts, still only referencing the already-fixed, already-reviewed tool set — never inventing a new capability. On failure (empty context, model error, empty response) the generator falls back to the static reference skill verbatim; this step never blocks or fails the install. Explicitly NOT in v0.1 scope: LLM-synthesized RAG content beyond the literal fetched policy text, and LLM-generated NEW tools from a connector's full schema — both considered and deferred (see Decisions Log).
+
+Fixed in v0.1, therefore **not asked** (an option that can't be generated must not be in the menu):
+- **Agent framework:** Vercel AI SDK, always. Mastra/LangGraph adapter stubs ("wrap, don't dictate") are deferred to v0.2 (§14).
+- **Memory:** local LibSQL/SQLite file. Mem0 / Cognee / Postgres adapters are deferred (M10 / §14).
+- **Router:** LLM. The Jev backend is deferred (M10).
+- **WhatsApp credentials:** never entered during install. The four keys (`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`) are always listed, blank, in `.env.sample` with a note on where to find each.
+
+Output: a runnable project — `index.ts` (wires model+memory+router+tools+skills+WhatsApp), `tools/*.ts`, `skills/*.ts`, **`.env.sample`** (every key needed to run, grouped, with where-to-find-it notes; optional keys commented out), `.env`-ignoring `.gitignore`, `.wappy/state.json`, and a README that walks them through `cp .env.sample .env`, getting Meta creds, and filling each key.
 
 ### 4.2 CLI commands
 
@@ -218,7 +222,7 @@ Design proof: Router picks cheapest correct path; Memory + WhatsApp hit every me
 ## 11. Security & privacy
 
 - Local-first: memory + state on local disk by default.
-- Secrets via env only; scaffold writes .env.example, never real keys.
+- Secrets via env only; scaffold writes `.env.sample` (blank placeholders), never real keys, and the interview never asks for one.
 - WhatsApp webhook signature verification mandatory.
 - Bring-your-own model key + WhatsApp creds; no telemetry by default (if any added later, opt-in).
 
@@ -253,8 +257,8 @@ This is a boundary, not a feature. Wappy Kit is the foundation only. It ships no
 
 ## 14. Roadmap / phases
 
-- **v0.1 (now):** monorepo skeleton + @wappy/core (contracts + state ledger) → create-wappy interview → @wappy/whatsapp + @wappy/harness (message→reply loop alive) → @wappy/tools-openapi (OpenAPI + Shopify). Messaging subset: text/buttons/list/CTA + reliability/fallback. Auth: key/bearer/basic. Router: LLM default (+ Jev optional). Memory: local default (+ Mem0/Cognee optional).
-- **v0.2:** website spec discovery (/openapi.json), more connectors, OAuth, richer messaging (media/location/templates polish), skill registry (install community @wappy-skill/*).
+- **v0.1 (now):** monorepo skeleton + @wappy/core (contracts + state ledger) → create-wappy interview → @wappy/whatsapp + @wappy/harness (message→reply loop alive) → @wappy/tools-openapi (OpenAPI + Shopify). Messaging subset: text/buttons/list/CTA + reliability/fallback. Auth: key/bearer/basic. Interview: model → Shopify → (skills). Router: LLM. Memory: local SQLite. (Jev, Mem0, Cognee, Postgres: implemented in M10, and only then added back to the interview menu.)
+- **v0.2:** existing-framework adapter stubs (Mastra / LangGraph, "wrap, don't dictate"), OpenAPI as an interview option, website spec discovery (/openapi.json), more connectors, OAuth, richer messaging (media/location/templates polish), skill registry (install community @wappy-skill/*).
 - **v0.3+:** code-introspection → OpenAPI (FastAPI/NestJS/Express), Flows/forms, more channels (the MessageChannel interface already anticipates this), evaluation harness, observability dashboard.
 - **Non-goals (explicit):** we do NOT build any business/domain logic (that's for apps built on top, §13); no staff scheduling/round-robin/assignment; no forced cloud; no vendor lock-in to a single model.
 
@@ -263,9 +267,10 @@ This is a boundary, not a feature. Wappy Kit is the foundation only. It ships no
 1. Exact @wappy/core interface signatures (draft as the FIRST artifact, before the three parts).
 2. Confirm scaffold folder and that the project is pushed to a fresh public GitHub repo. (Status: scaffolded at ~/wappy-kit; pushed to a PRIVATE repo csr1010/wappy-kit — flip to public before v0.1 release, see M11.)
 3. Verify Jev's real package/API surface against official docs before wiring it.
-4. Reference skills to ship in v0.1 (candidates: store-info (RAG), orders (tools)).
+4. Reference skills to ship in v0.1: store-info (RAG) and orders (tools) — resolved v2.3: shipped as Shopify-path examples only, offered after the API step (§4.1), not in the generic interview.
 
 ## 16. Decisions log
+- 2026-09-21 (v2.3, M9): **Interview simplified; domain-agnostic; credentials out of the interview.** Driven by hands-on testing of the installed CLI. (1) §4.1 reordered/reduced to model → tools → skills, with skills asked only after Shopify is chosen — the old first-position "Store info / Orders" prompt broke the no-domain-logic principle (§1.1, §13) because it asked for store skills before the domain was known. (2) Removed the framework question: Vercel AI SDK is the fixed runtime, Mastra is unused in v0.1, and Mastra/LangGraph answers only threw "not yet implemented". T9.4 (adapter stubs) deferred to v0.2. (3) Removed the memory and router questions: only local SQLite and the LLM router exist; Mem0/Cognee/Postgres/Jev threw at generation time. Deferred to M10 / v0.2. (4) OpenAPI removed from the interview (engine stays); Shopify is the one connector "good enough" for v0.1. (5) No credentials are asked at install (WhatsApp, Shopify domain/token): the generated `.env.sample` lists every required key with where-to-find notes; it now includes `WHATSAPP_APP_SECRET` (needed for mandatory webhook signature verification, §11). `.env.example` renamed `.env.sample`. Unimplemented options no longer appear in any menu.
 
 - 2026-09-21 (v2.2, M9-scoping/M8 follow-on): a hypothetical end-user interview simulation surfaced that nothing in the codebase ever populates RAG for a real install. Closed narrowly in two steps, both this session: (1) `fetchShopifyPolicies`/`shopifyPolicyIngestDocuments` (`@wappy/tools-openapi`) — auto-ingest Shopify's own static `shop.{shippingPolicy,refundPolicy,privacyPolicy,termsOfService}` fields into RAG; explicitly excludes live/volatile data (inventory, orders), which stays on the existing live tool-call path. (2) §4.1 step 3/4 amended: `generateStoreSkill` (`@wappy/harness`) — a single setup-time-only LLM call that redrafts a picked reference skill's `promptFragment` from real store facts, still only referencing the already-fixed tool set. Two broader alternatives were proposed and explicitly declined for v0.1: a generic web scraper for stores with an existing site (conflicts with the v0.1 API→tools scope below — "no arbitrary-website discovery"), and LLM-generated NEW tools from a connector's full API/GraphQL schema (materially bigger scope: a schema-introspection engine with per-store correctness/security review burden, closer to a new milestone than a setup step). Both remain open for a future v0.3+ decision, not ruled out permanently.
 - 2026-09-21 (M4): No spec content changed — recorded per CLAUDE.md's "editing an old test requires a spec change" rule. M3's `channel.ts` shipped an explicitly-documented placeholder `send()` (text-only, no session-window guard) with M3's own commit message and PROGRESS.md stating M4 would replace it with what §6.1-§6.3 already specify (smart rendering, the mandatory 24h window guard, fallback ladder). M4 T4.1-T4.10 implemented exactly that; three of `channel.m3.test.ts`'s `send()` tests were updated accordingly (`--allow-test-change`, logged in PROGRESS.md's Decision & change log with the same reasoning) because their assertions were written against the placeholder, not against §6.1-§6.3's actual behavior.
