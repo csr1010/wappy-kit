@@ -255,7 +255,10 @@ function renderInlineSkill(name: ReferenceSkillName, draft: StoreSkillDraft, bas
   return baseExpr ? `{ ...${baseExpr}, ${overrides.join(", ")} }` : `{ ...STORE_INFO_SKILL, ${overrides.join(", ")} }`;
 }
 
-function collectEnvVars(opts: RenderProjectOptions): EnvVarSpec[] {
+/** Exposed for the ledger-driven orchestrator (`generate.ts`), which needs the same env-var list to
+ * declare the `.env.example` step's `SetupManifest.envKeys` — kept as one source of truth rather
+ * than re-deriving it. */
+export function collectEnvVars(opts: RenderProjectOptions): EnvVarSpec[] {
   const { answers } = opts;
   const vars: EnvVarSpec[] = [...modelSetup(answers.model.provider).envVars, ...memorySetup(answers.memory.backend).envVars];
   const tools = toolsSetup(answers.tools);
