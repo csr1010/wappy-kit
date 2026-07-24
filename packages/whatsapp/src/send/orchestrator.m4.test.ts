@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { sendSmartMessage, type SendDeps } from "./orchestrator.js";
+import { replayPendingSends, sendSmartMessage, type SendDeps } from "./orchestrator.js";
 import { createSessionWindowTracker } from "../session-window.js";
 import { createFallbackOptionsStore } from "./fallback.js";
 import { createTemplateRegistry } from "./templates.js";
@@ -131,6 +131,76 @@ describe("sendSmartMessage — fallback ladder", () => {
     const result = await sendSmartMessage({ text: "Pick", buttons: [{ id: "a", title: "A" }] }, "c1", baseDeps({ fetchImpl }));
     expect(result.status).toBe("failed");
     expect(result.reason).toMatch(/still undeliverable/);
+  });
+});
+
+describe("sendSmartMessage — outbound media preflight", () => {
+  test("an oversize media message fails fast, without ever hitting the send endpoint", async () => {
+    let sendCalled = false;
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "HEAD") return new Response(null, { headers: { "content-length": "50000000" } });
+      sendCalled = true;
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.x" }] }), { status: 200 });
+    }) as typeof fetch;
+    const result = await sendSmartMessage({ media: { kind: "image", url: "https://x.com/a.png" } }, "c1", baseDeps({ fetchImpl }));
+    expect(result.status).toBe("failed");
+    expect(result.reason).toMatch(/exceeds/);
+    expect(sendCalled).toBe(false);
+  });
+
+  test("an unrecognized media kind fails fast with a clear reason", async () => {
+    const result = await sendSmartMessage({ media: { kind: "sticker" as never, url: "https://x.com/a.webp" } }, "c1", baseDeps());
+    expect(result).toEqual({ status: "failed", reason: "unsupported outbound media kind: sticker" });
+  });
+
+  test("a disallowed mime fails fast with a clear reason", async () => {
+    const result = await sendSmartMessage({ media: { kind: "image", url: "https://x.com/a.gif", mimeType: "image/gif" } }, "c1", baseDeps());
+    expect(result).toEqual({ status: "failed", reason: 'mime type "image/gif" not allowed (expected one of: image/jpeg, image/png, image/webp)' });
+  });
+
+  test("media combined with buttons is not preflighted (buttons win the render, media is unused)", async () => {
+    // A HEAD call here would indicate the (unused) media was wrongly preflighted.
+    let headCalled = false;
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "HEAD") {
+        headCalled = true;
+        return new Response(null, { headers: { "content-length": "50000000" } });
+      }
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.x" }] }), { status: 200 });
+    }) as typeof fetch;
+    const result = await sendSmartMessage({ text: "Pick", buttons: [{ id: "a", title: "A" }], media: { kind: "image", url: "https://x.com/a.png" } }, "c1", baseDeps({ fetchImpl }));
+    expect(result.status).toBe("sent");
+    expect(headCalled).toBe(false);
+  });
+});
+
+describe("replayPendingSends", () => {
+  test("re-attempts every pending item and updates the queue", async () => {
+    const queue = createMemoryOutboundQueue();
+    queue.enqueue({ idempotencyKey: "k1", to: "c1", payload: { type: "text" } }, 0);
+    queue.enqueue({ idempotencyKey: "k2", to: "c1", payload: { type: "text" } }, 0);
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      return new Response(JSON.stringify({ messages: [{ id: `wamid.${calls}` }] }), { status: 200 });
+    }) as typeof fetch;
+    const results = await replayPendingSends({ graphApiBaseUrl: "https://api", phoneNumberId: "pn1", accessToken: "t", fetchImpl, clock, queue });
+    expect(results).toHaveLength(2);
+    expect(results.every((r) => r.status === "sent")).toBe(true);
+    expect(queue.pending()).toEqual([]);
+  });
+
+  test("no queue configured -> nothing to replay", async () => {
+    expect(await replayPendingSends({ graphApiBaseUrl: "https://api", phoneNumberId: "pn1", accessToken: "t", fetchImpl: (async () => new Response()) as typeof fetch, clock })).toEqual([]);
+  });
+
+  test("a failed replay is recorded as failed again, not left pending forever", async () => {
+    const queue = createMemoryOutboundQueue();
+    queue.enqueue({ idempotencyKey: "k1", to: "c1", payload: { type: "text" } }, 0);
+    const fetchImpl = (async () => new Response(JSON.stringify({ error: { code: 131026, message: "still undeliverable" } }), { status: 400 })) as typeof fetch;
+    const results = await replayPendingSends({ graphApiBaseUrl: "https://api", phoneNumberId: "pn1", accessToken: "t", fetchImpl, clock, queue });
+    expect(results).toEqual([{ status: "failed", reason: "meta 131026: still undeliverable" }]);
+    expect(queue.get("k1")?.status).toBe("failed");
   });
 });
 

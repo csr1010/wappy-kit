@@ -22,3 +22,9 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
 
 - 2026-09-21: gate M4 --allow-test-change (logged twice identically by two gate runs in the same session; deduped to one entry here): M4 replaces M3's documented placeholder send() (text-only, no window guard) with the required smart-send + window-guard behavior (T4.1-T4.10); channel.m3.test.ts's send() tests were updated to open the session window first and assert correct media rendering, matching M3's own commit message stating this replacement was coming
   M	packages/whatsapp/src/channel.m3.test.ts
+
+- 2026-09-21: gate M4 --allow-test-change: M4 replaces M3's documented placeholder send() with the required smart-send + window-guard behavior; channel.m3.test.ts's send() tests updated accordingly (see earlier identical log entry)
+  M	packages/whatsapp/src/channel.m3.test.ts
+
+- 2026-09-21: gate M4 --allow-test-change: M4 replaces M3's documented placeholder send() with the required smart-send + window-guard behavior (already logged for this milestone; re-running gate after a review-driven fix)
+  M	packages/whatsapp/src/channel.m3.test.ts
