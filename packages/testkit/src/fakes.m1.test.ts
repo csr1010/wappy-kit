@@ -51,6 +51,33 @@ describe("fakeChannel", () => {
     expect(ch.receive(null)).toEqual([]);
     expect(ch.receive(undefined)).toEqual([]);
   });
+
+  test("a channel with an empty name fails conformance", async () => {
+    const broken: MessageChannel = { name: "", receive: () => [], send: async () => ({ status: "sent" }) };
+    const violations = await runChannelConformance(broken, { rawWithMessage: { text: "hi" }, to: "c1", message: { text: "hi" } });
+    expect(violations).toContain("MessageChannel.name must be a non-empty string");
+  });
+
+  test("a channel whose receive() yields a malformed InboundMessage fails conformance", async () => {
+    const broken: MessageChannel = {
+      name: "broken",
+      // @ts-expect-error deliberately invalid: missing required fields
+      receive: () => [{ text: "hi" }],
+      send: async () => ({ status: "sent" }),
+    };
+    const violations = await runChannelConformance(broken, { rawWithMessage: {}, to: "c1", message: { text: "hi" } });
+    expect(violations.join("\n")).toMatch(/not a valid InboundMessage/);
+  });
+
+  test("a channel whose receive(rawStatusOnly) isn't empty fails conformance", async () => {
+    const broken: MessageChannel = {
+      name: "broken",
+      receive: () => [{ id: "1", contactId: "c1", channel: "x", timestamp: 0 }],
+      send: async () => ({ status: "sent" }),
+    };
+    const violations = await runChannelConformance(broken, { rawWithMessage: {}, rawStatusOnly: { statusOnly: true }, to: "c1", message: { text: "hi" } });
+    expect(violations).toContain("receive(rawStatusOnly) must return an empty array");
+  });
 });
 
 describe("fakeMemory", () => {
@@ -98,6 +125,17 @@ describe("fakeMemory", () => {
     };
     const violations = await runMemoryConformance(broken, { contactId: "c1", turn: { id: "t1", contactId: "c1", role: "user", timestamp: 0 } });
     expect(violations).toContain("recall() must return string[]");
+  });
+
+  test("a broken memory (load() contains a malformed Turn) fails conformance", async () => {
+    const broken: Memory = {
+      // @ts-expect-error deliberately invalid: missing required fields
+      load: async () => [{ id: "t1" }],
+      append: async () => {},
+      recall: async () => [],
+    };
+    const violations = await runMemoryConformance(broken, { contactId: "c1", turn: { id: "t1", contactId: "c1", role: "user", timestamp: 0 } });
+    expect(violations.join("\n")).toMatch(/not a valid Turn/);
   });
 });
 
@@ -160,5 +198,40 @@ describe("fakeToolProvider", () => {
     const broken: ToolProvider = { name: "orders", listTools: () => [dupe, dupe] };
     const violations = await runToolProviderConformance(broken);
     expect(violations.some((v) => v.includes("duplicate tool name"))).toBe(true);
+  });
+
+  test("a provider with an empty name fails conformance", async () => {
+    const violations = await runToolProviderConformance({ name: "", listTools: () => [] });
+    expect(violations).toContain("ToolProvider.name must be a non-empty string");
+  });
+
+  test("a provider whose listTools() isn't an array fails conformance", async () => {
+    // @ts-expect-error deliberately invalid
+    const violations = await runToolProviderConformance({ name: "orders", listTools: () => "nope" });
+    expect(violations).toEqual(["listTools() must return an array"]);
+  });
+
+  test("a tool missing every required field is fully reported", async () => {
+    const bad = { name: "", description: "", parameters: null, readOnly: "yes", confirmBefore: "no", execute: async () => ({ toolName: "x", ok: false, error: "bad" }) };
+    // @ts-expect-error deliberately invalid
+    const broken: ToolProvider = { name: "orders", listTools: () => [bad] };
+    const violations = await runToolProviderConformance(broken);
+    expect(violations).toEqual(
+      expect.arrayContaining([
+        "tools[0] missing name",
+        "tools[0] () missing description",
+        "tools[0] () parameters must be a JSON Schema object",
+        "tools[0] () readOnly must be boolean",
+        "tools[0] () confirmBefore must be boolean",
+      ]),
+    );
+  });
+
+  test("a tool whose execute() returns an invalid ToolResult fails conformance", async () => {
+    const bad = { name: "getOrder", description: "d", parameters: {}, readOnly: true, confirmBefore: false, execute: async () => ({ ok: true }) };
+    // @ts-expect-error deliberately invalid: missing required toolName
+    const broken: ToolProvider = { name: "orders", listTools: () => [bad] };
+    const violations = await runToolProviderConformance(broken);
+    expect(violations.join("\n")).toMatch(/not a valid ToolResult/);
   });
 });
