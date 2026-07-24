@@ -38,12 +38,22 @@ export interface OutboundQueue {
 }
 
 async function loadQueueFile(path: string): Promise<QueueItem[]> {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch (e) {
+    // Only "no file yet" starts fresh. Anything else (EACCES, EISDIR, EIO, ...) on what may be a
+    // pre-existing queue file must NOT be treated as "empty" — that would silently forget already-
+    // `sent` items and let a restart re-send them (exactly what this queue exists to prevent).
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw e;
+  }
   let raw: unknown;
   try {
-    raw = JSON.parse(await readFile(path, "utf8"));
+    raw = JSON.parse(text);
   } catch {
-    // No file yet (ENOENT) or a corrupt one (bad JSON) — both start fresh rather than crashing the
-    // process; outbound sends are re-derived from the agent, not the sole record of truth.
+    // Corrupt (non-JSON) file content — start fresh rather than crashing the process; outbound
+    // sends are re-derived from the agent, not the sole record of truth.
     return [];
   }
   return Array.isArray((raw as { items?: unknown } | null)?.items) ? ((raw as { items: QueueItem[] }).items) : [];
