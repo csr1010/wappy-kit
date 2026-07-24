@@ -112,7 +112,11 @@ function toolsSetup(tools: ToolsAnswer): ToolsSetup | undefined {
   if (tools.kind === "none") return undefined;
   return {
     importLine: 'import { createShopifyToolProvider } from "@wappy/tools-openapi";',
-    providerExpr: 'createShopifyToolProvider({ storeDomain: process.env.SHOPIFY_STORE_DOMAIN!, accessTokenEnvVar: "SHOPIFY_ACCESS_TOKEN" })',
+    // SHOPIFY_GRAPHQL_URL_OVERRIDE is undocumented-to-end-users on purpose (not in .env.sample): it
+    // exists so this exact generated code can be pointed at a local mock Shopify server for
+    // testing, without touching real store credentials. Real installs never set it.
+    providerExpr:
+      'createShopifyToolProvider({ storeDomain: process.env.SHOPIFY_STORE_DOMAIN!, accessTokenEnvVar: "SHOPIFY_ACCESS_TOKEN", graphqlUrlOverride: process.env.SHOPIFY_GRAPHQL_URL_OVERRIDE, ssrf: process.env.SHOPIFY_GRAPHQL_URL_OVERRIDE ? { allowPrivateNetworks: true } : undefined })',
     fileName: "shopify",
     envVars: [
       { name: "SHOPIFY_STORE_DOMAIN", required: true, group: "Shopify", description: 'Your store domain, e.g. "my-shop.myshopify.com".' },
