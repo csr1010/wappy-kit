@@ -19,4 +19,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # Bump this number as each milestone lands (gate is cumulative).
-      - run: pnpm gate 5
+      - run: pnpm gate 6 --allow-test-change "M6 T6.2/T6.8/T6.9: composeWithBudget folds recentTurns into the flat assembled prompt string instead of passing history separately to model.generate(); two agent.m5.test.ts tests were updated to inspect req.prompt instead of req.history for the same underlying claim (see docs/PROGRESS.md Decision & change log, 2026-09-21)."
