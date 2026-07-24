@@ -2,8 +2,8 @@
 
 **STATUS:** Design-locked, pre-implementation. Green-lit for v0.1 build. This is the single source of truth for the project. On any session resume, READ `docs/PROGRESS.md` first, then use `pnpm ctx M<n>` to load only the spec sections you need. When plans change, UPDATE THIS FILE in place (bump the version + add to the Decisions Log).
 
-**Spec version:** 2.0
-**Last updated:** 2026-06-23
+**Spec version:** 2.1
+**Last updated:** 2026-09-21
 **Project:** Wappy Kit — an open-source WhatsApp Agent OS.
 **Repo:** This repository IS the entire project. It is a standalone open-source library published to npm.
 **Hard constraint:** 100% open-source, vendor-neutral (no proprietary/single-vendor lock-in), no forced cloud, local-first, users own their data.
@@ -77,6 +77,8 @@ These interfaces are the whole ballgame. Draft precisely before building the thr
 - **SmartMessage** (rich response schema) — `{ text, buttons?, list?, cta?, media?, quoteId? }` (see §6).
 - **PluginRegistry** — parts self-register a `register(registry)`; core loads the enabled list from config.
 - **SetupManifest** — each part declares its setup steps + required env keys; core aggregates into the state ledger (see §5).
+- **Tracer** — `record(system, event)` / `touched()` / `events()`; systems = `whatsapp|memory|router|skill|rag|tools|llm`; powers the §9 canonical-trace assertions (ratified M1, see Decisions Log).
+- **Skill** — prompt fragment + tools + optional memory schema for one capability (§17 glossary); ratified as a core interface M1 (see Decisions Log).
 
 ## 4. CLI: create-wappy — interview + commands
 
@@ -264,6 +266,7 @@ This is a boundary, not a feature. Wappy Kit is the foundation only. It ships no
 
 ## 16. Decisions log
 
+- 2026-09-21 (v2.1, M1 T1.1): Ratified §15 open question 1 (core interface signatures — see `docs/CONTRACTS.md`). Added **Tracer** and **Skill** to the §3 core contract list (both were already implied by §9/§13/§17 but missing from §3). Confirmed **Knowledge/RAG** gets no core interface — it lives in `@wappy/harness` (M8), consumed via `Memory.recall` + a skill's `promptFragment`. Precision deviations from §3 prose, not semantic changes: `MessageChannel.receive` returns `InboundMessage[]` (a webhook can batch messages or carry zero for a status-only payload); `Memory.recall` takes `(contactId, query)` (recall must be contact-scoped).
 - 2026-06-23 (v2.0): Spec rewritten as a standalone, open-source-first project. Removed all assumptions of a companion/hosted product; Wappy Kit stands on its own. Made explicit that functional/business apps built on top are separate, out-of-scope projects (§13). Reframed the architecture as "core + 3 parts (harness, whatsapp, tools-openapi) + CLI".
 - 2026-06-23: Architecture = core + 3 independent parts + create-wappy CLI; hub-and-spoke (parts depend only on core).
 - 2026-06-23: Agentic core = Vercel AI SDK (+ Mastra optional). Not LangChain. Not a single-vendor SDK.
