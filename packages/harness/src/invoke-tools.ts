@@ -114,6 +114,7 @@ export function createToolInvoker(opts: CreateToolInvokerOptions): (input: { mes
 
     const bounded = boundToolResult(toolResult.data, boundOptions);
     const text = typeof bounded.shown === "string" ? bounded.shown : JSON.stringify(bounded.shown);
-    return [bounded.hint ? `${text} (${bounded.hint})` : text];
+    if (bounded.hint) return [`${text} (${bounded.hint})`];
+    return [text];
   };
 }

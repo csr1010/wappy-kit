@@ -70,4 +70,20 @@ describe("createConfirmFlow", () => {
     expect(CONFIRM_SELECTION_ID).toBe("confirm");
     expect(CANCEL_SELECTION_ID).toBe("cancel");
   });
+
+  test("a transient failure creating the schema is retried on the next call, not permanently cached", async () => {
+    const client = createClient({ url: ":memory:" });
+    const originalExecuteMultiple = client.executeMultiple.bind(client);
+    let executeMultipleCalls = 0;
+    client.executeMultiple = (sql: string) => {
+      executeMultipleCalls++;
+      if (executeMultipleCalls === 1) return Promise.reject(new Error("transient connection blip"));
+      return originalExecuteMultiple(sql);
+    };
+    const flow = createConfirmFlow({ client, clock: fakeClock() });
+
+    await expect(flow.getPending("c1")).rejects.toThrow("transient connection blip");
+    expect(await flow.getPending("c1")).toBeUndefined();
+    expect(executeMultipleCalls).toBe(2);
+  });
 });

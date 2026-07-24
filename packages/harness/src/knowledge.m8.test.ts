@@ -36,12 +36,30 @@ describe("chunkText — edge cases", () => {
     expect(chunks.join(" ")).toContain("word49");
   });
 
+  test("an oversized 'word' preceded by normal words flushes the accumulated chunk first, then hard-slices", () => {
+    const longWord = "x".repeat(300);
+    const text = `see this link ${longWord} for details`;
+    const chunks = chunkText(text, { maxChunkChars: 100 });
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const c of chunks) expect(c.length).toBeLessThanOrEqual(100);
+    expect(chunks[0]).toBe("see this link");
+    expect(chunks.join("")).toContain(longWord);
+  });
+
   test("a single 'word' longer than the limit (e.g. a long URL) is hard-sliced, never infinite-loops", () => {
     const longWord = "https://example.com/" + "a".repeat(500);
     const chunks = chunkText(longWord, { maxChunkChars: 100 });
     expect(chunks.length).toBeGreaterThan(1);
     for (const c of chunks) expect(c.length).toBeLessThanOrEqual(100);
     expect(chunks.join("")).toBe(longWord);
+  });
+
+  test("with overlapChars: 0, a split within a long paragraph carries no tail into the next chunk", () => {
+    const para = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
+    const chunks = chunkText(para, { maxChunkChars: 100, overlapChars: 0 });
+    expect(chunks.length).toBeGreaterThan(1);
+    // the second chunk starts with the very next word, not a repeated tail from the first
+    expect(chunks[1]?.startsWith(chunks[0]!.split(" ").at(-1)!)).toBe(false);
   });
 
   test("chunks never exceed maxChunkChars across a realistic mixed document", () => {
@@ -146,6 +164,50 @@ describe("createKnowledge — optional embedding index", () => {
     const k = createKnowledge({ client: memClient(), embed: fakeEmbed({}) });
     const results = await k.recall("anything");
     expect(results).toEqual([]);
+  });
+
+  test("mismatched embedding dimensions (a shorter stored vector) are treated as zero-padded, not a crash", async () => {
+    const vectors: Record<string, number[]> = { "short doc": [1, 0], "long query": [1, 0, 0, 5] };
+    const k = createKnowledge({ client: memClient(), embed: fakeEmbed(vectors) });
+    await k.ingest("doc", "short doc");
+    const results = await k.recall("long query", { scoreFloor: -1 });
+    expect(results.length).toBe(1);
+    expect(Number.isFinite(results[0]!.score)).toBe(true);
+  });
+
+  test("an embed() call returning no vector for the query (e.g. an empty array) scores everything 0, not a crash", async () => {
+    // A real vector for the ingested chunk (so ingest() itself succeeds), but an empty array when
+    // asked to embed the query — simulating an embedding provider that returns fewer results than
+    // requested for some texts.
+    const embed = async (texts: string[]): Promise<number[][]> => (texts[0] === "a query" ? [] : texts.map(() => [1, 0]));
+    const k = createKnowledge({ client: memClient(), embed });
+    await k.ingest("doc", "some content");
+    const results = await k.recall("a query", { scoreFloor: -1 });
+    expect(results[0]?.score).toBe(0);
+  });
+
+  test("a zero-magnitude embedding (e.g. an all-zero vector) scores 0 similarity, not NaN/Infinity", async () => {
+    const vectors: Record<string, number[]> = { "some text": [0, 0, 0], "a query": [0, 0, 0] };
+    const k = createKnowledge({ client: memClient(), embed: fakeEmbed(vectors) });
+    await k.ingest("doc", "some text");
+    const results = await k.recall("a query", { scoreFloor: -1 }); // floor below 0 so a 0-score match isn't itself excluded
+    expect(results[0]?.score).toBe(0);
+  });
+
+  test("a transient failure creating the schema is retried on the next call, not permanently cached", async () => {
+    const client = createClient({ url: ":memory:" });
+    const originalExecuteMultiple = client.executeMultiple.bind(client);
+    let executeMultipleCalls = 0;
+    client.executeMultiple = (sql: string) => {
+      executeMultipleCalls++;
+      if (executeMultipleCalls === 1) return Promise.reject(new Error("transient connection blip"));
+      return originalExecuteMultiple(sql);
+    };
+    const k = createKnowledge({ client });
+
+    await expect(k.recall("anything")).rejects.toThrow("transient connection blip");
+    expect(await k.recall("anything")).toEqual([]);
+    expect(executeMultipleCalls).toBe(2);
   });
 });
 

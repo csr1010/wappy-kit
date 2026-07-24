@@ -167,17 +167,20 @@ async function resolvePendingConfirmation(message: InboundMessage, confirmFlow: 
  * `buttons`/`list`/`cta`/`media` (§6.3 "the model controls UX intent — buttons vs list vs text"), so
  * a rich reply with no `text` set would otherwise persist as `Turn.text: undefined` — which
  * model.ts's `toModelMessages()` then filters out entirely, making the agent's own reply invisible
- * to itself on the next turn. Never returns undefined for a message that satisfies SmartMessageSchema
- * (at least one field is always present).
+ * to itself on the next turn. Every real caller here (`composeSmartMessage`'s degrade path always
+ * sets `text`; every other reply in this file — refusal, oversized-decline, confirm/cancel — also
+ * always sets `text`) only ever produces a `SmartMessage` satisfying `SmartMessageSchema`'s own
+ * `.refine()`, which requires at least one of text/buttons/list/cta/media — so `parts` is never
+ * empty here; no fallback-to-undefined branch is reachable to simplify away.
  */
-function summarizeReply(message: SmartMessage): string | undefined {
+function summarizeReply(message: SmartMessage): string {
   if (message.text) return message.text;
   const parts: string[] = [];
   if (message.buttons) parts.push(`buttons: ${message.buttons.map((b) => b.title).join(", ")}`);
   if (message.list) parts.push(`list: ${message.list.sections.flatMap((s) => s.rows.map((r) => r.title)).join(", ")}`);
   if (message.cta) parts.push(`link "${message.cta.text}": ${message.cta.url}`);
   if (message.media) parts.push(message.media.caption ? `${message.media.kind}: ${message.media.caption}` : message.media.kind);
-  return parts.length > 0 ? `[${parts.join("; ")}]` : undefined;
+  return `[${parts.join("; ")}]`;
 }
 
 function trace(tracer: Tracer, system: TracedSystem, event: string, data?: unknown): void {
