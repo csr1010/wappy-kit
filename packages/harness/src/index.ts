@@ -9,3 +9,4 @@ export * from "./model.js";
 export * from "./recall-budget.js";
 export * from "./router.js";
 export * from "./skills.js";
+export * from "./tool-selector.js";
