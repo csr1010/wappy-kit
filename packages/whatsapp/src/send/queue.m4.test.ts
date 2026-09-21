@@ -112,6 +112,15 @@ describe("createFileOutboundQueue — survives restart", () => {
     expect(await createFileOutboundQueue(path2).pending()).toEqual([]);
   });
 
+  test("a real I/O error reading a pre-existing queue file (not ENOENT) rejects instead of silently starting fresh", async () => {
+    // readFile() on a directory fails with EISDIR, not ENOENT — this must NOT be mistaken for
+    // "no file yet", or an already-`sent` item on disk would look forgotten and get re-sent.
+    const dir = tmpDir();
+    const path = join(dir, "queue.json");
+    mkdirSync(path);
+    await expect(createFileOutboundQueue(path).pending()).rejects.toThrow();
+  });
+
   test("a rename failure cleans up the temp file and rethrows, leaving no orphaned .tmp file", async () => {
     const dir = tmpDir();
     const path = join(dir, "queue.json");
