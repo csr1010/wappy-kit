@@ -48,4 +48,51 @@ describe("renderTemplate", () => {
     const result = renderTemplate(registry, "15550002222", "order_update", { customerName: "Ada" });
     expect(result).toEqual({ ok: false, error: 'template "order_update" is missing variables: orderId' });
   });
+
+  test("a template with buttons emits one button component per button, in order, with the right sub_type/index/parameter shape", () => {
+    const registry = createTemplateRegistry();
+    registry.register({
+      name: "shipped",
+      language: "en_US",
+      category: "utility",
+      variables: ["orderId"],
+      buttons: [
+        { type: "url", text: "track/{{orderId}}" },
+        { type: "quick_reply", text: "confirm_delivery" },
+      ],
+    });
+    const result = renderTemplate(registry, "15550002222", "shipped", { orderId: "8842" });
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        messaging_product: "whatsapp",
+        to: "15550002222",
+        type: "template",
+        template: {
+          name: "shipped",
+          language: { code: "en_US" },
+          components: [
+            { type: "body", parameters: [{ type: "text", text: "8842" }] },
+            { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "track/{{orderId}}" }] },
+            { type: "button", sub_type: "quick_reply", index: "1", parameters: [{ type: "payload", payload: "confirm_delivery" }] },
+          ],
+        },
+      },
+    });
+  });
+
+  test("a template with no buttons omits button components entirely (unchanged from before buttons existed)", () => {
+    const registry = createTemplateRegistry();
+    registry.register(def);
+    const result = renderTemplate(registry, "15550002222", "order_update", { customerName: "Ada", orderId: "8842" });
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        messaging_product: "whatsapp",
+        to: "15550002222",
+        type: "template",
+        template: { name: "order_update", language: { code: "en_US" }, components: [{ type: "body", parameters: [{ type: "text", text: "Ada" }, { type: "text", text: "8842" }] }] },
+      },
+    });
+  });
 });

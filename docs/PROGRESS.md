@@ -51,3 +51,6 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
 
 - 2026-09-21: gate M4 --allow-test-change: M4 replaces M3's documented placeholder send() with the required smart-send + window-guard behavior (already logged for this milestone; re-running gate after eighth review-driven fix round: attemptAndReport/replayPendingSends now catch queue errors and convert them to typed DeliveryResults instead of letting them escape as unhandled rejections; removed dead validateOutboundMedia())
   M	packages/whatsapp/src/channel.m3.test.ts
+
+- 2026-09-21: gate M4 --allow-test-change: M4 replaces M3's documented placeholder send() with the required smart-send + window-guard behavior (already logged for this milestone; re-running gate after ninth review-driven fix round: renderTemplate now actually emits button components from TemplateDef.buttons, matching SPEC §6.1's 'variable + button mapping' requirement — previously buttons was defined but silently ignored)
+  M	packages/whatsapp/src/channel.m3.test.ts
