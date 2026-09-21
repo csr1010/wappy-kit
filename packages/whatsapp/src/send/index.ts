@@ -9,5 +9,6 @@ export * from "./backoff.js";
 export * from "./delivery-state.js";
 export * from "./queue.js";
 export * from "./outbound-media.js";
+export * from "./outbound-media-preflight.js";
 export * from "./http-send.js";
 export * from "./orchestrator.js";
