@@ -76,11 +76,32 @@ describe("createWhatsAppChannel — reliability", () => {
     expect(await channel.send("15550002222", { text: "hello there" })).toEqual({ status: "sent", messageId: "wamid.out1" });
   });
 
+  test("send() with no text (e.g. a media-only SmartMessage) posts an empty text body, not undefined", async () => {
+    let sentBody: unknown;
+    const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+      sentBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.out2" }] }), { status: 200 });
+    }) as typeof fetch;
+    const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", fetchImpl });
+    await channel.send("15550002222", { media: { kind: "image", url: "https://example.com/a.png" } });
+    expect(sentBody).toMatchObject({ text: { body: "" } });
+  });
+
   test("send() maps a Meta error response to a failed DeliveryResult with a reason", async () => {
     const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", fetchImpl: fakeFetch(400, { error: { code: 131026, message: "Message undeliverable" } }) });
     const result = await channel.send("15550002222", { text: "hi" });
     expect(result.status).toBe("failed");
     expect(result.reason).toMatch(/131026/);
+  });
+
+  test("send() handles a non-JSON error response body gracefully", async () => {
+    const channel = createWhatsAppChannel({
+      phoneNumberId: "pn1",
+      accessToken: "t",
+      fetchImpl: (async () => new Response("<html>502 Bad Gateway</html>", { status: 502 })) as typeof fetch,
+    });
+    const result = await channel.send("15550002222", { text: "hi" });
+    expect(result).toEqual({ status: "failed", reason: "http 502" });
   });
 
   test("send() maps a network error to a failed DeliveryResult", async () => {

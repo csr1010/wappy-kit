@@ -41,6 +41,34 @@ async function startServer(opts: ServerOpts): Promise<{ base: string; mediaBase:
   return { base, mediaBase: `${base}/media` };
 }
 
+describe("downloadWhatsAppMedia — defaults and edge cases", () => {
+  test("defaults graphApiBaseUrl to the real Cloud API host when not given", async () => {
+    let requestedUrl = "";
+    await downloadWhatsAppMedia({
+      mediaId: "123",
+      accessToken: "t",
+      maxBytes: 1000,
+      fetchImpl: (async (input: string | URL | Request) => {
+        if (!requestedUrl) requestedUrl = String(input); // capture only the first (metadata) hop
+        return new Response(JSON.stringify({ url: "http://x/file", mime_type: "text/plain", file_size: 1 }));
+      }) as typeof fetch,
+    });
+    expect(requestedUrl).toBe("https://graph.facebook.com/v21.0/123");
+  });
+
+  test("defaults mimeType to application/octet-stream when the metadata omits mime_type", async () => {
+    const { mediaBase } = await startServer({ metaBody: (base) => ({ url: `${base}/file` }), fileBytes: new Uint8Array([1]) });
+    const result = await downloadWhatsAppMedia({ mediaId: "123", accessToken: "t", graphApiBaseUrl: mediaBase, maxBytes: 1000 });
+    expect(result).toEqual({ ok: true, media: { bytes: new Uint8Array([1]), mimeType: "application/octet-stream" } });
+  });
+
+  test("metadata missing a url maps to http_error", async () => {
+    const { mediaBase } = await startServer({ metaBody: () => ({ mime_type: "image/jpeg", file_size: 1 }) });
+    const result = await downloadWhatsAppMedia({ mediaId: "123", accessToken: "t", graphApiBaseUrl: mediaBase, maxBytes: 1000 });
+    expect(result).toEqual({ ok: false, error: { kind: "http_error", status: 502 } });
+  });
+});
+
 describe("downloadWhatsAppMedia", () => {
   test("happy path: resolves the media id then downloads the bytes", async () => {
     const bytes = new Uint8Array([1, 2, 3, 4]);
@@ -104,7 +132,7 @@ describe("downloadWhatsAppMedia", () => {
     expect(result).toEqual({ ok: false, error: { kind: "http_error", status: 500 } });
   });
 
-  test("a network error (fetch throws) maps to network_error", async () => {
+  test("a network error resolving the media id maps to network_error", async () => {
     const result = await downloadWhatsAppMedia({
       mediaId: "123",
       accessToken: "t",
@@ -115,5 +143,41 @@ describe("downloadWhatsAppMedia", () => {
       },
     });
     expect(result).toEqual({ ok: false, error: { kind: "network_error", message: "connection refused" } });
+  });
+
+  test("a network error downloading the (successfully resolved) file maps to network_error", async () => {
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/media/")) return new Response(JSON.stringify({ url: "http://unreachable.invalid/file", mime_type: "image/jpeg", file_size: 10 }), { status: 200 });
+      throw new Error("connection reset");
+    }) as typeof fetch;
+    const result = await downloadWhatsAppMedia({ mediaId: "123", accessToken: "t", graphApiBaseUrl: "http://x/media", maxBytes: 1000, fetchImpl });
+    expect(result).toEqual({ ok: false, error: { kind: "network_error", message: "connection reset" } });
+  });
+
+  test("a response without a streamable body falls back to a single-buffer read, still capped", async () => {
+    // Simulates an environment where the response has no ReadableStream body (body: null).
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/media/")) return new Response(JSON.stringify({ url: "http://x/file", mime_type: "text/plain", file_size: 2 }));
+      const r = new Response("ok");
+      Object.defineProperty(r, "body", { value: null });
+      return r;
+    }) as typeof fetch;
+    const result = await downloadWhatsAppMedia({ mediaId: "123", accessToken: "t", graphApiBaseUrl: "http://x/media", maxBytes: 1000, fetchImpl });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(new TextDecoder().decode(result.media.bytes)).toBe("ok");
+  });
+
+  test("a response without a streamable body still enforces the byte cap", async () => {
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/media/")) return new Response(JSON.stringify({ url: "http://x/file", mime_type: "text/plain" }));
+      const r = new Response("this body is longer than the cap");
+      Object.defineProperty(r, "body", { value: null });
+      return r;
+    }) as typeof fetch;
+    const result = await downloadWhatsAppMedia({ mediaId: "123", accessToken: "t", graphApiBaseUrl: "http://x/media", maxBytes: 5, fetchImpl });
+    expect(result).toEqual({ ok: false, error: { kind: "too_large", limitBytes: 5 } });
   });
 });
