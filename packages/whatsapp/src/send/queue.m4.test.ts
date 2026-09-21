@@ -122,6 +122,23 @@ describe("createFileOutboundQueue — survives restart", () => {
     expect(readdirSync(dir).filter((n) => n.includes(".tmp"))).toEqual([]);
   });
 
+  test("a failed write doesn't leave the in-memory cache believing an unsaved item was persisted", async () => {
+    const dir = tmpDir();
+    const path = join(dir, "queue.json");
+    const q = createFileOutboundQueue(path);
+    await q.enqueue({ idempotencyKey: "k1", to: "c1", payload: {} }, 0); // one real, successfully-persisted item
+
+    // Make the NEXT save fail by replacing the queue file with a non-empty directory of the same name.
+    rmSync(path, { force: true });
+    mkdirSync(path);
+    writeFileSync(join(path, "keepme"), "x");
+    await expect(q.enqueue({ idempotencyKey: "k2", to: "c1", payload: {} }, 1)).rejects.toThrow();
+
+    // The failed enqueue must not appear in this instance's own in-memory view of the queue —
+    // otherwise a caller believing k2 was durably queued would be wrong (it never hit disk).
+    expect((await q.pending()).map((i) => i.idempotencyKey)).toEqual(["k1"]);
+  });
+
   test("no leftover temp file after a write", async () => {
     const dir = tmpDir();
     const path = join(dir, "queue.json");

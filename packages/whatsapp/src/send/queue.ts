@@ -84,16 +84,18 @@ export function createFileOutboundQueue(path: string): OutboundQueue {
         const existing = current.find((i) => i.idempotencyKey === item.idempotencyKey);
         if (existing) return existing;
         const record: QueueItem = { ...item, status: "pending", attempts: 0, createdAt: now, updatedAt: now };
-        items = [...current, record];
-        await saveQueueFile(path, items);
+        const next = [...current, record];
+        await saveQueueFile(path, next); // only adopt the new array into the cache once it's actually durable
+        items = next;
         return record;
       }),
 
     update: (idempotencyKey, patch, now) =>
       serialize(async () => {
         const current = await ensureLoaded();
-        items = current.map((i) => (i.idempotencyKey === idempotencyKey ? { ...i, ...patch, updatedAt: now } : i));
-        await saveQueueFile(path, items);
+        const next = current.map((i) => (i.idempotencyKey === idempotencyKey ? { ...i, ...patch, updatedAt: now } : i));
+        await saveQueueFile(path, next);
+        items = next;
       }),
 
     get: (idempotencyKey) => serialize(async () => (await ensureLoaded()).find((i) => i.idempotencyKey === idempotencyKey)),
