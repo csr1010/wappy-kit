@@ -336,4 +336,302 @@ describe("createShopifyToolProvider — transport/GraphQL error handling (T8.6 g
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/JSON/);
   });
+
+  test("a network-level throw of a non-Error value is still caught and stringified", async () => {
+    const fetchImpl = async () => {
+      throw "a plain string rejection";
+    };
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "searchProducts")!.execute({ query: "x" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("a plain string rejection");
+  });
+
+  test("a response with neither `errors` nor `data` is reported as having no data", async () => {
+    const fetchImpl = async () => jsonResponse({});
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "searchProducts")!.execute({ query: "x" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/no data/i);
+  });
+});
+
+describe("createShopifyToolProvider — defaults (envReader, accessTokenEnvVar, timeoutMs, apiVersion)", () => {
+  const ENV_VAR_NAME = "SHOPIFY_ACCESS_TOKEN";
+
+  test("without an explicit apiVersion, the derived URL uses the built-in default version", async () => {
+    let seenUrl: string | undefined;
+    const fetchImpl = async (url: string | URL) => {
+      seenUrl = url.toString();
+      return jsonResponse({ data: { products: { edges: [] } } });
+    };
+    const p = createShopifyToolProvider({ storeDomain: "my-shop.myshopify.com", accessTokenEnvVar: ENV_VAR, envReader: env({ [ENV_VAR]: "t" }), ssrf: { fetchImpl } });
+    await p.listTools().find((t) => t.name === "searchProducts")!.execute({ query: "x" });
+    expect(seenUrl).toMatch(/^https:\/\/my-shop\.myshopify\.com\/admin\/api\/\d{4}-\d{2}\/graphql\.json$/);
+  });
+
+  test("without an explicit accessTokenEnvVar, the default env var name (SHOPIFY_ACCESS_TOKEN) is used", async () => {
+    const originalValue = process.env[ENV_VAR_NAME];
+    process.env[ENV_VAR_NAME] = "shpat_from_default_env_var";
+    try {
+      let seenHeaders: Headers | undefined;
+      const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
+        seenHeaders = new Headers(init?.headers);
+        return jsonResponse({ data: { products: { edges: [] } } });
+      };
+      const p = createShopifyToolProvider({ graphqlUrlOverride: "https://shop.example.myshopify.com/admin/api/2026-07/graphql.json", ssrf: { allowPrivateNetworks: true, fetchImpl } });
+      await p.listTools().find((t) => t.name === "searchProducts")!.execute({ query: "x" });
+      expect(seenHeaders?.get("X-Shopify-Access-Token")).toBe("shpat_from_default_env_var");
+    } finally {
+      if (originalValue === undefined) delete process.env[ENV_VAR_NAME];
+      else process.env[ENV_VAR_NAME] = originalValue;
+    }
+  });
+
+  test("without an explicit envReader, the real process.env is used", async () => {
+    const originalValue = process.env[ENV_VAR_NAME];
+    process.env[ENV_VAR_NAME] = "shpat_real_process_env";
+    try {
+      let seenHeaders: Headers | undefined;
+      const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
+        seenHeaders = new Headers(init?.headers);
+        return jsonResponse({ data: { products: { edges: [] } } });
+      };
+      const p = createShopifyToolProvider({ graphqlUrlOverride: "https://shop.example.myshopify.com/admin/api/2026-07/graphql.json", ssrf: { allowPrivateNetworks: true, fetchImpl } });
+      await p.listTools().find((t) => t.name === "searchProducts")!.execute({ query: "x" });
+      expect(seenHeaders?.get("X-Shopify-Access-Token")).toBe("shpat_real_process_env");
+    } finally {
+      if (originalValue === undefined) delete process.env[ENV_VAR_NAME];
+      else process.env[ENV_VAR_NAME] = originalValue;
+    }
+  });
+
+  test("without an explicit timeoutMs, a call still completes normally (default applied)", async () => {
+    const fetchImpl = async () => jsonResponse({ data: { products: { edges: [] } } });
+    const p = createShopifyToolProvider({ graphqlUrlOverride: "https://shop.example.myshopify.com/admin/api/2026-07/graphql.json", accessTokenEnvVar: ENV_VAR, envReader: env({ [ENV_VAR]: "t" }), ssrf: { allowPrivateNetworks: true, fetchImpl } });
+    const result = await p.listTools().find((t) => t.name === "searchProducts")!.execute({ query: "x" });
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("createShopifyToolProvider — response shaping edge cases", () => {
+  test("money() omits the currency code when the GraphQL node doesn't provide one", async () => {
+    const fetchImpl = async () => jsonResponse({ data: { products: { edges: [{ node: { id: "1", title: "x", handle: "x", status: "ACTIVE", priceRangeV2: { minVariantPrice: { amount: "9.99" } } } }] } } });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "searchProducts")!.execute({ query: "x" });
+    expect((result.data as { priceRange?: { min?: string } }[])[0]?.priceRange?.min).toBe("9.99");
+  });
+
+  test("shapeOrder filters out a fulfillment's tracking entry that has no tracking number", async () => {
+    const fetchImpl = async () =>
+      jsonResponse({
+        data: { order: { id: "1", name: "#1", fulfillments: [{ trackingInfo: [{ number: "", url: "https://x" }, { number: "1Z9", url: "https://y" }] }] } },
+      });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "1" });
+    expect(result.data).toMatchObject({ tracking: [{ number: "1Z9", url: "https://y" }] });
+  });
+
+  test("shapeInventoryLevel filters out a quantities entry that has no name", async () => {
+    const fetchImpl = async () =>
+      jsonResponse({
+        data: {
+          inventoryItems: {
+            edges: [{ node: { sku: "S1", inventoryLevels: { edges: [{ node: { location: { name: "A" }, quantities: [{ quantity: 3 }, { name: "available", quantity: 7 }] } }] } } }],
+          },
+        },
+      });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getInventoryLevels")!.execute({ sku: "S1" });
+    expect(result.data).toEqual([{ sku: "S1", location: "A", quantities: { available: 7 } }]);
+  });
+});
+
+describe("createShopifyToolProvider — remaining tools' missing-argument and transport-failure paths", () => {
+  test("getProduct: a missing id fails without a network call", async () => {
+    const fetchImpl = vi.fn();
+    const p = provider(fetchImpl);
+    const result = await p.listTools().find((t) => t.name === "getProduct")!.execute({});
+    expect(result.ok).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test("getProduct: a failed GraphQL call is reported honestly", async () => {
+    const fetchImpl = async () => new Response("down", { status: 503 });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getProduct")!.execute({ id: "1" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("503");
+  });
+
+  test("getOrder: a missing id fails without a network call", async () => {
+    const fetchImpl = vi.fn();
+    const p = provider(fetchImpl);
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({});
+    expect(result.ok).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test("getOrder: a failed GraphQL call on the direct numeric-id path is reported honestly", async () => {
+    const fetchImpl = async () => new Response("down", { status: 503 });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "8842" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("503");
+  });
+
+  test("getOrder: a failed GraphQL call on the name-search path is reported honestly", async () => {
+    const fetchImpl = async () => new Response("down", { status: 503 });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "#8842" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("503");
+  });
+
+  test("listRecentOrders: a failed GraphQL call is reported honestly", async () => {
+    const fetchImpl = async () => new Response("down", { status: 503 });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "listRecentOrders")!.execute({});
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("503");
+  });
+
+  test("listRecentOrders: a missing limit defaults to 10", async () => {
+    let seenFirst: number | undefined;
+    const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
+      seenFirst = JSON.parse(init!.body as string).variables.first;
+      return jsonResponse({ data: { orders: { edges: [] } } });
+    };
+    const p = provider(fetchImpl as never);
+    await p.listTools().find((t) => t.name === "listRecentOrders")!.execute({});
+    expect(seenFirst).toBe(10);
+  });
+
+  test("getInventoryLevels: a failed GraphQL call is reported honestly", async () => {
+    const fetchImpl = async () => new Response("down", { status: 503 });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getInventoryLevels")!.execute({ sku: "S1" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("503");
+  });
+
+  test("lookupCustomer: a failed GraphQL call on the by-id path is reported honestly", async () => {
+    const fetchImpl = async () => new Response("down", { status: 503 });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "lookupCustomer")!.execute({ id: "1" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("503");
+  });
+
+  test("lookupCustomer: a failed GraphQL call on the by-email path is reported honestly", async () => {
+    const fetchImpl = async () => new Response("down", { status: 503 });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "lookupCustomer")!.execute({ email: "a@b.com" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("503");
+  });
+
+  test("getOrder: a null order on the direct numeric-id path is reported as not found", async () => {
+    const fetchImpl = async () => jsonResponse({ data: { order: null } });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "8842" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/no order/i);
+  });
+
+  test("lookupCustomer: a null customer on the by-id path is reported as not found", async () => {
+    const fetchImpl = async () => jsonResponse({ data: { customer: null } });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "lookupCustomer")!.execute({ id: "1" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/no customer/i);
+  });
+
+  test("lookupCustomer: no match on the by-email path is reported as not found", async () => {
+    const fetchImpl = async () => jsonResponse({ data: { customers: { edges: [] } } });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "lookupCustomer")!.execute({ email: "nobody@example.com" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/no customer/i);
+  });
+});
+
+describe("createShopifyToolProvider — every tool tolerates a missing/undefined args object", () => {
+  const names = ["searchProducts", "getProduct", "getOrder", "listRecentOrders", "getInventoryLevels", "lookupCustomer"];
+
+  for (const name of names) {
+    test(`${name}: execute(undefined) doesn't throw`, async () => {
+      const fetchImpl = vi.fn();
+      const p = provider(fetchImpl);
+      const result = await p.listTools().find((t) => t.name === name)!.execute(undefined);
+      expect(result.toolName).toBe(name);
+      expect(result.ok).toBe(false); // every tool requires at least one argument, all missing here
+    });
+  }
+});
+
+describe("createShopifyToolProvider — responses missing an expected nested field entirely (not just an empty array)", () => {
+  test("searchProducts: a response with no `products` field at all yields an empty list, not a crash", async () => {
+    const fetchImpl = async () => jsonResponse({ data: {} });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "searchProducts")!.execute({ query: "x" });
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual([]);
+  });
+
+  test("getOrder (name-search path): a response with no `orders` field at all is reported as not found, not a crash", async () => {
+    const fetchImpl = async () => jsonResponse({ data: {} });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "#9999" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/no order/i);
+  });
+
+  test("listRecentOrders: a response with no `orders` field at all yields an empty list, not a crash", async () => {
+    const fetchImpl = async () => jsonResponse({ data: {} });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "listRecentOrders")!.execute({});
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual([]);
+  });
+
+  test("getInventoryLevels: a response with no `inventoryItems` field at all is reported as not found, not a crash", async () => {
+    const fetchImpl = async () => jsonResponse({ data: {} });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getInventoryLevels")!.execute({ sku: "S1" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/no inventory item/i);
+  });
+
+  test("getInventoryLevels: an inventory item with no `inventoryLevels` field at all yields an empty list", async () => {
+    const fetchImpl = async () => jsonResponse({ data: { inventoryItems: { edges: [{ node: { sku: "S1" } }] } } });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getInventoryLevels")!.execute({ sku: "S1" });
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual([]);
+  });
+
+  test("shapeOrder: a fulfillment with no `trackingInfo` field at all yields no tracking, not a crash", async () => {
+    const fetchImpl = async () => jsonResponse({ data: { order: { id: "1", name: "#1", fulfillments: [{}] } } });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getOrder")!.execute({ id: "1" });
+    expect(result.ok).toBe(true);
+    expect((result.data as { tracking?: unknown }).tracking).toBeUndefined();
+  });
+
+  test("lookupCustomer (by-email path): a response with no `customers` field at all is reported as not found, not a crash", async () => {
+    const fetchImpl = async () => jsonResponse({ data: {} });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "lookupCustomer")!.execute({ email: "a@b.com" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/no customer/i);
+  });
+
+  test("shapeInventoryLevel: a level with no `quantities` field at all yields an empty quantities object", async () => {
+    const fetchImpl = async () =>
+      jsonResponse({ data: { inventoryItems: { edges: [{ node: { sku: "S1", inventoryLevels: { edges: [{ node: { location: { name: "A" } } }] } } }] } } });
+    const p = provider(fetchImpl as never);
+    const result = await p.listTools().find((t) => t.name === "getInventoryLevels")!.execute({ sku: "S1" });
+    expect(result.data).toEqual([{ sku: "S1", location: "A", quantities: {} }]);
+  });
 });

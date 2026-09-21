@@ -24,6 +24,17 @@ function decisionModel(response: { toolName?: string; args?: unknown } | undefin
 }
 
 describe("createToolInvoker", () => {
+  test("a textless message (e.g. media-only) falls back to an empty query — no lexical relevance, no findings, model never called", async () => {
+    let called = false;
+    const model: Model = { generate: async () => { called = true; return { structured: {} }; } };
+    const getOrder = tool("getOrder", async () => ({ toolName: "getOrder", ok: true, data: {} }));
+    const invoke = createToolInvoker({ model, tools: [getOrder] });
+    const textlessMessage: InboundMessage = { id: "m1", contactId: "c1", channel: "whatsapp", timestamp: 0 };
+    const findings = await invoke({ message: textlessMessage, decision: DECISION });
+    expect(findings).toEqual([]);
+    expect(called).toBe(false); // an empty query has zero lexical relevance to any tool — selectTools returns none
+  });
+
   test("no candidate tools at all (empty pool) never calls the model", async () => {
     let called = false;
     const model: Model = { generate: async () => { called = true; return { structured: {} }; } };
@@ -79,6 +90,13 @@ describe("createToolInvoker", () => {
     expect(findings[0]).toContain("showing");
   });
 
+  test("a tool result that's already a plain string is used verbatim, not re-JSON-stringified", async () => {
+    const echoTool = tool("echo", async () => ({ toolName: "echo", ok: true, data: "order 8842 shipped yesterday" }));
+    const invoke = createToolInvoker({ model: decisionModel({ toolName: "echo" }), tools: [echoTool] });
+    const findings = await invoke({ message: message("echo my status"), decision: DECISION });
+    expect(findings).toEqual(["order 8842 shipped yesterday"]);
+  });
+
   describe("tool-failure path (T8.6)", () => {
     test("a tool resolving ok:false produces an honest failure finding and fires onToolFailure", async () => {
       let notified: { toolName: string; error: string } | undefined;
@@ -91,6 +109,20 @@ describe("createToolInvoker", () => {
       expect(findings[0]).toMatch(/honestly|couldn't|team will follow up/i);
       expect(findings[0]).not.toContain('"ok":true');
       expect(notified).toEqual({ toolName: "getOrder", error: "upstream API returned 503" });
+    });
+
+    test("a tool resolving ok:false with no `error` field falls back to 'unknown error'", async () => {
+      const flaky = tool("getOrder", async () => ({ toolName: "getOrder", ok: false }));
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "getOrder", args: {} }), tools: [flaky] });
+      const findings = await invoke({ message: message("where's my order?"), decision: DECISION });
+      expect(findings[0]).toContain("unknown error");
+    });
+
+    test("a tool that throws a non-Error value (e.g. a plain string) is still caught and stringified", async () => {
+      const broken = tool("getOrder", async () => { throw "a plain string rejection"; });
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "getOrder", args: {} }), tools: [broken] });
+      const findings = await invoke({ message: message("where's my order?"), decision: DECISION });
+      expect(findings[0]).toContain("a plain string rejection");
     });
 
     test("a tool that THROWS is caught, produces an honest finding, and still fires onToolFailure", async () => {
@@ -159,6 +191,15 @@ describe("createToolInvoker", () => {
       const findings = await invoke({ message: message("cancel my order"), decision: DECISION });
       expect(executed).toBe(false);
       expect(findings[0]).toMatch(/no confirmation flow|not.*configured/i);
+    });
+
+    test("a confirmBefore decision with no args still persists a pending confirmation (defaults to {})", async () => {
+      const cancelOrder = writeTool("cancelOrder", async () => ({ toolName: "cancelOrder", ok: true, data: {} }));
+      const confirmFlow = flow();
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "cancelOrder" }), tools: [cancelOrder], confirmFlow });
+      await invoke({ message: message("cancel my order"), decision: DECISION });
+      const pending = await confirmFlow.getPending("c1");
+      expect(pending?.args).toEqual({});
     });
 
     test("a read-only (confirmBefore: false) tool is unaffected by a configured confirmFlow — executes immediately as usual", async () => {

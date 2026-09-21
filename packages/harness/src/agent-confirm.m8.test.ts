@@ -173,6 +173,20 @@ describe("createAgent — confirm-before-write flow (T8.5)", () => {
     expect(escalated).toBe(true);
   });
 
+  test("a failed tool execution with no `error` field still reports honestly (falls back to 'unknown error')", async () => {
+    const tool = cancelOrderTool(async () => ({ toolName: "cancelOrder", ok: false }));
+    const channel = fakeChannel("whatsapp");
+    const memory = fakeMemory();
+    const confirmFlow = createConfirmFlow({ client: createClient({ url: ":memory:" }), clock: fakeClock() });
+    await confirmFlow.request({ contactId: "c1", toolName: "cancelOrder", args: {}, summary: "cancelOrder" });
+    const agent = createAgent({ channel, memory, router: fakeRouter([GREETING]), model: textModel(), clock: fakeClock(), tracer: createInMemoryTracer(), confirmFlow, tools: [tool] });
+
+    const result = await agent.handle(msg({ selectionId: CONFIRM_SELECTION_ID, text: "Confirm" }));
+
+    expect(result.status).toBe("sent");
+    expect(channel.sent[0]?.message.text).toContain("unknown error");
+  });
+
   test("a pending confirmation for a tool no longer in deps.tools fails honestly instead of crashing", async () => {
     const channel = fakeChannel("whatsapp");
     const memory = fakeMemory();
