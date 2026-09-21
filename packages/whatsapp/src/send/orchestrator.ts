@@ -78,24 +78,45 @@ function describeMediaError(error: NonNullable<Awaited<ReturnType<typeof preflig
   return `media exceeds the ${error.limitBytes}-byte limit for this kind`;
 }
 
+function describeQueueError(e: unknown): string {
+  return `outbound queue error: ${e instanceof Error ? e.message : String(e)}`;
+}
+
 async function attemptAndReport(payload: CloudApiOutboundPayload, to: string, deps: SendDeps, idempotencyKeyOverride?: string): Promise<DeliveryResult> {
   const idempotencyKey = idempotencyKeyOverride ?? deps.idempotencyKey;
   if (!deps.queue || !idempotencyKey) {
     const result = await sendWithRetry(payload, deps);
     return result.ok ? { status: "sent", messageId: result.messageId } : { status: "failed", reason: result.reason };
   }
+  const queue = deps.queue;
 
-  const existing = await deps.queue.enqueue({ idempotencyKey, to, payload }, deps.clock.now());
+  // Queue trouble before we've sent anything (e.g. the queue file became unreadable) fails closed:
+  // nothing went out, so reporting "failed" here can never cause a double-send.
+  let existing;
+  try {
+    existing = await queue.enqueue({ idempotencyKey, to, payload }, deps.clock.now());
+  } catch (e) {
+    return { status: "failed", reason: describeQueueError(e) };
+  }
   if (existing.status === "sent") return { status: "sent", messageId: existing.metaMessageId }; // crash-safe: already delivered before, never resend
 
-  await deps.queue.update(idempotencyKey, { status: "pending", attempts: existing.attempts + 1 }, deps.clock.now());
-  const result = await sendWithRetry(payload, deps);
-  if (result.ok) {
-    await deps.queue.update(idempotencyKey, { status: "sent", metaMessageId: result.messageId }, deps.clock.now());
-    return { status: "sent", messageId: result.messageId };
+  try {
+    await queue.update(idempotencyKey, { status: "pending", attempts: existing.attempts + 1 }, deps.clock.now());
+  } catch (e) {
+    return { status: "failed", reason: describeQueueError(e) };
   }
-  await deps.queue.update(idempotencyKey, { status: "failed", lastError: result.reason }, deps.clock.now());
-  return { status: "failed", reason: result.reason };
+
+  const result = await sendWithRetry(payload, deps);
+  // The send has already happened on the wire by this point — a failure persisting its OUTCOME to
+  // the queue must not override what actually happened (reporting "failed" for a message that was
+  // really sent would make a caller retry and double-send). Best-effort only from here.
+  try {
+    if (result.ok) await queue.update(idempotencyKey, { status: "sent", metaMessageId: result.messageId }, deps.clock.now());
+    else await queue.update(idempotencyKey, { status: "failed", lastError: result.reason }, deps.clock.now());
+  } catch {
+    /* best-effort: the send's own outcome below is authoritative regardless of persistence */
+  }
+  return result.ok ? { status: "sent", messageId: result.messageId } : { status: "failed", reason: result.reason };
 }
 
 /**
@@ -105,16 +126,27 @@ async function attemptAndReport(payload: CloudApiOutboundPayload, to: string, de
  */
 export async function replayPendingSends(deps: Pick<SendDeps, "queue" | "clock" | "graphApiBaseUrl" | "phoneNumberId" | "accessToken" | "fetchImpl" | "maxAttempts" | "backoff">): Promise<DeliveryResult[]> {
   if (!deps.queue) return [];
+  const queue = deps.queue;
+
+  let items;
+  try {
+    items = await queue.pending();
+  } catch (e) {
+    return [{ status: "failed", reason: describeQueueError(e) }];
+  }
+
   const results: DeliveryResult[] = [];
-  for (const item of await deps.queue.pending()) {
+  for (const item of items) {
     const result = await sendWithRetry(item.payload, deps);
-    if (result.ok) {
-      await deps.queue.update(item.idempotencyKey, { status: "sent", attempts: item.attempts + 1, metaMessageId: result.messageId }, deps.clock.now());
-      results.push({ status: "sent", messageId: result.messageId });
-    } else {
-      await deps.queue.update(item.idempotencyKey, { status: "failed", attempts: item.attempts + 1, lastError: result.reason }, deps.clock.now());
-      results.push({ status: "failed", reason: result.reason });
+    // Same reasoning as attemptAndReport: the send already happened, so a queue-write failure here
+    // is best-effort and must not flip a real "sent" into a reported "failed".
+    try {
+      if (result.ok) await queue.update(item.idempotencyKey, { status: "sent", attempts: item.attempts + 1, metaMessageId: result.messageId }, deps.clock.now());
+      else await queue.update(item.idempotencyKey, { status: "failed", attempts: item.attempts + 1, lastError: result.reason }, deps.clock.now());
+    } catch {
+      /* best-effort */
     }
+    results.push(result.ok ? { status: "sent", messageId: result.messageId } : { status: "failed", reason: result.reason });
   }
   return results;
 }

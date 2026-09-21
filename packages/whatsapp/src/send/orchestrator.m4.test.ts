@@ -3,7 +3,43 @@ import { replayPendingSends, sendSmartMessage, type SendDeps } from "./orchestra
 import { createSessionWindowTracker } from "../session-window.js";
 import { createFallbackOptionsStore } from "./fallback.js";
 import { createTemplateRegistry } from "./templates.js";
-import { createMemoryOutboundQueue } from "./queue.js";
+import { createMemoryOutboundQueue, type OutboundQueue } from "./queue.js";
+
+/** Wraps a real memory queue but makes one named method reject every call, to test queue-error handling. */
+function queueThrowingOn(method: keyof OutboundQueue, error: unknown): OutboundQueue {
+  const real = createMemoryOutboundQueue();
+  return {
+    ...real,
+    [method]: (async () => {
+      throw error;
+    }) as never,
+  };
+}
+
+/** Like a real memory queue, but update() only rejects once the item is no longer "pending" — i.e. the
+ * post-send bookkeeping write, not the pre-send "claim" write. */
+function queueThrowingOnOutcomeUpdate(error: Error): OutboundQueue {
+  const real = createMemoryOutboundQueue();
+  return {
+    ...real,
+    update: async (idempotencyKey, patch, now) => {
+      if (patch.status !== "pending") throw error;
+      return real.update(idempotencyKey, patch, now);
+    },
+  };
+}
+
+/** Like a real memory queue, but update() rejects only the pre-send "claim as pending" write. */
+function queueThrowingOnClaimUpdate(error: Error): OutboundQueue {
+  const real = createMemoryOutboundQueue();
+  return {
+    ...real,
+    update: async (idempotencyKey, patch, now) => {
+      if (patch.status === "pending") throw error;
+      return real.update(idempotencyKey, patch, now);
+    },
+  };
+}
 
 const clock = { now: () => 0, setTimeout: () => 0, clearTimeout: () => {}, sleep: async () => {} };
 
@@ -203,6 +239,12 @@ describe("replayPendingSends", () => {
     expect(await replayPendingSends({ graphApiBaseUrl: "https://api", phoneNumberId: "pn1", accessToken: "t", fetchImpl: (async () => new Response()) as typeof fetch, clock })).toEqual([]);
   });
 
+  test("queue.pending() itself throwing is reported as a failed result, not an unhandled rejection", async () => {
+    const queue = queueThrowingOn("pending", new Error("EACCES: permission denied"));
+    const results = await replayPendingSends({ graphApiBaseUrl: "https://api", phoneNumberId: "pn1", accessToken: "t", fetchImpl: (async () => new Response()) as typeof fetch, clock, queue });
+    expect(results).toEqual([{ status: "failed", reason: "outbound queue error: EACCES: permission denied" }]);
+  });
+
   test("a failed replay is recorded as failed again, not left pending forever", async () => {
     const queue = createMemoryOutboundQueue();
     await queue.enqueue({ idempotencyKey: "k1", to: "c1", payload: { type: "text" } }, 0);
@@ -248,5 +290,46 @@ describe("sendSmartMessage — outbound queue integration", () => {
     await sendSmartMessage({ text: "hi" }, "c1", deps);
     await sendSmartMessage({ text: "hi" }, "c1", deps);
     expect(calls).toBe(2);
+  });
+
+  test("a queue error before anything is sent (enqueue throws) reports failed, not an unhandled rejection", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.x" }] }), { status: 200 });
+    }) as typeof fetch;
+    const queue = queueThrowingOn("enqueue", Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" }));
+    const deps = baseDeps({ fetchImpl, queue, idempotencyKey: "reply-to:wamid.inbound3" });
+    const result = await sendSmartMessage({ text: "hi" }, "c1", deps);
+    expect(result).toEqual({ status: "failed", reason: "outbound queue error: EACCES: permission denied" });
+    expect(calls).toBe(0); // must fail closed: nothing was ever sent, so reporting "failed" here is honest
+  });
+
+  test("a non-Error thrown by the queue is still stringified into a readable reason", async () => {
+    const queue = queueThrowingOn("enqueue", "disk quota exceeded"); // e.g. a plain string throw
+    const deps = baseDeps({ queue, idempotencyKey: "reply-to:wamid.inbound6" });
+    const result = await sendSmartMessage({ text: "hi" }, "c1", deps);
+    expect(result).toEqual({ status: "failed", reason: "outbound queue error: disk quota exceeded" });
+  });
+
+  test("a queue error claiming the item as pending (before sending) reports failed, not an unhandled rejection", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.z" }] }), { status: 200 });
+    }) as typeof fetch;
+    const queue = queueThrowingOnClaimUpdate(new Error("disk full"));
+    const deps = baseDeps({ fetchImpl, queue, idempotencyKey: "reply-to:wamid.inbound5" });
+    const result = await sendSmartMessage({ text: "hi" }, "c1", deps);
+    expect(result).toEqual({ status: "failed", reason: "outbound queue error: disk full" });
+    expect(calls).toBe(0); // fails closed before the HTTP call, so nothing was actually sent
+  });
+
+  test("a queue error recording a successful send's outcome still reports sent, not failed (the message really went out)", async () => {
+    const queue = queueThrowingOnOutcomeUpdate(new Error("disk full"));
+    const fetchImpl = (async () => new Response(JSON.stringify({ messages: [{ id: "wamid.y" }] }), { status: 200 })) as typeof fetch;
+    const deps = baseDeps({ fetchImpl, queue, idempotencyKey: "reply-to:wamid.inbound4" });
+    const result = await sendSmartMessage({ text: "hi" }, "c1", deps);
+    expect(result).toEqual({ status: "sent", messageId: "wamid.y" });
   });
 });
