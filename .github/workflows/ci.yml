@@ -20,4 +20,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Bump this number as each milestone lands (gate is cumulative). --allow-test-change is no
       # longer needed as of M7: B2 diffs against m6-done, which already includes the M6 test edit.
-      - run: pnpm gate 7
+      - run: pnpm gate 8
