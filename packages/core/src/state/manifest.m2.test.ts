@@ -14,7 +14,7 @@ const manifests: SetupManifest[] = [
 
 describe("applyManifests", () => {
   test("a fresh state gets pending steps and unfilled env keys for every declared step", () => {
-    const { state, removedStepIds } = applyManifests(createEmptyState("r1"), parts, manifests, { now: () => 1 });
+    const { state, removedSteps } = applyManifests(createEmptyState("r1"), parts, manifests, { now: () => 1 });
     expect(state.parts).toEqual(parts);
     expect(state.steps).toEqual([
       { id: "creds", part: "whatsapp", status: "pending" },
@@ -24,7 +24,7 @@ describe("applyManifests", () => {
       { name: "WA_TOKEN", required: true, filled: false },
       { name: "OPENAI_API_KEY", required: true, filled: false },
     ]);
-    expect(removedStepIds).toEqual([]);
+    expect(removedSteps).toEqual([]);
   });
 
   test("preserves an existing step's status and an env key's filled flag", () => {
@@ -46,9 +46,9 @@ describe("applyManifests", () => {
         { id: "old-step", part: "some-removed-plugin", status: "done" as const },
       ],
     };
-    const { state, removedStepIds } = applyManifests(seeded, parts, manifests);
+    const { state, removedSteps } = applyManifests(seeded, parts, manifests);
     expect(state.steps.map((s) => s.id)).toEqual(["creds", "model-key"]);
-    expect(removedStepIds).toEqual(["old-step"]);
+    expect(removedSteps).toEqual([{ id: "old-step", part: "some-removed-plugin" }]);
   });
 
   test("two different parts declaring the same step id don't collide (aggregateSetupManifests only dedupes within a part)", () => {
@@ -57,12 +57,25 @@ describe("applyManifests", () => {
       { part: "shopify", steps: [{ id: "creds", description: "Shopify creds" }] },
     ];
     const seeded = { ...createEmptyState("r1"), steps: [{ id: "creds", part: "whatsapp", status: "done" as const }] };
-    const { state, removedStepIds } = applyManifests(seeded, [{ name: "whatsapp", version: "0.1.0" }, { name: "shopify", version: "0.1.0" }], sameIdManifests);
+    const { state, removedSteps } = applyManifests(seeded, [{ name: "whatsapp", version: "0.1.0" }, { name: "shopify", version: "0.1.0" }], sameIdManifests);
     expect(state.steps).toEqual([
       { id: "creds", part: "whatsapp", status: "done" }, // preserved — matched by (part, id), not id alone
       { id: "creds", part: "shopify", status: "pending" }, // a distinct step despite the same id
     ]);
-    expect(removedStepIds).toEqual([]);
+    expect(removedSteps).toEqual([]);
+  });
+
+  test("removedSteps disambiguates by part when two parts shared a step id and only one was dropped", () => {
+    const seeded = {
+      ...createEmptyState("r1"),
+      steps: [
+        { id: "creds", part: "whatsapp", status: "done" as const },
+        { id: "creds", part: "shopify", status: "done" as const },
+      ],
+    };
+    // Only "whatsapp" is still configured; "shopify"'s same-id step must be the one reported removed.
+    const { removedSteps } = applyManifests(seeded, [{ name: "whatsapp", version: "0.1.0" }], [{ part: "whatsapp", steps: [{ id: "creds", description: "WA creds" }] }]);
+    expect(removedSteps).toEqual([{ id: "creds", part: "shopify" }]);
   });
 
   test("no manifests -> empty steps/envKeys, existing state.parts replaced", () => {

@@ -4,8 +4,8 @@ import { stepKey, type EnvKeyState, type State, type StatePart, type StateStep }
 
 export interface AppliedManifests {
   state: State;
-  /** Step ids that were in state but are no longer contributed by any registered part — reported, not silently dropped. */
-  removedStepIds: string[];
+  /** Steps that were in state but are no longer contributed by any registered part — reported, not silently dropped. */
+  removedSteps: Pick<StateStep, "id" | "part">[];
 }
 
 /**
@@ -23,13 +23,13 @@ export function applyManifests(state: State, parts: StatePart[], manifests: Setu
 
   const existingStepByKey = new Map(state.steps.map((s) => [stepKey(s), s]));
   const steps: StateStep[] = aggregated.steps.map((s) => existingStepByKey.get(stepKey(s)) ?? { id: s.id, part: s.part, status: "pending" });
-  const removedStepIds = state.steps.filter((s) => !activeKeys.has(stepKey(s))).map((s) => s.id);
+  const removedSteps = state.steps.filter((s) => !activeKeys.has(stepKey(s))).map((s) => ({ id: s.id, part: s.part }));
 
   const existingEnvByName = new Map(state.envKeys.map((e) => [e.name, e]));
   const envKeys: EnvKeyState[] = aggregated.envKeys.map((name) => existingEnvByName.get(name) ?? { name, required: true, filled: false });
 
   return {
     state: { ...state, parts: [...parts], steps, envKeys, updatedAt: clock.now() },
-    removedStepIds,
+    removedSteps,
   };
 }
