@@ -37,6 +37,21 @@ describe("createMemorySeenStore", () => {
     expect(store.size()).toBe(1);
   });
 
+  test("has() peeks without marking — checkAndSet still returns true afterward", async () => {
+    const store = createMemorySeenStore();
+    expect(await store.has("m1", 0)).toBe(false);
+    expect(await store.has("m1", 0)).toBe(false); // still false: has() never marks
+    expect(await store.checkAndSet("m1", 0)).toBe(true);
+    expect(await store.has("m1", 0)).toBe(true);
+  });
+
+  test("has() respects TTL expiry the same as checkAndSet", async () => {
+    const store = createMemorySeenStore({ ttlMs: 100 });
+    await store.checkAndSet("m1", 0);
+    expect(await store.has("m1", 99)).toBe(true);
+    expect(await store.has("m1", 100)).toBe(false);
+  });
+
   test("default TTL is 24h", async () => {
     const store = createMemorySeenStore();
     expect(await store.checkAndSet("m1", 0)).toBe(true);

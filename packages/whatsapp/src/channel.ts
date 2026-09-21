@@ -42,8 +42,14 @@ export function createWhatsAppChannel(opts: WhatsAppChannelOptions): MessageChan
         // Keyed on (messageId, status), not messageId alone: a message legitimately passes through
         // several distinct statuses (sent -> delivered -> read), which must NOT be deduped against
         // each other — only a retried delivery of the SAME status transition should be dropped.
-        const isNew = await seenStore.checkAndSet(`status:${status.messageId}:${status.status}`, now());
-        if (isNew) opts.onStatus?.(status);
+        const key = `status:${status.messageId}:${status.status}`;
+        if (await seenStore.has(key, now())) continue; // already handled successfully before
+
+        // Mark seen only AFTER onStatus succeeds: if it throws, this id stays unmarked, so Meta's
+        // webhook retry (its standard behavior on a non-2xx response) genuinely retries the
+        // handler instead of the status being silently dropped forever within the TTL.
+        await opts.onStatus?.(status);
+        await seenStore.checkAndSet(key, now());
       }
 
       const fresh: InboundMessage[] = [];
