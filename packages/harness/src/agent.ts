@@ -1,4 +1,4 @@
-import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, TracedSystem, Tracer, Turn } from "@wappy/core";
+import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, SmartMessage, TracedSystem, Tracer, Turn } from "@wappy/core";
 import { composeSmartMessage } from "./compose.js";
 import type { SkillRegistry } from "./skills.js";
 
@@ -92,6 +92,24 @@ async function safeCall<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
+/**
+ * A textual stand-in for what was persisted to memory: `SmartMessage.text` is independent of
+ * `buttons`/`list`/`cta`/`media` (§6.3 "the model controls UX intent — buttons vs list vs text"), so
+ * a rich reply with no `text` set would otherwise persist as `Turn.text: undefined` — which
+ * model.ts's `toModelMessages()` then filters out entirely, making the agent's own reply invisible
+ * to itself on the next turn. Never returns undefined for a message that satisfies SmartMessageSchema
+ * (at least one field is always present).
+ */
+function summarizeReply(message: SmartMessage): string | undefined {
+  if (message.text) return message.text;
+  const parts: string[] = [];
+  if (message.buttons) parts.push(`buttons: ${message.buttons.map((b) => b.title).join(", ")}`);
+  if (message.list) parts.push(`list: ${message.list.sections.flatMap((s) => s.rows.map((r) => r.title)).join(", ")}`);
+  if (message.cta) parts.push(`link "${message.cta.text}": ${message.cta.url}`);
+  if (message.media) parts.push(message.media.caption ? `${message.media.kind}: ${message.media.caption}` : message.media.kind);
+  return parts.length > 0 ? `[${parts.join("; ")}]` : undefined;
+}
+
 function trace(tracer: Tracer, system: TracedSystem, event: string, data?: unknown): void {
   try {
     tracer.record(system, event, data);
@@ -173,14 +191,14 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
   // "queued" result must not leave a turn in history claiming the agent said something it didn't,
   // which would otherwise get fed back to the model as prior context on the contact's next message.
   //
-  // Known gap: `reply.text` is what compose.ts produced, not necessarily what was actually
-  // delivered — a buttons/list/cta/media-only SmartMessage (reply.text undefined) or a "fellBack"
-  // result (the channel actually sent renderNumberedFallback()'s plain text, not `reply.text`) would
-  // both persist a turn that doesn't represent the real delivered content. Not reachable today since
-  // compose.ts only ever produces {text}-shaped SmartMessages; revisit once a skill can emit richer
-  // replies (M7/M8).
+  // Uses summarizeReply(), not reply.text directly, since a buttons/list/cta/media-only SmartMessage
+  // has no `text` at all (§6.3 — the model is free to choose this from the start, not gated behind a
+  // future milestone). On "fellBack" the channel actually delivered renderNumberedFallback()'s plain
+  // text, not this summary — an acceptable approximation (same offer, reworded) rather than plumbing
+  // the literal delivered text back through DeliveryResult, but worth revisiting if that mismatch
+  // ever matters (e.g. the numbered options' exact wording becomes something the model must recall).
   if (result.status === "sent" || result.status === "fellBack") {
-    await safeAppend(deps.memory, { id: replyTurnId, contactId: message.contactId, role: "agent", text: reply.text, timestamp: deps.clock.now() });
+    await safeAppend(deps.memory, { id: replyTurnId, contactId: message.contactId, role: "agent", text: summarizeReply(reply), timestamp: deps.clock.now() });
   }
 
   return result;
