@@ -10,3 +10,4 @@ export * from "./interfaces.js";
 export * from "./semver.js";
 export * from "./setup-manifest.js";
 export * from "./registry.js";
+export * from "./state/index.js";
