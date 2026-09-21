@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { runToolProviderConformance } from "@wappy/testkit";
+import { runToolProviderConformance, mockOpenApiServer } from "@wappy/testkit";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createOpenApiToolProvider } from "./provider.js";
@@ -82,6 +82,27 @@ describe("createOpenApiToolProvider — assembly", () => {
     const result = await listPets.execute({});
     expect(result.ok).toBe(false);
     expect(result.toolName).toBe("listPets");
+  });
+
+  test("petstore-3.0.json's own server URL (which carries a /v1 path prefix, the common real-world shape) is preserved end-to-end through the real pipeline", async () => {
+    const spec = readFixture("petstore-3.0.json");
+    const mock = await mockOpenApiServer(spec, { "GET /v1/pets": { status: 200, body: [] } });
+    try {
+      const { provider } = await createOpenApiToolProvider({
+        name: "petstore",
+        source: spec,
+        envPrefix: "PETSTORE_",
+        baseUrl: `${mock.url}/v1`,
+        ssrf: { allowPrivateNetworks: true },
+      });
+      const tools = await provider.listTools();
+      const listPets = tools.find((t) => t.name === "listPets")!;
+      const result = await listPets.execute({});
+      expect(result.ok).toBe(true);
+      expect(mock.requests.some((r) => r.path === "/v1/pets")).toBe(true);
+    } finally {
+      await mock.close();
+    }
   });
 
   test("an operation needing unsupported auth (OAuth2) is skipped and reported, not silently broken", async () => {
