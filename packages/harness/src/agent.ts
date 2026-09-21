@@ -172,6 +172,13 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
   // Only record the agent as having replied when something actually reached the user — a "failed"/
   // "queued" result must not leave a turn in history claiming the agent said something it didn't,
   // which would otherwise get fed back to the model as prior context on the contact's next message.
+  //
+  // Known gap: `reply.text` is what compose.ts produced, not necessarily what was actually
+  // delivered — a buttons/list/cta/media-only SmartMessage (reply.text undefined) or a "fellBack"
+  // result (the channel actually sent renderNumberedFallback()'s plain text, not `reply.text`) would
+  // both persist a turn that doesn't represent the real delivered content. Not reachable today since
+  // compose.ts only ever produces {text}-shaped SmartMessages; revisit once a skill can emit richer
+  // replies (M7/M8).
   if (result.status === "sent" || result.status === "fellBack") {
     await safeAppend(deps.memory, { id: replyTurnId, contactId: message.contactId, role: "agent", text: reply.text, timestamp: deps.clock.now() });
   }

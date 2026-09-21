@@ -240,6 +240,44 @@ describe("createAgent — escalate", () => {
   });
 });
 
+describe("createAgent — retry after a failed send (the exact scenario the idempotency fix targets)", () => {
+  test("a failed send persists no reply turn, so a retry of the same message actually re-sends for real, not a silent no-op", async () => {
+    const channel = fakeChannel("whatsapp");
+    const memory = fakeMemory();
+    const agent = createAgent({ channel, memory, router: fakeRouter([GREETING]), model: textModel(), clock: systemClock, tracer: createInMemoryTracer() });
+
+    channel.failNextSend("failed", "network down");
+    const first = await agent.handle(msg());
+    expect(first).toEqual({ status: "failed", reason: "network down" });
+    expect(memory.turns.filter((t) => t.role === "agent")).toHaveLength(0); // nothing persisted on failure
+
+    const second = await agent.handle(msg()); // same message.id, a legitimate retry
+    expect(second.status).toBe("sent");
+    expect(channel.sent).toHaveLength(2); // both attempts genuinely reached channel.send() — the retry wasn't skipped
+    expect(memory.turns.filter((t) => t.role === "agent")).toHaveLength(1); // persisted exactly once, by the retry
+  });
+
+  test("a queued (window-closed) result also persists no reply turn, so retrying once the window reopens still composes/sends for real", async () => {
+    const channel = fakeChannel("whatsapp");
+    let calls = 0;
+    channel.send = async () => {
+      calls++;
+      return calls === 1 ? { status: "queued", reason: "window closed" } : { status: "sent", messageId: "wamid.retry" };
+    };
+    const memory = fakeMemory();
+    const agent = createAgent({ channel, memory, router: fakeRouter([GREETING]), model: textModel(), clock: systemClock, tracer: createInMemoryTracer() });
+
+    const first = await agent.handle(msg());
+    expect(first).toEqual({ status: "queued", reason: "window closed" });
+    expect(memory.turns.filter((t) => t.role === "agent")).toHaveLength(0);
+
+    const second = await agent.handle(msg());
+    expect(second).toEqual({ status: "sent", messageId: "wamid.retry" });
+    expect(calls).toBe(2);
+    expect(memory.turns.filter((t) => t.role === "agent")).toHaveLength(1);
+  });
+});
+
 describe("createAgent — idempotent persist", () => {
   test("replaying the same message id (e.g. a post-crash webhook retry) persists exactly one turn and doesn't re-send", async () => {
     const channel = fakeChannel("whatsapp");
