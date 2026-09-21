@@ -4,6 +4,7 @@ export * from "./agent.js";
 export * from "./assemble.js";
 export * from "./compose.js";
 export * from "./context-budget.js";
+export * from "./history-window.js";
 export * from "./model.js";
 export * from "./router.js";
 export * from "./skills.js";
