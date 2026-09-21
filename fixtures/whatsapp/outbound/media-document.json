@@ -1,0 +1,9 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15550002222",
+  "type": "document",
+  "document": {
+    "link": "https://example.com/invoice.pdf",
+    "filename": "invoice.pdf"
+  }
+}

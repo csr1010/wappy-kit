@@ -1,0 +1,9 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15550002222",
+  "type": "image",
+  "image": {
+    "link": "https://example.com/receipt.png",
+    "caption": "Here's your receipt"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15550002222",
+  "context": {
+    "message_id": "wamid.original123"
+  },
+  "type": "text",
+  "text": {
+    "body": "Sure, here's the answer",
+    "preview_url": true
+  }
+}

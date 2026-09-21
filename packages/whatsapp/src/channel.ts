@@ -1,7 +1,12 @@
-import type { DeliveryResult, InboundMessage, MessageChannel, SmartMessage } from "@wappy/core";
+import { systemClock, type Clock, type DeliveryResult, type InboundMessage, type MessageChannel, type SmartMessage } from "@wappy/core";
 import { parseWebhookPayload, type StatusEvent } from "./parser.js";
 import { createMemorySeenStore, type SeenStore } from "./seen-store.js";
 import { createSessionWindowTracker, type SessionWindowTracker } from "./session-window.js";
+import { sendSmartMessage, type SendDeps } from "./send/orchestrator.js";
+import type { FallbackOptionsStore } from "./send/fallback.js";
+import type { TemplateRegistry } from "./send/templates.js";
+import type { OutboundQueue } from "./send/queue.js";
+import type { BackoffOptions } from "./send/backoff.js";
 
 export interface WhatsAppChannelOptions {
   /** Meta phone_number_id to send from. */
@@ -15,19 +20,30 @@ export interface WhatsAppChannelOptions {
   fetchImpl?: typeof fetch;
   /**
    * Status webhooks (sent/delivered/read/failed) have no slot in MessageChannel.receive()'s
-   * InboundMessage[] return type, so they're routed here instead (M4 wires retry/fallback to it).
+   * InboundMessage[] return type, so they're routed here instead. Also drives the delivery-state
+   * machine when wired to updateDeliveryState (M4, send/delivery-state.ts) by the caller.
    */
   onStatus?: (status: StatusEvent) => void;
+
+  // --- smart send (M4) ---
+  /** Full Clock (now + sleep) for retry backoff; falls back to `now` + real timers, then systemClock. */
+  clock?: Clock;
+  fallbackStore?: FallbackOptionsStore;
+  templateRegistry?: TemplateRegistry;
+  defaultTemplateName?: string;
+  templateVariables?: (message: SmartMessage) => Record<string, string>;
+  queue?: OutboundQueue;
+  /** Derives the outbound-queue idempotency key for a send; required together with `queue`. */
+  idempotencyKeyFor?: (to: string, message: SmartMessage) => string;
+  maxSendAttempts?: number;
+  backoff?: BackoffOptions;
 }
 
-/**
- * Rendering is intentionally minimal here (text only) — SmartMessage's rich types (buttons/list/
- * cta/media) + capability-aware fallback are M4's job. M3 only needs a real, conformant send().
- */
 export function createWhatsAppChannel(opts: WhatsAppChannelOptions): MessageChannel {
   const base = opts.graphApiBaseUrl ?? "https://graph.facebook.com/v21.0";
   const fetchFn = opts.fetchImpl ?? fetch;
   const now = opts.now ?? Date.now;
+  const clock: Clock = opts.clock ?? { ...systemClock, now };
   const seenStore = opts.seenStore ?? createMemorySeenStore();
   const sessionWindow = opts.sessionWindow ?? createSessionWindowTracker();
   const channelName = opts.channelName ?? "whatsapp";
@@ -66,32 +82,23 @@ export function createWhatsAppChannel(opts: WhatsAppChannelOptions): MessageChan
     },
 
     async send(to: string, message: SmartMessage): Promise<DeliveryResult> {
-      const body = { messaging_product: "whatsapp", to, type: "text", text: { body: message.text ?? "" } };
-      let res: Response;
-      try {
-        res = await fetchFn(`${base}/${opts.phoneNumberId}/messages`, {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${opts.accessToken}` },
-          body: JSON.stringify(body),
-        });
-      } catch (e) {
-        return { status: "failed", reason: `network error: ${(e as Error).message}` };
-      }
-
-      let payload: unknown;
-      try {
-        payload = await res.json();
-      } catch {
-        payload = undefined;
-      }
-
-      if (!res.ok) {
-        const err = (payload as { error?: { code?: number; message?: string } } | undefined)?.error;
-        return { status: "failed", reason: err ? `meta ${err.code}: ${err.message}` : `http ${res.status}` };
-      }
-
-      const messageId = (payload as { messages?: { id?: string }[] } | undefined)?.messages?.[0]?.id;
-      return { status: "sent", messageId };
+      const deps: SendDeps = {
+        graphApiBaseUrl: base,
+        phoneNumberId: opts.phoneNumberId,
+        accessToken: opts.accessToken,
+        fetchImpl: fetchFn,
+        clock,
+        maxAttempts: opts.maxSendAttempts,
+        backoff: opts.backoff,
+        sessionWindow,
+        fallbackStore: opts.fallbackStore,
+        templateRegistry: opts.templateRegistry,
+        defaultTemplateName: opts.defaultTemplateName,
+        templateVariables: opts.templateVariables,
+        queue: opts.queue,
+        idempotencyKey: opts.idempotencyKeyFor?.(to, message),
+      };
+      return sendSmartMessage(message, to, deps);
     },
   };
 }

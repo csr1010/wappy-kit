@@ -1,0 +1,31 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15550002222",
+  "type": "interactive",
+  "interactive": {
+    "type": "list",
+    "body": {
+      "text": "Choose an option"
+    },
+    "action": {
+      "button": "Open menu",
+      "sections": [
+        {
+          "title": "Support",
+          "rows": [
+            {
+              "id": "hours",
+              "title": "Store hours",
+              "description": "See when we're open"
+            },
+            {
+              "id": "track",
+              "title": "Track order",
+              "description": "Check delivery status"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
