@@ -9,3 +9,4 @@ export * from "./executor.js";
 export * from "./policy.js";
 export * from "./curate.js";
 export * from "./glob.js";
+export * from "./provider.js";
