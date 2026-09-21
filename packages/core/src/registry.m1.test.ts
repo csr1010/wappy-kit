@@ -82,4 +82,8 @@ describe("satisfiesRange", () => {
   ])("satisfiesRange(%s, %s) === %s", (version, range, expected) => {
     expect(satisfiesRange(version, range)).toBe(expected);
   });
+
+  test("throws on an unparseable version", () => {
+    expect(() => satisfiesRange("not-a-version", "^1.0.0")).toThrow(/invalid version/i);
+  });
 });
