@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { createShopifyToolProvider } from "./shopify.js";
+import { createShopifyToolProvider, fetchShopifyPolicies, shopifyPolicyIngestDocuments } from "./shopify.js";
 
 const ENV_VAR = "SHOPIFY_ACCESS_TOKEN";
 function env(vars: Record<string, string>) {
@@ -663,5 +663,123 @@ describe("createShopifyToolProvider — responses missing an expected nested fie
     const p = provider(fetchImpl as never);
     const result = await p.listTools().find((t) => t.name === "getInventoryLevels")!.execute({ sku: "S1" });
     expect(result.data).toEqual([{ sku: "S1", location: "A", quantities: {} }]);
+  });
+});
+
+describe("fetchShopifyPolicies — RAG-ingestion auto-fetch (2026-09-21 scope decision)", () => {
+  function policyOpts(fetchImpl: () => Promise<Response>) {
+    return {
+      graphqlUrlOverride: "https://shop.example.myshopify.com/admin/api/2026-07/graphql.json",
+      accessTokenEnvVar: ENV_VAR,
+      envReader: env({ [ENV_VAR]: "shpat_test_token" }),
+      ssrf: { allowPrivateNetworks: true, fetchImpl },
+    };
+  }
+
+  test("fetches all 4 configured policies, stripping HTML markup to plain text", async () => {
+    const fetchImpl = async () =>
+      jsonResponse({
+        data: {
+          shop: {
+            shippingPolicy: { title: "Shipping Policy", body: "<p>We ship in <strong>2-3 days</strong>.</p>" },
+            refundPolicy: { title: "Refund Policy", body: "<p>Returns within 30 days.</p>" },
+            privacyPolicy: { title: "Privacy Policy", body: "<p>We respect your privacy.</p>" },
+            termsOfService: { title: "Terms of Service", body: "<p>Standard terms apply.</p>" },
+          },
+        },
+      });
+    const result = await fetchShopifyPolicies(policyOpts(fetchImpl as never));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.policies.map((p) => p.key).sort()).toEqual(["privacyPolicy", "refundPolicy", "shippingPolicy", "termsOfService"]);
+    const shipping = result.policies.find((p) => p.key === "shippingPolicy")!;
+    expect(shipping.title).toBe("Shipping Policy");
+    expect(shipping.text).toBe("We ship in 2-3 days.");
+    expect(shipping.text).not.toMatch(/[<>]/);
+  });
+
+  test("omits a policy Shopify reports as unset (null), instead of a placeholder entry", async () => {
+    const fetchImpl = async () =>
+      jsonResponse({
+        data: { shop: { shippingPolicy: { title: "Shipping Policy", body: "<p>Ships fast.</p>" }, refundPolicy: null, privacyPolicy: null, termsOfService: null } },
+      });
+    const result = await fetchShopifyPolicies(policyOpts(fetchImpl as never));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.policies.map((p) => p.key)).toEqual(["shippingPolicy"]);
+  });
+
+  test("a store with no policies configured at all returns an empty (not failed) result", async () => {
+    const fetchImpl = async () => jsonResponse({ data: { shop: { shippingPolicy: null, refundPolicy: null, privacyPolicy: null, termsOfService: null } } });
+    const result = await fetchShopifyPolicies(policyOpts(fetchImpl as never));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.policies).toEqual([]);
+  });
+
+  test("falls back to the field key as title when Shopify returns an empty title", async () => {
+    const fetchImpl = async () =>
+      jsonResponse({ data: { shop: { shippingPolicy: { title: "", body: "Ships fast." }, refundPolicy: null, privacyPolicy: null, termsOfService: null } } });
+    const result = await fetchShopifyPolicies(policyOpts(fetchImpl as never));
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.policies[0]!.title).toBe("shippingPolicy");
+  });
+
+  test("a missing `shop` field in the response is a failure, not a crash", async () => {
+    const fetchImpl = async () => jsonResponse({ data: {} });
+    const result = await fetchShopifyPolicies(policyOpts(fetchImpl as never));
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toMatch(/no shop data/i);
+  });
+
+  test("propagates a transport/GraphQL error instead of throwing", async () => {
+    const fetchImpl = async () => jsonResponse({ errors: [{ message: "throttled" }] });
+    const result = await fetchShopifyPolicies(policyOpts(fetchImpl as never));
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toMatch(/throttled/);
+  });
+
+  test("propagates the missing-access-token error the same way the curated tools do", async () => {
+    const result = await fetchShopifyPolicies({
+      graphqlUrlOverride: "https://shop.example.myshopify.com/admin/api/2026-07/graphql.json",
+      accessTokenEnvVar: ENV_VAR,
+      envReader: env({}),
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toMatch(/Missing Shopify access token/);
+  });
+
+  test("sends no variables (a static, argument-free query)", async () => {
+    let seenBody: { query: string; variables: unknown } | undefined;
+    const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
+      seenBody = JSON.parse(init!.body as string);
+      return jsonResponse({ data: { shop: { shippingPolicy: null, refundPolicy: null, privacyPolicy: null, termsOfService: null } } });
+    };
+    await fetchShopifyPolicies(policyOpts(fetchImpl as never));
+    expect(seenBody?.variables).toBeUndefined();
+    expect(seenBody?.query).toMatch(/shippingPolicy/);
+    expect(seenBody?.query).toMatch(/refundPolicy/);
+    expect(seenBody?.query).toMatch(/privacyPolicy/);
+    expect(seenBody?.query).toMatch(/termsOfService/);
+  });
+});
+
+describe("shopifyPolicyIngestDocuments — shaping fetched policies for Knowledge.ingest()", () => {
+  test("keys each document by shopify-policy:<field>, prefixing the title into the ingested text", () => {
+    const docs = shopifyPolicyIngestDocuments([
+      { key: "refundPolicy", title: "Refund Policy", text: "Returns within 30 days." },
+      { key: "shippingPolicy", title: "Shipping Policy", text: "Ships in 2-3 days." },
+    ]);
+    expect(docs).toEqual([
+      { sourceId: "shopify-policy:refundPolicy", text: "Refund Policy\n\nReturns within 30 days." },
+      { sourceId: "shopify-policy:shippingPolicy", text: "Shipping Policy\n\nShips in 2-3 days." },
+    ]);
+  });
+
+  test("an empty policies array yields an empty documents array", () => {
+    expect(shopifyPolicyIngestDocuments([])).toEqual([]);
   });
 });

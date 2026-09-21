@@ -225,19 +225,26 @@ function ok(toolName: string, data: unknown): ToolResult {
  * (get by id/name, list recent), inventory levels, customers (lookup) — every tool a real GraphQL
  * Admin API call, SSRF-guarded, response shaped to what a model needs.
  */
-export function createShopifyToolProvider(opts: CreateShopifyToolProviderOptions): ToolProvider {
+/** Builds the `(query, variables) => Result` caller shared by every Shopify entry point in this
+ * module (the curated tools below AND `fetchShopifyPolicies()`) — one place resolving the URL,
+ * access token, timeout, and SSRF options from `opts`, so both call sites stay in sync. */
+function createGraphqlCaller(opts: CreateShopifyToolProviderOptions) {
   const url = graphqlUrl(opts);
   const envReader = opts.envReader ?? ((name: string) => process.env[name]);
   const accessTokenEnvVar = opts.accessTokenEnvVar ?? DEFAULT_ACCESS_TOKEN_ENV_VAR;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  function call(query: string, variables: Record<string, unknown> | undefined) {
+  return function call(query: string, variables: Record<string, unknown> | undefined) {
     const accessToken = envReader(accessTokenEnvVar);
     if (!accessToken) {
       return Promise.resolve({ ok: false as const, error: `Missing Shopify access token — set the "${accessTokenEnvVar}" environment variable.` });
     }
     return shopifyGraphQL(url, accessToken, query, variables, timeoutMs, opts.ssrf);
-  }
+  };
+}
+
+export function createShopifyToolProvider(opts: CreateShopifyToolProviderOptions): ToolProvider {
+  const call = createGraphqlCaller(opts);
 
   const tools: Tool[] = [
     {
@@ -413,4 +420,86 @@ export function createShopifyToolProvider(opts: CreateShopifyToolProviderOptions
   ];
 
   return { name: opts.name ?? "shopify", listTools: () => tools };
+}
+
+const POLICY_FIELDS = ["shippingPolicy", "refundPolicy", "privacyPolicy", "termsOfService"] as const;
+export type ShopifyPolicyKey = (typeof POLICY_FIELDS)[number];
+
+export interface ShopifyPolicyDocument {
+  key: ShopifyPolicyKey;
+  title: string;
+  text: string;
+}
+
+interface ShopPolicyNode {
+  title?: string;
+  body?: string;
+}
+interface ShopNode {
+  shippingPolicy?: ShopPolicyNode | null;
+  refundPolicy?: ShopPolicyNode | null;
+  privacyPolicy?: ShopPolicyNode | null;
+  termsOfService?: ShopPolicyNode | null;
+}
+
+/** Strips Shopify's rich-text policy HTML (the `body` field's actual format) down to plain text
+ * suitable for chunking/BM25 lexical recall — raw markup would pollute tokenization with tag noise
+ * a model never needs. Deliberately narrow: only used on Shopify's own policy body field below,
+ * never on user-supplied or arbitrary web content (this module has no general HTML-fetching path —
+ * see the file-level scope note on why arbitrary-website scraping is explicitly out of v0.1 scope). */
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<(p|div|br|li|h[1-6])[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ +([.,!?;:])/g, "$1")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Fetches the store's own policy documents (2026-09-21 scope decision: Shopify's `shop` object
+ * exposes `shippingPolicy`/`refundPolicy`/`privacyPolicy`/`termsOfService` as real, queryable
+ * GraphQL fields — merchant-authored, deliberately published text, unlike inventory/order data,
+ * which stays on the live tool-call path above rather than RAG, to avoid ever answering from a
+ * stale ingested snapshot). Returns only the policies the store has actually configured (Shopify
+ * returns `null` for an unset policy) as plain text. Deliberately NOT wired to a `Knowledge` store
+ * here — hub-and-spoke (this package imports only `@wappy/core`, never `@wappy/harness`); pair with
+ * `shopifyPolicyIngestDocuments()` and a `Knowledge.ingest()` call at the CLI/e2e wiring layer. */
+export async function fetchShopifyPolicies(
+  opts: CreateShopifyToolProviderOptions,
+): Promise<{ ok: true; policies: ShopifyPolicyDocument[] } | { ok: false; error: string }> {
+  const call = createGraphqlCaller(opts);
+  const result = await call(
+    `query { shop { shippingPolicy { title body } refundPolicy { title body } privacyPolicy { title body } termsOfService { title body } } }`,
+    undefined,
+  );
+  if (!result.ok) return { ok: false, error: result.error };
+  const shop = (result.data as { shop?: ShopNode } | undefined)?.shop;
+  if (!shop) return { ok: false, error: "Shopify API response had no shop data." };
+
+  const policies: ShopifyPolicyDocument[] = [];
+  for (const key of POLICY_FIELDS) {
+    const node = shop[key];
+    if (!node?.body) continue;
+    const text = htmlToPlainText(node.body);
+    if (text.length === 0) continue;
+    policies.push({ key, title: node.title && node.title.length > 0 ? node.title : key, text });
+  }
+  return { ok: true, policies };
+}
+
+/** Shapes fetched policy documents into `{sourceId, text}` pairs ready for a `Knowledge` store's
+ * `ingest()` — one source per policy, keyed by `shopify-policy:<key>` so re-running ingestion (e.g.
+ * a scheduled refresh) replaces each policy's own chunks (`Knowledge.ingest`'s per-sourceId replace
+ * semantics) without disturbing any other knowledge the caller has ingested from elsewhere. */
+export function shopifyPolicyIngestDocuments(policies: ShopifyPolicyDocument[]): { sourceId: string; text: string }[] {
+  return policies.map((p) => ({ sourceId: `shopify-policy:${p.key}`, text: `${p.title}\n\n${p.text}` }));
 }
