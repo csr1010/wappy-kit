@@ -1,12 +1,22 @@
 name: ci
 on: [push, pull_request]
 jobs:
-  verify:
+  gate:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
     steps:
+      # Full history + tags: the gate diffs old tests/fixtures against the previous m<n>-done tag (B2).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify
+      # Bump this number as each milestone lands (gate is cumulative).
+      - run: pnpm gate 0
