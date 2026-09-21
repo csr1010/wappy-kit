@@ -1,0 +1,21 @@
+{
+  "name": "@wappy/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/harness.js",
+  "types": "dist/harness.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@wappy/testkit": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.1"
+  }
+}
