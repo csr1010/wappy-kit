@@ -4,13 +4,20 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "create-wappy": "dist/bin.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@wappy/core": "workspace:*"
+    "@clack/prompts": "^1.8.1",
+    "@wappy/core": "workspace:*",
+    "@wappy/harness": "workspace:*",
+    "@wappy/tools-openapi": "workspace:*",
+    "@wappy/whatsapp": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
