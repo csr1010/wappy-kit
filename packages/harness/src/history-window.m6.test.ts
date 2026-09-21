@@ -170,3 +170,47 @@ describe("windowHistory — summarizer failure: plain truncation, no persistence
     expect(second.summary).toBe("first summary"); // the earlier, still-persisted summary survives
   });
 });
+
+// Milestone brief's required scale fixture: a 10,000-turn history (e.g. an imported/long-lived
+// contact never summarized before) must not blow up in latency or size — the function's own work is
+// linear in history length (one findIndex + one filter + one slice), not quadratic or unbounded.
+// A dedicated clock whose `now()` is past every fixture turn's timestamp (0..9999) — fakeMemory's
+// load() sorts by timestamp, so a persisted summary turn must sort AFTER everything it covers, or a
+// reload would see it appear mid-history instead of at the end.
+const lateClock = { now: () => 20_000, setTimeout: () => 0, clearTimeout: () => {}, sleep: async () => {} };
+
+describe("windowHistory — 10,000-turn history fixture (bounded latency and size)", () => {
+  test("completes in bounded time and correctly caps recentTurns to maxRecentTurns", async () => {
+    const memory = fakeMemory();
+    const model: Model = { generate: async () => ({ text: "summary of a very long history" }) };
+    const history = Array.from({ length: 10_000 }, (_, i) => turn(i));
+    const start = Date.now();
+    const result = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 20, clock: lateClock });
+    const elapsedMs = Date.now() - start;
+    expect(result.recentTurns).toHaveLength(20);
+    expect(result.recentTurns[result.recentTurns.length - 1]?.id).toBe("t9999"); // the newest turn
+    expect(result.summary).toBe("summary of a very long history");
+    expect(elapsedMs).toBeLessThan(2000); // generous bound — proves no accidental quadratic blowup
+  });
+
+  test("a second call reusing the history (now including the persisted summary) does not re-summarize, even at this scale", async () => {
+    const memory = fakeMemory();
+    let calls = 0;
+    const model: Model = { generate: async () => { calls++; return { text: `summary attempt ${calls}` }; } };
+    const history = Array.from({ length: 10_000 }, (_, i) => turn(i));
+    // Mirrors real usage (agent.ts persists every turn via Memory.append before windowing it) — the
+    // original 20-turn variant of this test above skips this, which happens to still pass there only
+    // because it never asserts on recentTurns after the reload; asserting it at this scale requires
+    // the fixture to actually match how Memory is populated in production.
+    for (const t of history) await memory.append(t);
+    const first = await windowHistory({ model, memory, contactId: "c1", history, maxRecentTurns: 20, clock: lateClock });
+    expect(calls).toBe(1);
+
+    const historyAfterFirst = await memory.load("c1");
+    const second = await windowHistory({ model, memory, contactId: "c1", history: historyAfterFirst, maxRecentTurns: 20, clock: lateClock });
+    expect(calls).toBe(1); // no new model call — the persisted summary was reused
+    expect(second.summary).toBe(first.summary);
+    expect(second.recentTurns).toHaveLength(20);
+    expect(second.recentTurns[second.recentTurns.length - 1]?.id).toBe("t9999");
+  });
+});
