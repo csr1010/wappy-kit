@@ -71,6 +71,11 @@ function mergeAllOf(members: JsonSchema[]): JsonSchema {
     if (member.type && member.type !== "object") merged.type = member.type; // last non-object type wins if present
     if (member.properties) Object.assign(properties, member.properties as Record<string, unknown>);
     if (Array.isArray(member.required)) required.push(...(member.required as string[]));
+    // A member that's ITSELF a discriminated union (e.g. `allOf: [Base, {oneOf: [Cat, Dog]}]`, a
+    // common real-world composition pattern) must not have its oneOf/anyOf silently dropped just
+    // because mergeAllOf otherwise only looks at properties/required/scalar keywords.
+    if (member.oneOf) merged.oneOf = member.oneOf;
+    if (member.anyOf) merged.anyOf = member.anyOf;
     for (const key of SCALAR_KEYWORDS) {
       if (key in member && key !== "type") merged[key] = member[key];
     }
@@ -112,17 +117,27 @@ function resolveInner(schema: SchemaOrRef | undefined, opts: ResolveSchemaOption
     return resolveInner(resolved, opts, nextSeen, depth + 1);
   }
 
-  if (Array.isArray(schema.allOf) && schema.allOf.length > 0) {
-    const members = schema.allOf.map((m) => resolveInner(m as SchemaOrRef, opts, seenRefs, depth + 1)!);
-    return mergeAllOf(members);
+  const hasAllOf = Array.isArray(schema.allOf) && schema.allOf.length > 0;
+  const hasOneOf = Array.isArray(schema.oneOf) && schema.oneOf.length > 0;
+  const hasAnyOf = Array.isArray(schema.anyOf) && schema.anyOf.length > 0;
+
+  // These are composable, not mutually exclusive — a schema can legitimately combine a base
+  // (allOf) with a discriminated union of the SAME node (sibling oneOf/anyOf), not just nested
+  // inside one allOf member (handled by mergeAllOf itself, above).
+  if (hasAllOf) {
+    const members = (schema.allOf as SchemaOrRef[]).map((m) => resolveInner(m, opts, seenRefs, depth + 1)!);
+    const merged = mergeAllOf(members);
+    if (hasOneOf) merged.oneOf = (schema.oneOf as SchemaOrRef[]).map((m) => resolveInner(m, opts, seenRefs, depth + 1)!);
+    if (hasAnyOf) merged.anyOf = (schema.anyOf as SchemaOrRef[]).map((m) => resolveInner(m, opts, seenRefs, depth + 1)!);
+    return merged;
   }
 
-  if (Array.isArray(schema.oneOf) && schema.oneOf.length > 0) {
-    return { oneOf: schema.oneOf.map((m) => resolveInner(m as SchemaOrRef, opts, seenRefs, depth + 1)!) };
+  if (hasOneOf) {
+    return { oneOf: (schema.oneOf as SchemaOrRef[]).map((m) => resolveInner(m, opts, seenRefs, depth + 1)!) };
   }
 
-  if (Array.isArray(schema.anyOf) && schema.anyOf.length > 0) {
-    return { anyOf: schema.anyOf.map((m) => resolveInner(m as SchemaOrRef, opts, seenRefs, depth + 1)!) };
+  if (hasAnyOf) {
+    return { anyOf: (schema.anyOf as SchemaOrRef[]).map((m) => resolveInner(m, opts, seenRefs, depth + 1)!) };
   }
 
   const out: JsonSchema = {};

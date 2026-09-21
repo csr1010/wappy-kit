@@ -23,6 +23,7 @@
     "@wappy/core": "workspace:*",
     "ipaddr.js": "^2.5.0",
     "js-yaml": "^5.4.2",
-    "swagger2openapi": "^7.0.8"
+    "swagger2openapi": "^7.0.8",
+    "undici": "^6.28.1"
   }
 }

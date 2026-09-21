@@ -121,6 +121,60 @@ describe("resolveSchema — allOf merge", () => {
     );
     expect(result?.properties).toBeUndefined();
   });
+
+  test("a discriminated-union member nested inside allOf (allOf: [Base, {oneOf: [...]}]) is NOT dropped — a common real-world composition pattern", () => {
+    const document = doc({
+      Cat: { type: "object", properties: { kind: { type: "string", enum: ["cat"] }, meow: { type: "boolean" } } },
+      Dog: { type: "object", properties: { kind: { type: "string", enum: ["dog"] }, bark: { type: "boolean" } } },
+    });
+    const result = resolveSchema(
+      {
+        allOf: [
+          { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+          { oneOf: [{ $ref: "#/components/schemas/Cat" }, { $ref: "#/components/schemas/Dog" }] },
+        ],
+      } as unknown as OpenAPIV3.SchemaObject,
+      { document },
+    );
+    expect(result?.properties).toEqual({ id: { type: "string" } });
+    expect(result?.oneOf).toEqual([
+      { type: "object", properties: { kind: { type: "string", enum: ["cat"] }, meow: { type: "boolean" } } },
+      { type: "object", properties: { kind: { type: "string", enum: ["dog"] }, bark: { type: "boolean" } } },
+    ]);
+  });
+
+  test("an anyOf nested inside an allOf member is also preserved, not just oneOf", () => {
+    const result = resolveSchema(
+      { allOf: [{ type: "object", properties: { id: { type: "string" } } }, { anyOf: [{ type: "string" }, { type: "integer" }] }] } as unknown as OpenAPIV3.SchemaObject,
+      { document: doc({}) },
+    );
+    expect(result?.properties).toEqual({ id: { type: "string" } });
+    expect(result?.anyOf).toEqual([{ type: "string" }, { type: "integer" }]);
+  });
+
+  test("a sibling oneOf on the SAME node as allOf (not nested inside a member) is also preserved, not dropped by the allOf branch winning first", () => {
+    const result = resolveSchema(
+      {
+        allOf: [{ type: "object", properties: { id: { type: "string" } } }],
+        oneOf: [{ type: "object", properties: { a: { type: "string" } } }, { type: "object", properties: { b: { type: "string" } } }],
+      } as unknown as OpenAPIV3.SchemaObject,
+      { document: doc({}) },
+    );
+    expect(result?.properties).toEqual({ id: { type: "string" } });
+    expect(result?.oneOf).toHaveLength(2);
+  });
+
+  test("a sibling anyOf on the SAME node as allOf is preserved the same way", () => {
+    const result = resolveSchema(
+      {
+        allOf: [{ type: "object", properties: { id: { type: "string" } } }],
+        anyOf: [{ type: "object", properties: { a: { type: "string" } } }],
+      } as unknown as OpenAPIV3.SchemaObject,
+      { document: doc({}) },
+    );
+    expect(result?.properties).toEqual({ id: { type: "string" } });
+    expect(result?.anyOf).toHaveLength(1);
+  });
 });
 
 describe("resolveSchema — oneOf/anyOf pass-through", () => {
