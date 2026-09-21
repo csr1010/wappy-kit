@@ -338,22 +338,22 @@ describe("createAgent — persisting rich (non-text) replies", () => {
     expect(agentTurn?.text).toBe("[video]");
   });
 
-  test("a persisted rich reply is not silently dropped from the next turn's model context (round-trips through toModelMessages)", async () => {
+  test("a persisted rich reply is not silently dropped from the next turn's model context", async () => {
     const memory = fakeMemory();
-    let secondCallHistory: Turn[] | undefined;
+    let secondCallPrompt: string | undefined;
     let calls = 0;
     const model: Model = {
       generate: async (req) => {
         calls++;
         if (calls === 1) return { structured: { buttons: [{ id: "a", title: "Track order" }] } };
-        secondCallHistory = req.history;
+        if (calls === 2) secondCallPrompt = req.prompt; // fakeRouter doesn't call the model, so call 2 is the second message's compose
         return { structured: { text: "ok" } };
       },
     };
     const agent = createAgent({ channel: fakeChannel("whatsapp"), memory, router: fakeRouter([GREETING]), model, clock: systemClock, tracer: createInMemoryTracer() });
     await agent.handle(msg({ id: "m1" }));
     await agent.handle(msg({ id: "m2" }));
-    expect(secondCallHistory?.some((t) => t.role === "agent" && t.text?.includes("Track order"))).toBe(true);
+    expect(secondCallPrompt).toContain("Track order");
   });
 });
 
@@ -385,12 +385,12 @@ describe("createAgent — per-contact serialization", () => {
       append: (turn: Turn) => memory.append(turn),
       recall: (contactId: string, query: string) => memory.recall(contactId, query),
     };
-    let secondCallHistory: Turn[] | undefined;
+    let secondCallPrompt: string | undefined;
     let calls = 0;
     const model: Model = {
       generate: async (req) => {
         calls++;
-        if (calls === 2) secondCallHistory = req.history;
+        if (calls === 2) secondCallPrompt = req.prompt;
         return { structured: { text: `reply ${calls}` } };
       },
     };
@@ -399,7 +399,7 @@ describe("createAgent — per-contact serialization", () => {
     await Promise.all([agent.handle(msg({ id: "m1", text: "first" })), agent.handle(msg({ id: "m2", text: "second" }))]);
 
     // If unserialized, msg2's load() could race ahead and see none of msg1's turns.
-    expect(secondCallHistory?.some((t) => t.id === "m1")).toBe(true);
+    expect(secondCallPrompt).toContain("first");
     expect(memory.turns).toHaveLength(4); // 2 user + 2 agent, no dupes, no lost writes
   });
 });

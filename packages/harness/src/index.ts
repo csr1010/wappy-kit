@@ -4,6 +4,7 @@ export * from "./agent.js";
 export * from "./bound-inbound-text.js";
 export * from "./bound-tool-result.js";
 export * from "./assemble.js";
+export * from "./compose-with-budget.js";
 export * from "./compose.js";
 export * from "./context-budget.js";
 export * from "./history-window.js";
