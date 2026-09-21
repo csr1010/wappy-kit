@@ -227,6 +227,9 @@ importers:
       '@wappy/testkit':
         specifier: workspace:*
         version: link:../testkit
+      '@wappy/tools-openapi':
+        specifier: workspace:*
+        version: link:../tools-openapi
       '@wappy/whatsapp':
         specifier: workspace:*
         version: link:../whatsapp

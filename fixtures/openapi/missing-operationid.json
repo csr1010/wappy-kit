@@ -1,0 +1,25 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Missing operationId fixture", "version": "1.0.0" },
+  "servers": [{ "url": "https://api.example.com" }],
+  "paths": {
+    "/widgets": {
+      "get": {
+        "summary": "List widgets (no operationId — name must be derived from method+path)",
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/widgets/{widgetId}": {
+      "get": {
+        "summary": "Get a widget by id (no operationId)",
+        "parameters": [{ "name": "widgetId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "ok" } }
+      },
+      "delete": {
+        "summary": "Delete a widget (no operationId)",
+        "parameters": [{ "name": "widgetId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "204": { "description": "ok" } }
+      }
+    }
+  }
+}
