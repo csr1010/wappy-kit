@@ -48,6 +48,10 @@ interface SplitArgs {
   cookie: Record<string, unknown>;
   body: unknown;
   hasBody: boolean;
+  /** From the body property's own `"x-wappy-media-type"` (set by operations.ts) — which media type
+   * this operation actually declared for its request body, so the executor can serialize/label it
+   * correctly instead of always assuming JSON. */
+  bodyMediaType?: string;
 }
 
 /** Splits the model's flat call args by `"x-wappy-in"` (set by operations.ts's parameter
@@ -68,6 +72,7 @@ function splitArgs(tool: GeneratedTool, args: Record<string, unknown>): SplitArg
     else if (location === "body") {
       out.body = value;
       out.hasBody = true;
+      if (typeof propSchema["x-wappy-media-type"] === "string") out.bodyMediaType = propSchema["x-wappy-media-type"];
     }
   }
   return out;
@@ -129,6 +134,33 @@ function buildHeaders(
 
 function isJsonContentType(contentType: string | null): boolean {
   return !!contentType && /application\/(?:[^+]*\+)?json/i.test(contentType);
+}
+
+interface SerializedBody {
+  content: string;
+  contentType: string;
+}
+
+/** Serializes a request body per the operation's OWN declared media type (`x-wappy-media-type`,
+ * from operations.ts) instead of always assuming JSON — a real operation declaring e.g.
+ * `application/x-www-form-urlencoded` would otherwise get a JSON body with a mismatched
+ * Content-Type, which most real servers reject outright. Supports the two common v0.1 cases (JSON,
+ * form-urlencoded); anything else is reported as an unsupported failure rather than silently sent
+ * with the wrong wire format under a Content-Type header that doesn't match what's actually inside. */
+function serializeBody(body: unknown, mediaType: string): SerializedBody | { error: string } {
+  if (/^application\/(?:[^+]*\+)?json/i.test(mediaType)) {
+    return { content: JSON.stringify(body), contentType: mediaType };
+  }
+  if (/^application\/x-www-form-urlencoded/i.test(mediaType)) {
+    const params = new URLSearchParams();
+    if (body && typeof body === "object") {
+      for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+        if (value !== undefined) params.set(key, String(value));
+      }
+    }
+    return { content: params.toString(), contentType: mediaType };
+  }
+  return { error: `Unsupported request body media type "${mediaType}" — only application/json and application/x-www-form-urlencoded are supported in v0.1.` };
 }
 
 function isTextLikeContentType(contentType: string | null): boolean {
@@ -202,8 +234,10 @@ export function buildExecutor(tool: GeneratedTool, opts: ExecutorOptions): (args
 
       let body: string | undefined;
       if (split.hasBody) {
-        body = JSON.stringify(split.body);
-        if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+        const serialized = serializeBody(split.body, split.bodyMediaType ?? "application/json");
+        if ("error" in serialized) return { toolName: tool.name, ok: false, error: serialized.error };
+        body = serialized.content;
+        if (!headers.has("Content-Type")) headers.set("Content-Type", serialized.contentType);
       }
 
       const method = tool.method.toUpperCase();

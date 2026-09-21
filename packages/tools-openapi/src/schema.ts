@@ -73,7 +73,10 @@ function mergeAllOf(members: JsonSchema[]): JsonSchema {
     if (Array.isArray(member.required)) required.push(...(member.required as string[]));
     // A member that's ITSELF a discriminated union (e.g. `allOf: [Base, {oneOf: [Cat, Dog]}]`, a
     // common real-world composition pattern) must not have its oneOf/anyOf silently dropped just
-    // because mergeAllOf otherwise only looks at properties/required/scalar keywords.
+    // because mergeAllOf otherwise only looks at properties/required/scalar keywords. If MULTIPLE
+    // members each declare their own oneOf/anyOf (combining two discriminated unions via allOf is
+    // itself an unusual, out-of-v0.1-scope shape), the LAST member's wins — matching how every other
+    // per-member keyword here (type, scalar keywords) is merged, not a special case for this one.
     if (member.oneOf) merged.oneOf = member.oneOf;
     if (member.anyOf) merged.anyOf = member.anyOf;
     for (const key of SCALAR_KEYWORDS) {

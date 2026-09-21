@@ -154,26 +154,42 @@ export async function fetchSafely(rawUrl: string, opts: SafeFetchOptions = {}): 
       const validated = await assertSafeUrl(currentUrl, opts);
       const init: RequestInit = { ...opts.init, redirect: "manual" };
       if (dispatcher) (init as RequestInit & { dispatcher: Agent }).dispatcher = dispatcher;
-      let response: Response;
-      try {
-        response = await doFetch(validated, init);
-      } catch (e) {
-        // The Fetch spec wraps any network-level failure — including our own pinned-lookup rejection
-        // — in a generic TypeError("fetch failed") with the real cause attached via `.cause`. Unwrap
-        // an SsrfBlockedError cause so callers see the actual reason, not just "fetch failed".
-        if (e instanceof Error && e.cause instanceof SsrfBlockedError) throw e.cause;
-        throw e;
-      }
+      const response = await doFetch(validated, init);
       const isRedirect = response.status >= 300 && response.status < 400;
       const location = response.headers.get("location");
       if (isRedirect && location) {
         currentUrl = new URL(location, validated).toString();
         continue;
       }
+      // Success: don't AWAIT the close here — the caller hasn't read the response body yet, and
+      // undici's Agent.close() only resolves once every in-flight response is fully drained. Awaiting
+      // it before this function's own promise settles would deadlock: the caller can't start reading
+      // the body until fetchSafely() returns, and fetchSafely() can't return until the body is read.
+      // Closing without awaiting lets it finish naturally, in the background, once the caller
+      // actually consumes (or cancels) the body — which every current caller does (executor.ts's
+      // readBodyCapped, load.ts's response.text()).
+      // NOTE on coverage: this `if (dispatcher)` truthy branch (and the one in the catch block below)
+      // only fires on fetchSafely()'s REAL pinned-dispatcher path — no `fetchImpl` override and
+      // `allowPrivateNetworks: false` — which requires an actual DNS-resolvable "unicast"-range address
+      // to genuinely connect through, not constructible in a hermetic/offline test run (a loopback or
+      // RFC-reserved test address is deliberately rejected by the very check being pinned). The
+      // dispatcher's close()/lookup mechanics this guards are still fully exercised directly, just not
+      // through this exact call site: `pinnedLookup()`'s own unit tests above, and the raw-`undici.Agent`
+      // deadlock regression test below (same connect/close pattern, hand-rolled lookup to a real local
+      // server so it doesn't need a real internet-routable address).
+      if (dispatcher) dispatcher.close().catch(() => undefined);
       return response;
     }
     throw new SsrfBlockedError(`Too many redirects (> ${maxRedirects}) while fetching ${rawUrl}`);
-  } finally {
-    if (dispatcher) await dispatcher.close();
+  } catch (e) {
+    // Every throw path here (assertSafeUrl, doFetch, or the redirect-exhaustion throw above) means no
+    // response body will ever exist to read, so it's both safe and necessary to wait for a clean
+    // shutdown before this function's own promise rejects.
+    if (dispatcher) await dispatcher.close().catch(() => undefined);
+    // The Fetch spec wraps any network-level failure — including our own pinned-lookup rejection —
+    // in a generic TypeError("fetch failed") with the real cause attached via `.cause`. Unwrap an
+    // SsrfBlockedError cause so callers see the actual reason, not just "fetch failed".
+    if (e instanceof Error && e.cause instanceof SsrfBlockedError) throw e.cause;
+    throw e;
   }
 }

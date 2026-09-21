@@ -126,6 +126,17 @@ describe("resolveAuth — unsupported schemes skip with an explicit reason", () 
     expect("skip" in result).toBe(true);
   });
 
+  test("a document with no `components` object at all (not just an empty securitySchemes) is unsupported, not a crash", () => {
+    const document: OpenAPIV3.Document = {
+      openapi: "3.0.3",
+      info: { title: "x", version: "1" },
+      paths: {},
+      security: [{ ghost: [] }],
+    } as OpenAPIV3.Document;
+    const result = resolveAuth(op(), document, "MYAPI_");
+    expect("skip" in result).toBe(true);
+  });
+
   test("multiple alternative requirements: the first SUPPORTED alternative is used, even if an earlier one is oauth2", () => {
     const document = doc({ oauth: { type: "oauth2", flows: {} }, apiKeyAuth: { type: "apiKey", name: "k", in: "header" } }, [{ oauth: [] }, { apiKeyAuth: [] }]);
     const result = resolveAuth(op(), document, "MYAPI_");
