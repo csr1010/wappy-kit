@@ -76,6 +76,9 @@ describe("satisfiesRange", () => {
     ["1.3.0", "~1.2.3", false],
     ["0.2.5", "^0.2.3", true],
     ["0.3.0", "^0.2.3", false],
+    ["0.0.3", "^0.0.3", true],
+    ["0.0.4", "^0.0.3", false],
+    ["0.1.0", "^0.0.3", false],
   ])("satisfiesRange(%s, %s) === %s", (version, range, expected) => {
     expect(satisfiesRange(version, range)).toBe(expected);
   });
