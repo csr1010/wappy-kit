@@ -19,3 +19,6 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
 
 - 2026-09-20: Spec saved to docs/SPEC.md; milestones M0–M11 defined; backward-testing layers B1–B10 defined (see MILESTONES.md).
 - 2026-09-20: Proposed spec additions, to be ratified in M1 T1.1 (record in SPEC §16 then): (a) `Tracer` added to core contracts — needed for §9 "trace" and spine tests; (b) `Skill` added to core contracts — §13/§17 treat it as a core interface but §3 omits it; (c) RAG/`Knowledge` module lives in harness — §9-B needs it but no part owns it.
+
+- 2026-09-21: gate M4 --allow-test-change (logged twice identically by two gate runs in the same session; deduped to one entry here): M4 replaces M3's documented placeholder send() (text-only, no window guard) with the required smart-send + window-guard behavior (T4.1-T4.10); channel.m3.test.ts's send() tests were updated to open the session window first and assert correct media rendering, matching M3's own commit message stating this replacement was coming
+  M	packages/whatsapp/src/channel.m3.test.ts
