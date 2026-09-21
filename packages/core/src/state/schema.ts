@@ -49,6 +49,11 @@ export const StateSchema = z.object({
 });
 export type State = z.infer<typeof StateSchema>;
 
+/** Steps are only unique WITHIN a part (aggregateSetupManifests dedupes on `part:id`) — always key lookups by both. */
+export function stepKey(step: Pick<StateStep, "part" | "id">): string {
+  return `${step.part}:${step.id}`;
+}
+
 export function createEmptyState(runId: string, clock: Pick<Clock, "now"> = systemClock): State {
   const now = clock.now();
   return {

@@ -44,6 +44,19 @@ describe("runStep", () => {
     expect(result).toEqual({ id: "a", status: "failed", error: "raw string failure", skipped: false });
   });
 
+  test("two different parts' steps with the same id don't collide", async () => {
+    const spyA = vi.fn();
+    const spyB = vi.fn();
+    const seeded = { ...createEmptyState("r1"), steps: [{ id: "creds", part: "whatsapp", status: "done" as const }] };
+    const { state } = await runStep(seeded, { id: "creds", part: "shopify", run: spyB });
+    expect(spyB).toHaveBeenCalledTimes(1);
+    expect(spyA).not.toHaveBeenCalled();
+    expect(state.steps).toEqual([
+      { id: "creds", part: "whatsapp", status: "done" },
+      { id: "creds", part: "shopify", status: "done" },
+    ]);
+  });
+
   test("a previously-failed step is retried (not skipped)", async () => {
     const spy = vi.fn();
     const seeded = { ...createEmptyState("r1"), steps: [{ id: "a", part: "p", status: "failed" as const, error: "old" }] };

@@ -323,6 +323,10 @@
     "kind": "InterfaceDeclaration",
     "type": "StepDef"
   },
+  "stepKey": {
+    "kind": "FunctionDeclaration",
+    "type": "(step: Pick<StateStep, \"part\" | \"id\">) => string"
+  },
   "StepResult": {
     "kind": "InterfaceDeclaration",
     "type": "StepResult"
