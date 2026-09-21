@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createClient } from "@libsql/client";
-import { chunkText, createKnowledge } from "./knowledge.js";
+import type { Memory } from "@wappy/core";
+import { chunkText, createKnowledge, createKnowledgeRag } from "./knowledge.js";
 
 function memClient() {
   return createClient({ url: ":memory:" });
@@ -145,6 +146,68 @@ describe("createKnowledge — optional embedding index", () => {
     const k = createKnowledge({ client: memClient(), embed: fakeEmbed({}) });
     const results = await k.recall("anything");
     expect(results).toEqual([]);
+  });
+});
+
+describe("createKnowledgeRag — the real AgentDeps.retrieveRag hook (§9 Scenario B)", () => {
+  test("recalls chunk text for a matching query", async () => {
+    const knowledge = createKnowledge({ client: memClient() });
+    await knowledge.ingest("hours", "Our store hours are 9am to 5pm, Monday through Friday.");
+    const retrieveRag = createKnowledgeRag({ knowledge });
+    const snippets = await retrieveRag({ contactId: "c1", query: "what are your store hours" });
+    expect(snippets.length).toBe(1);
+    expect(snippets[0]).toContain("9am to 5pm");
+  });
+
+  test("an empty store returns no snippets — the compose step, not this hook, is responsible for an honest 'I don't know'", async () => {
+    const knowledge = createKnowledge({ client: memClient() });
+    const retrieveRag = createKnowledgeRag({ knowledge });
+    const snippets = await retrieveRag({ contactId: "c1", query: "anything" });
+    expect(snippets).toEqual([]);
+  });
+
+  test("an empty query short-circuits without touching the store", async () => {
+    let recallCalled = false;
+    const knowledge = createKnowledge({ client: memClient() });
+    const originalRecall = knowledge.recall.bind(knowledge);
+    knowledge.recall = async (...args) => {
+      recallCalled = true;
+      return originalRecall(...args);
+    };
+    const retrieveRag = createKnowledgeRag({ knowledge });
+    const snippets = await retrieveRag({ contactId: "c1", query: "" });
+    expect(snippets).toEqual([]);
+    expect(recallCalled).toBe(false);
+  });
+
+  test("topK/scoreFloor options are threaded through to recall()", async () => {
+    const knowledge = createKnowledge({ client: memClient() });
+    for (let i = 0; i < 5; i++) await knowledge.ingest(`doc${i}`, `Shipping and returns policy notes, case ${i}.`);
+    const retrieveRag = createKnowledgeRag({ knowledge, topK: 2 });
+    const snippets = await retrieveRag({ contactId: "c1", query: "shipping returns" });
+    expect(snippets.length).toBe(2);
+  });
+
+  test("when `memory` is supplied, past-conversation snippets (T6.4 recallWithBudget) are appended after Knowledge chunks", async () => {
+    const knowledge = createKnowledge({ client: memClient() });
+    await knowledge.ingest("hours", "Our store hours are 9am to 5pm, Monday through Friday.");
+    const memory: Memory = {
+      load: async () => [],
+      append: async () => undefined,
+      recall: async (contactId, query) => (contactId === "c1" && query.includes("hours") ? ["earlier the user said they usually visit on weekend hours"] : []),
+    };
+    const retrieveRag = createKnowledgeRag({ knowledge, memory });
+    const snippets = await retrieveRag({ contactId: "c1", query: "what are your store hours" });
+    expect(snippets[0]).toContain("9am to 5pm");
+    expect(snippets[1]).toContain("weekend hours");
+  });
+
+  test("without `memory`, no Memory.recall call happens at all (Knowledge-only RAG stays the default)", async () => {
+    const knowledge = createKnowledge({ client: memClient() });
+    await knowledge.ingest("hours", "Our store hours are 9am to 5pm.");
+    const retrieveRag = createKnowledgeRag({ knowledge });
+    const snippets = await retrieveRag({ contactId: "c1", query: "store hours" });
+    expect(snippets).toEqual(["Our store hours are 9am to 5pm."]);
   });
 });
 

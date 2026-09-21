@@ -1,0 +1,127 @@
+import { describe, expect, test } from "vitest";
+import type { InboundMessage, Model, RouterDecision, Tool, ToolResult } from "@wappy/core";
+import { createToolInvoker } from "./invoke-tools.js";
+
+function message(text: string): InboundMessage {
+  return { id: "m1", contactId: "c1", channel: "whatsapp", text, timestamp: 0 } as InboundMessage;
+}
+
+const DECISION: RouterDecision = { intent: "order-status", needsRAG: false, needsTool: true, escalate: false, confidence: 0.9 };
+
+function tool(name: string, execute: (args: unknown) => Promise<ToolResult>): Tool {
+  return { name, description: `${name} tool`, parameters: { type: "object", properties: {} }, readOnly: true, confirmBefore: false, execute };
+}
+
+function decisionModel(response: { toolName?: string; args?: unknown } | undefined): Model {
+  return { generate: async () => ({ structured: response }) };
+}
+
+describe("createToolInvoker", () => {
+  test("no candidate tools at all (empty pool) never calls the model", async () => {
+    let called = false;
+    const model: Model = { generate: async () => { called = true; return { structured: {} }; } };
+    const invoke = createToolInvoker({ model, tools: [] });
+    const findings = await invoke({ message: message("where's my order 8842?"), decision: DECISION });
+    expect(findings).toEqual([]);
+    expect(called).toBe(false);
+  });
+
+  test("model decides no tool applies (omits toolName) -> no findings, tool never called", async () => {
+    let executeCalled = false;
+    const getOrder = tool("getOrder", async () => { executeCalled = true; return { toolName: "getOrder", ok: true, data: {} }; });
+    const invoke = createToolInvoker({ model: decisionModel({}), tools: [getOrder] });
+    const findings = await invoke({ message: message("where's my order 8842?"), decision: DECISION });
+    expect(findings).toEqual([]);
+    expect(executeCalled).toBe(false);
+  });
+
+  test("model decides a tool + args -> that tool's real execute() is called exactly once with those args", async () => {
+    let calls = 0;
+    let seenArgs: unknown;
+    const getOrder = tool("getOrder", async (args) => {
+      calls++;
+      seenArgs = args;
+      return { toolName: "getOrder", ok: true, data: { id: "8842", status: "shipped" } };
+    });
+    const invoke = createToolInvoker({ model: decisionModel({ toolName: "getOrder", args: { id: "8842" } }), tools: [getOrder] });
+    const findings = await invoke({ message: message("where's my order 8842?"), decision: DECISION });
+    expect(calls).toBe(1);
+    expect(seenArgs).toEqual({ id: "8842" });
+    expect(findings.length).toBe(1);
+    expect(findings[0]).toContain("8842");
+    expect(findings[0]).toContain("shipped");
+  });
+
+  test("a decided toolName outside the offered candidate set is ignored, not guessed at", async () => {
+    let executeCalled = false;
+    const getOrder = tool("getOrder", async () => { executeCalled = true; return { toolName: "getOrder", ok: true, data: {} }; });
+    const invoke = createToolInvoker({ model: decisionModel({ toolName: "deleteEverything", args: {} }), tools: [getOrder] });
+    const findings = await invoke({ message: message("where's my order?"), decision: DECISION });
+    expect(findings).toEqual([]);
+    expect(executeCalled).toBe(false);
+  });
+
+  test("a tool result is bounded (T6.6, boundToolResult finally wired) before becoming a finding", async () => {
+    const bigArray = Array.from({ length: 100 }, (_, i) => ({ id: i }));
+    const listOrders = tool("listOrders", async () => ({ toolName: "listOrders", ok: true, data: bigArray }));
+    const invoke = createToolInvoker({ model: decisionModel({ toolName: "listOrders" }), tools: [listOrders], boundOptions: { maxBytes: 500, maxArrayItems: 3 } });
+    const findings = await invoke({ message: message("list my orders"), decision: DECISION });
+    expect(findings.length).toBe(1);
+    const parsed = JSON.parse(findings[0]!.replace(/ \(showing.*\)$/, "")) as unknown[];
+    expect(parsed.length).toBeLessThanOrEqual(3);
+    expect(findings[0]).toContain("showing");
+  });
+
+  describe("tool-failure path (T8.6)", () => {
+    test("a tool resolving ok:false produces an honest failure finding and fires onToolFailure", async () => {
+      let notified: { toolName: string; error: string } | undefined;
+      const flaky = tool("getOrder", async () => ({ toolName: "getOrder", ok: false, error: "upstream API returned 503" }));
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "getOrder", args: { id: "1" } }), tools: [flaky], onToolFailure: (info) => { notified = info; } });
+      const findings = await invoke({ message: message("where's my order?"), decision: DECISION });
+      expect(findings.length).toBe(1);
+      expect(findings[0]).toContain("getOrder");
+      expect(findings[0]).toContain("503");
+      expect(findings[0]).toMatch(/honestly|couldn't|team will follow up/i);
+      expect(findings[0]).not.toContain('"ok":true');
+      expect(notified).toEqual({ toolName: "getOrder", error: "upstream API returned 503" });
+    });
+
+    test("a tool that THROWS is caught, produces an honest finding, and still fires onToolFailure", async () => {
+      let notified: { toolName: string; error: string } | undefined;
+      const broken = tool("getOrder", async () => { throw new Error("connection refused"); });
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "getOrder", args: { id: "1" } }), tools: [broken], onToolFailure: (info) => { notified = info; } });
+      const findings = await invoke({ message: message("where's my order?"), decision: DECISION });
+      expect(findings.length).toBe(1);
+      expect(findings[0]).toContain("connection refused");
+      expect(notified?.error).toBe("connection refused");
+    });
+
+    test("onToolFailure itself throwing doesn't propagate or replace the failure finding", async () => {
+      const flaky = tool("getOrder", async () => ({ toolName: "getOrder", ok: false, error: "down" }));
+      const invoke = createToolInvoker({
+        model: decisionModel({ toolName: "getOrder", args: {} }),
+        tools: [flaky],
+        onToolFailure: () => { throw new Error("webhook unreachable"); },
+      });
+      const findings = await invoke({ message: message("where's my order?"), decision: DECISION });
+      expect(findings.length).toBe(1);
+      expect(findings[0]).toContain("down");
+    });
+
+    test("no onToolFailure configured: a failure still degrades to an honest finding", async () => {
+      const flaky = tool("getOrder", async () => ({ toolName: "getOrder", ok: false, error: "timeout" }));
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "getOrder", args: {} }), tools: [flaky] });
+      const findings = await invoke({ message: message("where's my order?"), decision: DECISION });
+      expect(findings[0]).toContain("timeout");
+    });
+  });
+
+  test("the decision call's prompt carries the actual message text, not a stale/raw one", async () => {
+    let seenPrompt = "";
+    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: {} }; } };
+    const getOrder = tool("getOrder", async () => ({ toolName: "getOrder", ok: true, data: {} }));
+    const invoke = createToolInvoker({ model, tools: [getOrder] });
+    await invoke({ message: message("where's my order 8842?"), decision: DECISION });
+    expect(seenPrompt).toContain("8842");
+  });
+});

@@ -1,0 +1,101 @@
+import type { InboundMessage, JsonSchema, Model, RouterDecision, Tool } from "@wappy/core";
+import { selectTools } from "./tool-selector.js";
+import { boundToolResult, type BoundToolResultOptions } from "./bound-tool-result.js";
+import type { TokenEstimator } from "./context-budget.js";
+
+export interface CreateToolInvokerOptions {
+  model: Model;
+  tools: Tool[];
+  /** Budget for BM25-selecting candidate tools before asking the model to decide (T6.5's own
+   * mechanism, reused here) — keeps the decision prompt bounded even with a large toolset. Default 1000. */
+  maxSchemaTokens?: number;
+  estimator?: TokenEstimator;
+  /** Bounds the raw tool result before it becomes a prompt-context finding (T6.6, finally wired for
+   * real). Default `{maxBytes: 2000, maxArrayItems: 10}`. */
+  boundOptions?: BoundToolResultOptions;
+  /** Fired (best-effort, never blocks or throws) when the chosen tool's `execute()` resolves
+   * `ok:false` or itself throws — e.g. the underlying API is down — matching §10's "their API down
+   * -> caught -> honest reply, escalate hook fired" (T8.6). */
+  onToolFailure?: (info: { toolName: string; error: string }) => void | Promise<void>;
+}
+
+const DEFAULT_MAX_SCHEMA_TOKENS = 1000;
+const DEFAULT_BOUND_OPTIONS: BoundToolResultOptions = { maxBytes: 2000, maxArrayItems: 10 };
+
+interface ToolDecision {
+  toolName?: string;
+  args?: unknown;
+}
+
+function decisionSchema(toolNames: string[]): JsonSchema {
+  return {
+    type: "object",
+    properties: {
+      toolName: { type: "string", enum: toolNames, description: "Name of the single tool to call for this request. Omit entirely if none of the available tools can help." },
+      args: { type: "object", description: "Arguments for the chosen tool, matching its parameters schema." },
+    },
+  };
+}
+
+async function safeNotifyFailure(onToolFailure: CreateToolInvokerOptions["onToolFailure"], toolName: string, error: string): Promise<void> {
+  if (!onToolFailure) return;
+  try {
+    await onToolFailure({ toolName, error });
+  } catch {
+    // best-effort notification only — an escalation webhook outage must never cost the user their reply
+  }
+}
+
+function failureFinding(toolName: string, error: string): string {
+  return `Tool call to ${toolName} failed (${error}) — tell the user honestly that you couldn't complete this right now and that the team will follow up. Do not fabricate a result.`;
+}
+
+/**
+ * Builds the real `AgentDeps.invokeTools` hook (§9 Scenario C, finally wired for real in M8): picks
+ * candidate tools by BM25 (T6.5's own mechanism), asks the model to decide which ONE (if any) tool
+ * actually applies and with what arguments via a plain structured-output call — deliberately NOT the
+ * AI SDK's own auto-executing tool loop (`Model.generate({tools})`'s other path in `model.ts`), since
+ * that would make the tool's real HTTP call happen INSIDE the decision call: invisible to and
+ * unconfirmable by this function, untraceable as "called exactly once", and unusable with `testkit`'s
+ * `mockModel` (which never touches `req.tools` at all, only ever returning whatever `toolCalls` a
+ * test scripts). Instead, this calls that ONE decided tool's real `execute()` itself, exactly once,
+ * and returns its bounded result (T6.6's `boundToolResult`, finally given a real caller) as a single
+ * finding string fed into the final compose call — the same shape `retrieveRag`'s snippets take.
+ */
+export function createToolInvoker(opts: CreateToolInvokerOptions): (input: { message: InboundMessage; decision: RouterDecision }) => Promise<string[]> {
+  const boundOptions = opts.boundOptions ?? DEFAULT_BOUND_OPTIONS;
+
+  return async ({ message }) => {
+    const query = message.text ?? "";
+    const selected = selectTools({ tools: opts.tools, message: query, maxTokens: opts.maxSchemaTokens ?? DEFAULT_MAX_SCHEMA_TOKENS, estimator: opts.estimator });
+    if (selected.length === 0) return [];
+
+    const result = await opts.model.generate({
+      prompt: `The user said: "${query}"\n\nDecide whether one of the available tools should be called to help answer this, and if so, with what arguments. If none apply, omit toolName.`,
+      responseSchema: decisionSchema(selected.map((t) => t.name)),
+    });
+    const decision = result.structured as ToolDecision | undefined;
+    if (!decision?.toolName) return [];
+
+    const tool = selected.find((t) => t.name === decision.toolName);
+    if (!tool) return []; // model named a tool outside the candidate set it was actually offered — ignore, don't guess
+
+    let toolResult;
+    try {
+      toolResult = await tool.execute(decision.args ?? {});
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      await safeNotifyFailure(opts.onToolFailure, tool.name, error);
+      return [failureFinding(tool.name, error)];
+    }
+    if (!toolResult.ok) {
+      const error = toolResult.error ?? "unknown error";
+      await safeNotifyFailure(opts.onToolFailure, tool.name, error);
+      return [failureFinding(tool.name, error)];
+    }
+
+    const bounded = boundToolResult(toolResult.data, boundOptions);
+    const text = typeof bounded.shown === "string" ? bounded.shown : JSON.stringify(bounded.shown);
+    return [bounded.hint ? `${text} (${bounded.hint})` : text];
+  };
+}
