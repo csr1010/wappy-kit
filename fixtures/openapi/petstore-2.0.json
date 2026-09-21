@@ -1,0 +1,52 @@
+{
+  "swagger": "2.0",
+  "info": { "title": "Mini Petstore (Swagger 2.0)", "version": "1.0.0" },
+  "host": "api.example.com",
+  "basePath": "/v1",
+  "schemes": ["https"],
+  "paths": {
+    "/pets": {
+      "get": {
+        "operationId": "listPets",
+        "summary": "List all pets",
+        "produces": ["application/json"],
+        "parameters": [
+          { "name": "limit", "in": "query", "type": "integer", "description": "Max results" }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of pets",
+            "schema": { "type": "array", "items": { "$ref": "#/definitions/Pet" } }
+          }
+        }
+      }
+    },
+    "/pets/{petId}": {
+      "get": {
+        "operationId": "getPet",
+        "summary": "Get a pet by id",
+        "produces": ["application/json"],
+        "parameters": [
+          { "name": "petId", "in": "path", "required": true, "type": "string" }
+        ],
+        "responses": {
+          "200": {
+            "description": "A pet",
+            "schema": { "$ref": "#/definitions/Pet" }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Pet": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "tag": { "type": "string" }
+      }
+    }
+  }
+}
