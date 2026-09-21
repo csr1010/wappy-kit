@@ -1,11 +1,46 @@
 import type { Client } from "@libsql/client";
 import type { Clock } from "@wappy/core";
 
-/** `InboundMessage.selectionId` values a confirm/cancel button reply carries (§9 T8.5) — reserved,
- * stable ids agent.ts's confirm-flow branch keys off, never off free text (matching core's own
- * "routing must key off selectionId, never text" convention for button replies). */
-export const CONFIRM_SELECTION_ID = "confirm";
-export const CANCEL_SELECTION_ID = "cancel";
+/** `InboundMessage.selectionId` action prefixes a confirm/cancel button reply carries (§9 T8.5) —
+ * agent.ts's confirm-flow branch keys off this, never off free text (matching core's own "routing
+ * must key off selectionId, never text" convention for button replies). */
+export const CONFIRM_ACTION = "confirm";
+export const CANCEL_ACTION = "cancel";
+
+export interface ParsedConfirmSelection {
+  action: "confirm" | "cancel";
+  /** The specific `PendingConfirmation.id` this button was generated for. */
+  pendingId: string;
+}
+
+/** Builds the `selectionId` a "Confirm"/"Cancel" button should carry for a SPECIFIC pending
+ * confirmation — embedding `pendingId` (not a bare `"confirm"`/`"cancel"` constant) closes a
+ * confused-deputy replay: WhatsApp buttons are static once sent, so if a contact is asked to
+ * confirm action A, doesn't answer, and is later asked to confirm a DIFFERENT action B (which
+ * replaces A as the contact's one pending confirmation — see `contactId` as this table's primary
+ * key below), a stale tap on A's old "Confirm" button must not execute B. Embedding the id lets
+ * `parseConfirmSelection()` + a comparison against the CURRENT pending confirmation's own id detect
+ * and reject exactly that case, rather than blindly trusting "some confirmation was pending". */
+export function confirmSelectionId(pendingId: string): string {
+  return `${CONFIRM_ACTION}:${pendingId}`;
+}
+export function cancelSelectionId(pendingId: string): string {
+  return `${CANCEL_ACTION}:${pendingId}`;
+}
+
+/** Parses a `selectionId` produced by `confirmSelectionId()`/`cancelSelectionId()`. Returns
+ * `undefined` for anything else — an unrelated button, no selectionId at all, or a malformed value
+ * with no embedded id — so a caller never mistakes an ordinary button reply for a confirm/cancel one. */
+export function parseConfirmSelection(selectionId: string | undefined): ParsedConfirmSelection | undefined {
+  if (!selectionId) return undefined;
+  const sep = selectionId.indexOf(":");
+  if (sep === -1) return undefined;
+  const action = selectionId.slice(0, sep);
+  const pendingId = selectionId.slice(sep + 1);
+  if (pendingId.length === 0) return undefined;
+  if (action === CONFIRM_ACTION || action === CANCEL_ACTION) return { action, pendingId };
+  return undefined;
+}
 
 export interface PendingConfirmation {
   id: string;

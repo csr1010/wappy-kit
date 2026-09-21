@@ -79,7 +79,15 @@ function splitLong(text: string, maxChunkChars: number, overlapChars: number): s
       current = candidate;
     } else {
       chunks.push(current);
-      const tail = current.slice(Math.max(0, current.length - overlapChars));
+      // The carried-over tail must leave room for a joining space plus the whole new word (already
+      // known to fit alone, from the `word.length > maxChunkChars` check above) — capping it here,
+      // not just using `overlapChars` as-is, is what keeps every chunk within `maxChunkChars`; using
+      // the full requested overlap unconditionally could otherwise push `current` back OVER the
+      // limit on this very reassignment, silently violating the function's documented "bounded by
+      // maxChunkChars" contract for however many further words accumulate before the next split.
+      const maxTailForWord = Math.max(0, maxChunkChars - word.length - 1);
+      const overlapLen = Math.min(overlapChars, maxTailForWord);
+      const tail = overlapLen > 0 ? current.slice(Math.max(0, current.length - overlapLen)) : "";
       current = tail.length > 0 ? `${tail} ${word}` : word;
     }
   }
@@ -95,6 +103,10 @@ function splitLong(text: string, maxChunkChars: number, overlapChars: number): s
  */
 export function chunkText(text: string, opts: ChunkOptions = {}): string[] {
   const maxChunkChars = opts.maxChunkChars ?? DEFAULT_MAX_CHUNK_CHARS;
+  // hardSlice()'s `for (i = 0; i < word.length; i += maxChunkChars)` never advances (or goes
+  // negative) once maxChunkChars is <= 0 — fail loud here, at the one entry point every chunking
+  // path goes through, rather than silently hanging deep inside a helper on a caller's bad config.
+  if (maxChunkChars <= 0) throw new Error(`chunkText: maxChunkChars must be a positive number, got ${maxChunkChars}.`);
   const overlapChars = Math.min(opts.overlapChars ?? DEFAULT_OVERLAP_CHARS, Math.max(maxChunkChars - 1, 0));
   const trimmed = text.trim();
   if (trimmed.length === 0) return [];

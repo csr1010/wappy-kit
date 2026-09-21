@@ -62,6 +62,25 @@ describe("chunkText — edge cases", () => {
     expect(chunks[1]?.startsWith(chunks[0]!.split(" ").at(-1)!)).toBe(false);
   });
 
+  test("a non-positive maxChunkChars fails loud instead of hanging (hardSlice's loop would never advance)", () => {
+    expect(() => chunkText("some text", { maxChunkChars: 0 })).toThrow(/positive/);
+    expect(() => chunkText("some text", { maxChunkChars: -5 })).toThrow(/positive/);
+  });
+
+  test("a large overlapChars relative to maxChunkChars never pushes a carried-over chunk past the limit", () => {
+    // Regression: overlapChars (9) is nearly the whole maxChunkChars (10) budget — naively carrying
+    // the full requested overlap into the next chunk (tail + " " + word) would produce chunks well
+    // over 10 chars (e.g. "abcde fghij" = 11 chars, then growing further). Every chunk must still
+    // respect maxChunkChars regardless of how aggressive the overlap setting is.
+    const chunks = chunkText("abcde fghij klmno", { maxChunkChars: 10, overlapChars: 9 });
+    for (const c of chunks) expect(c.length).toBeLessThanOrEqual(10);
+    // every original word is still recoverable somewhere in the output
+    const joined = chunks.join(" ");
+    expect(joined).toContain("abcde");
+    expect(joined).toContain("fghij");
+    expect(joined).toContain("klmno");
+  });
+
   test("chunks never exceed maxChunkChars across a realistic mixed document", () => {
     const paragraphs = [
       "Short intro.",

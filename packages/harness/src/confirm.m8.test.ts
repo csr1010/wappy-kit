@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createClient } from "@libsql/client";
 import type { Clock } from "@wappy/core";
-import { CANCEL_SELECTION_ID, CONFIRM_SELECTION_ID, createConfirmFlow } from "./confirm.js";
+import { cancelSelectionId, confirmSelectionId, createConfirmFlow, parseConfirmSelection } from "./confirm.js";
 
 function fakeClock(startAt = 1_000_000): Clock & { advance(ms: number): void } {
   let now = startAt;
@@ -66,9 +66,21 @@ describe("createConfirmFlow", () => {
     expect(await flow.getPending("c2")).toBeUndefined();
   });
 
-  test("exports the reserved confirm/cancel selectionId constants", () => {
-    expect(CONFIRM_SELECTION_ID).toBe("confirm");
-    expect(CANCEL_SELECTION_ID).toBe("cancel");
+  test("confirmSelectionId()/cancelSelectionId() embed the pending confirmation's own id, and parseConfirmSelection() round-trips it", () => {
+    expect(confirmSelectionId("abc123")).toBe("confirm:abc123");
+    expect(cancelSelectionId("abc123")).toBe("cancel:abc123");
+    expect(parseConfirmSelection(confirmSelectionId("abc123"))).toEqual({ action: "confirm", pendingId: "abc123" });
+    expect(parseConfirmSelection(cancelSelectionId("abc123"))).toEqual({ action: "cancel", pendingId: "abc123" });
+  });
+
+  test("parseConfirmSelection() returns undefined for anything that isn't a well-formed confirm/cancel selection", () => {
+    expect(parseConfirmSelection(undefined)).toBeUndefined();
+    expect(parseConfirmSelection("")).toBeUndefined();
+    expect(parseConfirmSelection("confirm")).toBeUndefined(); // legacy bare constant, no embedded id — deliberately rejected
+    expect(parseConfirmSelection("cancel")).toBeUndefined();
+    expect(parseConfirmSelection("confirm:")).toBeUndefined(); // empty id
+    expect(parseConfirmSelection("track_order")).toBeUndefined(); // an unrelated button from some other skill
+    expect(parseConfirmSelection("delete:abc123")).toBeUndefined(); // not a recognized action
   });
 
   test("a transient failure creating the schema is retried on the next call, not permanently cached", async () => {

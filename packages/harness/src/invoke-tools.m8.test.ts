@@ -184,6 +184,19 @@ describe("createToolInvoker", () => {
       expect(pending?.args).toEqual({ id: "1001" });
     });
 
+    test("an oversized/adversarial args object is bounded in the confirmation summary text, not echoed verbatim", async () => {
+      const cancelOrder = writeTool("cancelOrder", async () => ({ toolName: "cancelOrder", ok: true, data: {} }));
+      const confirmFlow = flow();
+      const hugeArgs = { note: "x".repeat(5000) };
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "cancelOrder", args: hugeArgs }), tools: [cancelOrder], confirmFlow });
+      const findings = await invoke({ message: message("cancel my order"), decision: DECISION });
+      expect(findings[0]!.length).toBeLessThan(1000);
+      const pending = await confirmFlow.getPending("c1");
+      expect(pending?.summary.length).toBeLessThan(1000);
+      // the ACTUAL args passed to a real execute() are unaffected by the summary-text cap
+      expect(pending?.args).toEqual(hugeArgs);
+    });
+
     test("without a confirmFlow configured, a confirmBefore tool is refused, not silently executed", async () => {
       let executed = false;
       const cancelOrder = writeTool("cancelOrder", async () => { executed = true; return { toolName: "cancelOrder", ok: true, data: {} }; });
