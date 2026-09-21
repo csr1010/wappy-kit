@@ -1,0 +1,230 @@
+{
+  "Agent": {
+    "kind": "InterfaceDeclaration",
+    "type": "Agent"
+  },
+  "AggregatedSetup": {
+    "kind": "InterfaceDeclaration",
+    "type": "AggregatedSetup"
+  },
+  "AggregatedStep": {
+    "kind": "InterfaceDeclaration",
+    "type": "AggregatedStep"
+  },
+  "aggregateSetupManifests": {
+    "kind": "FunctionDeclaration",
+    "type": "(manifests: SetupManifest[]) => AggregatedSetup"
+  },
+  "Clock": {
+    "kind": "InterfaceDeclaration",
+    "type": "Clock"
+  },
+  "CORE_VERSION": {
+    "kind": "VariableDeclaration",
+    "type": "\"0.1.0\""
+  },
+  "createInMemoryTracer": {
+    "kind": "FunctionDeclaration",
+    "type": "(clock?: Pick<Clock, \"now\">) => Tracer"
+  },
+  "DeliveryResult": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    status: \"sent\" | \"failed\" | \"queued\" | \"fellBack\";    messageId?: string | undefined;    reason?: string | undefined;}"
+  },
+  "DeliveryResultSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    status: z.ZodEnum<{        sent: \"sent\";        failed: \"failed\";        queued: \"queued\";        fellBack: \"fellBack\";    }>;    messageId: z.ZodOptional<z.ZodString>;    reason: z.ZodOptional<z.ZodString>;}, z.core.$strip>"
+  },
+  "DeliveryStatusSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodEnum<{    sent: \"sent\";    failed: \"failed\";    queued: \"queued\";    fellBack: \"fellBack\";}>"
+  },
+  "InboundMedia": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    kind: \"image\" | \"document\" | \"video\" | \"audio\" | \"voice\" | \"location\";    url?: string | undefined;    mimeType?: string | undefined;    caption?: string | undefined;}"
+  },
+  "InboundMediaSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    kind: z.ZodEnum<{        image: \"image\";        document: \"document\";        video: \"video\";        audio: \"audio\";        voice: \"voice\";        location: \"location\";    }>;    url: z.ZodOptional<z.ZodString>;    mimeType: z.ZodOptional<z.ZodString>;    caption: z.ZodOptional<z.ZodString>;}, z.core.$strip>"
+  },
+  "InboundMessage": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    id: string;    contactId: string;    channel: string;    timestamp: number;    text?: string | undefined;    media?: {        kind: \"image\" | \"document\" | \"video\" | \"audio\" | \"voice\" | \"location\";        url?: string | undefined;        mimeType?: string | undefined;        caption?: string | undefined;    } | undefined;    raw?: unknown;}"
+  },
+  "InboundMessageSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    id: z.ZodString;    contactId: z.ZodString;    channel: z.ZodString;    text: z.ZodOptional<z.ZodString>;    media: z.ZodOptional<z.ZodObject<{        kind: z.ZodEnum<{            image: \"image\";            document: \"document\";            video: \"video\";            audio: \"audio\";            voice: \"voice\";            location: \"location\";        }>;        url: z.ZodOptional<z.ZodString>;        mimeType: z.ZodOptional<z.ZodString>;        caption: z.ZodOptional<z.ZodString>;    }, z.core.$strip>>;    timestamp: z.ZodNumber;    raw: z.ZodOptional<z.ZodUnknown>;}, z.core.$strip>"
+  },
+  "JsonSchema": {
+    "kind": "TypeAliasDeclaration",
+    "type": "JsonSchema"
+  },
+  "Logger": {
+    "kind": "InterfaceDeclaration",
+    "type": "Logger"
+  },
+  "Memory": {
+    "kind": "InterfaceDeclaration",
+    "type": "Memory"
+  },
+  "MessageChannel": {
+    "kind": "InterfaceDeclaration",
+    "type": "MessageChannel"
+  },
+  "Model": {
+    "kind": "InterfaceDeclaration",
+    "type": "Model"
+  },
+  "ModelRequest": {
+    "kind": "InterfaceDeclaration",
+    "type": "ModelRequest"
+  },
+  "ModelResult": {
+    "kind": "InterfaceDeclaration",
+    "type": "ModelResult"
+  },
+  "ModelToolCall": {
+    "kind": "InterfaceDeclaration",
+    "type": "ModelToolCall"
+  },
+  "noopLogger": {
+    "kind": "VariableDeclaration",
+    "type": "Logger"
+  },
+  "packageName": {
+    "kind": "VariableDeclaration",
+    "type": "\"@wappy/core\""
+  },
+  "Plugin": {
+    "kind": "InterfaceDeclaration",
+    "type": "Plugin<T>"
+  },
+  "PluginKind": {
+    "kind": "TypeAliasDeclaration",
+    "type": "PluginKind"
+  },
+  "PluginRegistry": {
+    "kind": "ClassDeclaration",
+    "type": "typeof PluginRegistry"
+  },
+  "RegistryConfig": {
+    "kind": "InterfaceDeclaration",
+    "type": "RegistryConfig"
+  },
+  "resolveEnabledPlugins": {
+    "kind": "FunctionDeclaration",
+    "type": "(registry: PluginRegistry, config: RegistryConfig) => Plugin[]"
+  },
+  "Router": {
+    "kind": "InterfaceDeclaration",
+    "type": "Router"
+  },
+  "RouterDecision": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    intent: string;    needsRAG: boolean;    needsTool: boolean;    escalate: boolean;    confidence: number;    skill?: string | undefined;}"
+  },
+  "RouterDecisionSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    intent: z.ZodString;    skill: z.ZodOptional<z.ZodString>;    needsRAG: z.ZodBoolean;    needsTool: z.ZodBoolean;    escalate: z.ZodBoolean;    confidence: z.ZodNumber;}, z.core.$strip>"
+  },
+  "RouterInput": {
+    "kind": "InterfaceDeclaration",
+    "type": "RouterInput"
+  },
+  "satisfiesRange": {
+    "kind": "FunctionDeclaration",
+    "type": "(version: string, range: string) => boolean"
+  },
+  "SetupManifest": {
+    "kind": "InterfaceDeclaration",
+    "type": "SetupManifest"
+  },
+  "SetupStep": {
+    "kind": "InterfaceDeclaration",
+    "type": "SetupStep"
+  },
+  "Skill": {
+    "kind": "InterfaceDeclaration",
+    "type": "Skill"
+  },
+  "SmartButtonSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    id: z.ZodString;    title: z.ZodString;}, z.core.$strip>"
+  },
+  "SmartButtonsSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodArray<z.ZodObject<{    id: z.ZodString;    title: z.ZodString;}, z.core.$strip>>"
+  },
+  "SmartCtaSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    text: z.ZodString;    url: z.ZodString;}, z.core.$strip>"
+  },
+  "SmartListRowSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    id: z.ZodString;    title: z.ZodString;    description: z.ZodOptional<z.ZodString>;}, z.core.$strip>"
+  },
+  "SmartListSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    buttonText: z.ZodString;    sections: z.ZodArray<z.ZodObject<{        title: z.ZodOptional<z.ZodString>;        rows: z.ZodArray<z.ZodObject<{            id: z.ZodString;            title: z.ZodString;            description: z.ZodOptional<z.ZodString>;        }, z.core.$strip>>;    }, z.core.$strip>>;}, z.core.$strip>"
+  },
+  "SmartListSectionSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    title: z.ZodOptional<z.ZodString>;    rows: z.ZodArray<z.ZodObject<{        id: z.ZodString;        title: z.ZodString;        description: z.ZodOptional<z.ZodString>;    }, z.core.$strip>>;}, z.core.$strip>"
+  },
+  "SmartMediaSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    kind: z.ZodEnum<{        image: \"image\";        document: \"document\";        video: \"video\";        audio: \"audio\";        voice: \"voice\";    }>;    url: z.ZodString;    caption: z.ZodOptional<z.ZodString>;    mimeType: z.ZodOptional<z.ZodString>;    filename: z.ZodOptional<z.ZodString>;}, z.core.$strip>"
+  },
+  "SmartMessage": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    text?: string | undefined;    buttons?: Array<{        id: string;        title: string;    }> | undefined;    list?: {        buttonText: string;        sections: Array<{            rows: Array<{                id: string;                title: string;                description?: string | undefined;            }>;            title?: string | undefined;        }>;    } | undefined;    cta?: {        text: string;        url: string;    } | undefined;    media?: {        kind: \"image\" | \"document\" | \"video\" | \"audio\" | \"voice\";        url: string;        caption?: string | undefined;        mimeType?: string | undefined;        filename?: string | undefined;    } | undefined;    quoteId?: string | undefined;    flow?: unknown;}"
+  },
+  "smartMessageJsonSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.core.ZodStandardJSONSchemaPayload<z.ZodObject<{    text: z.ZodOptional<z.ZodString>;    buttons: z.ZodOptional<z.ZodArray<z.ZodObject<{        id: z.ZodString;        title: z.ZodString;    }, z.core.$strip>>>;    list: z.ZodOptional<z.ZodObject<{        buttonText: z.ZodString;        sections: z.ZodArray<z.ZodObject<{            title: z.ZodOptional<z.ZodString>;            rows: z.ZodArray<z.ZodObject<{                id: z.ZodString;                title: z.ZodString;                description: z.ZodOptional<z.ZodString>;            }, z.core.$strip>>;        }, z.core.$strip>>;    }, z.core.$strip>>;    cta: z.ZodOptional<z.ZodObject<{        text: z.ZodString;        url: z.ZodString;    }, z.core.$strip>>;    media: z.ZodOptional<z.ZodObject<{        kind: z.ZodEnum<{            image: \"image\";            document: \"document\";            video: \"video\";            audio: \"audio\";            voice: \"voice\";        }>;        url: z.ZodString;        caption: z.ZodOptional<z.ZodString>;        mimeType: z.ZodOptional<z.ZodString>;        filename: z.ZodOptional<z.ZodString>;    }, z.core.$strip>>;    quoteId: z.ZodOptional<z.ZodString>;    flow: z.ZodOptional<z.ZodUnknown>;}, z.core.$strip>>"
+  },
+  "SmartMessageSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    text: z.ZodOptional<z.ZodString>;    buttons: z.ZodOptional<z.ZodArray<z.ZodObject<{        id: z.ZodString;        title: z.ZodString;    }, z.core.$strip>>>;    list: z.ZodOptional<z.ZodObject<{        buttonText: z.ZodString;        sections: z.ZodArray<z.ZodObject<{            title: z.ZodOptional<z.ZodString>;            rows: z.ZodArray<z.ZodObject<{                id: z.ZodString;                title: z.ZodString;                description: z.ZodOptional<z.ZodString>;            }, z.core.$strip>>;        }, z.core.$strip>>;    }, z.core.$strip>>;    cta: z.ZodOptional<z.ZodObject<{        text: z.ZodString;        url: z.ZodString;    }, z.core.$strip>>;    media: z.ZodOptional<z.ZodObject<{        kind: z.ZodEnum<{            image: \"image\";            document: \"document\";            video: \"video\";            audio: \"audio\";            voice: \"voice\";        }>;        url: z.ZodString;        caption: z.ZodOptional<z.ZodString>;        mimeType: z.ZodOptional<z.ZodString>;        filename: z.ZodOptional<z.ZodString>;    }, z.core.$strip>>;    quoteId: z.ZodOptional<z.ZodString>;    flow: z.ZodOptional<z.ZodUnknown>;}, z.core.$strip>"
+  },
+  "systemClock": {
+    "kind": "VariableDeclaration",
+    "type": "Clock"
+  },
+  "Tool": {
+    "kind": "InterfaceDeclaration",
+    "type": "Tool"
+  },
+  "ToolProvider": {
+    "kind": "InterfaceDeclaration",
+    "type": "ToolProvider"
+  },
+  "ToolResult": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    toolName: string;    ok: boolean;    data?: unknown;    error?: string | undefined;}"
+  },
+  "ToolResultSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    toolName: z.ZodString;    ok: z.ZodBoolean;    data: z.ZodOptional<z.ZodUnknown>;    error: z.ZodOptional<z.ZodString>;}, z.core.$strip>"
+  },
+  "TracedSystem": {
+    "kind": "TypeAliasDeclaration",
+    "type": "TracedSystem"
+  },
+  "TraceEvent": {
+    "kind": "InterfaceDeclaration",
+    "type": "TraceEvent"
+  },
+  "Tracer": {
+    "kind": "InterfaceDeclaration",
+    "type": "Tracer"
+  },
+  "Turn": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    id: string;    contactId: string;    role: \"user\" | \"agent\" | \"system\";    timestamp: number;    text?: string | undefined;    meta?: Record<string, unknown> | undefined;}"
+  },
+  "TurnSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    id: z.ZodString;    contactId: z.ZodString;    role: z.ZodEnum<{        user: \"user\";        agent: \"agent\";        system: \"system\";    }>;    text: z.ZodOptional<z.ZodString>;    timestamp: z.ZodNumber;    meta: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;}, z.core.$strip>"
+  }
+}
