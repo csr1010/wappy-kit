@@ -38,7 +38,13 @@ export function createWhatsAppChannel(opts: WhatsAppChannelOptions): MessageChan
     async receive(rawWebhook: unknown): Promise<InboundMessage[]> {
       const { messages, statuses } = parseWebhookPayload(rawWebhook, channelName);
 
-      for (const status of statuses) opts.onStatus?.(status);
+      for (const status of statuses) {
+        // Keyed on (messageId, status), not messageId alone: a message legitimately passes through
+        // several distinct statuses (sent -> delivered -> read), which must NOT be deduped against
+        // each other — only a retried delivery of the SAME status transition should be dropped.
+        const isNew = await seenStore.checkAndSet(`status:${status.messageId}:${status.status}`, now());
+        if (isNew) opts.onStatus?.(status);
+      }
 
       const fresh: InboundMessage[] = [];
       for (const message of messages) {

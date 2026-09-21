@@ -180,4 +180,23 @@ describe("downloadWhatsAppMedia", () => {
     const result = await downloadWhatsAppMedia({ mediaId: "123", accessToken: "t", graphApiBaseUrl: "http://x/media", maxBytes: 5, fetchImpl });
     expect(result).toEqual({ ok: false, error: { kind: "too_large", limitBytes: 5 } });
   });
+
+  test("a non-streamable response rejects on a declared Content-Length over the cap WITHOUT buffering the body", async () => {
+    let bodyWasRead = false;
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/media/")) return new Response(JSON.stringify({ url: "http://x/file", mime_type: "video/mp4" }));
+      const r = new Response("x".repeat(10), { headers: { "content-length": "50000000" } });
+      Object.defineProperty(r, "body", { value: null });
+      const originalArrayBuffer = r.arrayBuffer.bind(r);
+      r.arrayBuffer = async () => {
+        bodyWasRead = true;
+        return originalArrayBuffer();
+      };
+      return r;
+    }) as typeof fetch;
+    const result = await downloadWhatsAppMedia({ mediaId: "123", accessToken: "t", graphApiBaseUrl: "http://x/media", maxBytes: 1_000_000, fetchImpl });
+    expect(result).toEqual({ ok: false, error: { kind: "too_large", limitBytes: 1_000_000 } });
+    expect(bodyWasRead).toBe(false);
+  });
 });
