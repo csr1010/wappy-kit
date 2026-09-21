@@ -95,7 +95,7 @@ describe("createAgent — tool findings vs RAG snippets priority under budget pr
   test("tool-invocation findings survive budget pressure that drops generic RAG snippets first", async () => {
     let seenPrompt = "";
     const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { text: "ok" } }; } };
-    const tightBudget = createContextBudget("x", { overrides: { contextWindow: 260, reservedOutputTokens: 0 } });
+    const tightBudget = createContextBudget("x", { overrides: { contextWindow: 150, reservedOutputTokens: 0 } });
     const ragSnippets = Array.from({ length: 20 }, (_, i) => `generic rag filler snippet number ${i} with padding text`);
     const agent = createAgent({
       channel: fakeChannel("whatsapp"),
@@ -110,6 +110,7 @@ describe("createAgent — tool findings vs RAG snippets priority under budget pr
     });
     await agent.handle(msg({ text: "where's my order 8842?" }));
     expect(seenPrompt).toContain("Tool result: order 8842: shipped");
+    expect(seenPrompt).not.toContain("generic rag filler"); // dropped first, confirming the priority ordering, not just the tool finding's presence
   });
 });
 
