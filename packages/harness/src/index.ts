@@ -13,3 +13,5 @@ export * from "./recall-budget.js";
 export * from "./router.js";
 export * from "./skills.js";
 export * from "./tool-selector.js";
+export * from "./bm25.js";
+export * from "./knowledge.js";
