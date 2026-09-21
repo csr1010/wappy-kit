@@ -11,7 +11,12 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
+    "@types/swagger2openapi": "^7.0.4",
     "typescript": "^6.0.3",
     "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "@apidevtools/swagger-parser": "^13.1.0",
+    "swagger2openapi": "^7.0.8"
   }
 }
