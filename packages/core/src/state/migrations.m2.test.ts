@@ -33,8 +33,7 @@ describe("migrate", () => {
     }
   });
 
-  test("throws StateCorruptError when there's no migration path from an old-but-known version", () => {
-    // Only relevant once STATE_SCHEMA_VERSION > 1 and a step is deliberately skipped; guards the chain logic itself.
+  test("throws StateCorruptError when the current version doesn't pass schema validation", () => {
     expect(() => migrate({ schemaVersion: 1, runId: "r1", parts: [], steps: [], envKeys: [], lastStep: null, generatedFiles: [], createdAt: 0, updatedAt: "not-a-number" })).toThrow(
       StateCorruptError,
     );

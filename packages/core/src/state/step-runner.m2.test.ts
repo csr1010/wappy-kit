@@ -33,6 +33,17 @@ describe("runStep", () => {
     expect(state.steps).toEqual([{ id: "a", part: "p", status: "failed", error: "boom" }]);
   });
 
+  test("a step that throws a non-Error value still records a string error", async () => {
+    const { result } = await runStep(createEmptyState("r1"), {
+      id: "a",
+      part: "p",
+      run: () => {
+        throw "raw string failure";
+      },
+    });
+    expect(result).toEqual({ id: "a", status: "failed", error: "raw string failure", skipped: false });
+  });
+
   test("a previously-failed step is retried (not skipped)", async () => {
     const spy = vi.fn();
     const seeded = { ...createEmptyState("r1"), steps: [{ id: "a", part: "p", status: "failed" as const, error: "old" }] };

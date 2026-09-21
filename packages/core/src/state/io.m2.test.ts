@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEmptyState } from "./schema.js";
@@ -32,6 +32,12 @@ describe("readRawState", () => {
   test("throws StateCorruptError on a truncated file", () => {
     const f = join(tmpDir(), "state.json");
     writeFileSync(f, '{"schemaVersion": 1, "runId": "r1", "step');
+    expect(() => readRawState(f)).toThrow(StateCorruptError);
+  });
+
+  test("throws StateCorruptError if the path exists but can't be read as a file (e.g. it's a directory)", () => {
+    const f = join(tmpDir(), "state.json");
+    mkdirSync(f); // a directory at the state path — existsSync is true, readFileSync fails (EISDIR)
     expect(() => readRawState(f)).toThrow(StateCorruptError);
   });
 });
@@ -82,5 +88,16 @@ describe("writeStateAtomic + readRawState round-trip", () => {
     const stateB = createEmptyState("run-B", { now: () => 2 });
     writeStateAtomic(f, stateB);
     expect(readRawState(f)).toEqual(stateB);
+  });
+
+  test("a rename failure cleans up the temp file and rethrows, leaving no partial state behind", () => {
+    const dir = tmpDir();
+    const f = join(dir, "state.json");
+    // A non-empty directory at the destination makes rename(tmp, f) fail (EISDIR/ENOTEMPTY), not a write success.
+    mkdirSync(f);
+    writeFileSync(join(f, "keepme"), "x");
+    expect(() => writeStateAtomic(f, createEmptyState("run1"))).toThrow();
+    // No orphaned temp file left behind, and the directory (untouched target) is still there.
+    expect(readdirSync(dir).filter((n) => n.includes(".tmp"))).toEqual([]);
   });
 });
