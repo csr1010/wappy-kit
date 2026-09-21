@@ -1,6 +1,7 @@
 export const packageName = "@wappy/harness";
 export * from "./memory.js";
 export * from "./agent.js";
+export * from "./assemble.js";
 export * from "./compose.js";
 export * from "./context-budget.js";
 export * from "./model.js";
