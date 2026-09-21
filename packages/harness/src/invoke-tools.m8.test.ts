@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
+import { createClient } from "@libsql/client";
+import { systemClock } from "@wappy/core";
 import type { InboundMessage, Model, RouterDecision, Tool, ToolResult } from "@wappy/core";
 import { createToolInvoker } from "./invoke-tools.js";
+import { createConfirmFlow } from "./confirm.js";
 
 function message(text: string): InboundMessage {
   return { id: "m1", contactId: "c1", channel: "whatsapp", text, timestamp: 0 } as InboundMessage;
@@ -10,6 +13,10 @@ const DECISION: RouterDecision = { intent: "order-status", needsRAG: false, need
 
 function tool(name: string, execute: (args: unknown) => Promise<ToolResult>): Tool {
   return { name, description: `${name} tool`, parameters: { type: "object", properties: {} }, readOnly: true, confirmBefore: false, execute };
+}
+
+function writeTool(name: string, execute: (args: unknown) => Promise<ToolResult>): Tool {
+  return { name, description: `${name} tool`, parameters: { type: "object", properties: {} }, readOnly: false, confirmBefore: true, execute };
 }
 
 function decisionModel(response: { toolName?: string; args?: unknown } | undefined): Model {
@@ -113,6 +120,55 @@ describe("createToolInvoker", () => {
       const invoke = createToolInvoker({ model: decisionModel({ toolName: "getOrder", args: {} }), tools: [flaky] });
       const findings = await invoke({ message: message("where's my order?"), decision: DECISION });
       expect(findings[0]).toContain("timeout");
+    });
+  });
+
+  describe("confirmBefore tools (T8.5 request side)", () => {
+    function flow() {
+      return createConfirmFlow({ client: createClient({ url: ":memory:" }), clock: systemClock });
+    }
+
+    test("a confirmBefore tool is never executed directly — it's held pending instead", async () => {
+      let executed = false;
+      const cancelOrder = writeTool("cancelOrder", async () => { executed = true; return { toolName: "cancelOrder", ok: true, data: {} }; });
+      const confirmFlow = flow();
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "cancelOrder", args: { id: "1001" } }), tools: [cancelOrder], confirmFlow });
+      const findings = await invoke({ message: message("cancel my order 1001"), decision: DECISION });
+      expect(executed).toBe(false);
+      expect(findings.length).toBe(1);
+      expect(findings[0]).toContain("confirm");
+      expect(findings[0]).toContain("cancel");
+      expect(findings[0]).toContain("NOT been executed yet");
+      expect(findings[0]).not.toMatch(/^Done —/);
+    });
+
+    test("requesting confirmation persists a pending confirmation for the message's contact", async () => {
+      const cancelOrder = writeTool("cancelOrder", async () => ({ toolName: "cancelOrder", ok: true, data: {} }));
+      const confirmFlow = flow();
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "cancelOrder", args: { id: "1001" } }), tools: [cancelOrder], confirmFlow });
+      await invoke({ message: message("cancel my order 1001"), decision: DECISION });
+      const pending = await confirmFlow.getPending("c1");
+      expect(pending?.toolName).toBe("cancelOrder");
+      expect(pending?.args).toEqual({ id: "1001" });
+    });
+
+    test("without a confirmFlow configured, a confirmBefore tool is refused, not silently executed", async () => {
+      let executed = false;
+      const cancelOrder = writeTool("cancelOrder", async () => { executed = true; return { toolName: "cancelOrder", ok: true, data: {} }; });
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "cancelOrder", args: {} }), tools: [cancelOrder] });
+      const findings = await invoke({ message: message("cancel my order"), decision: DECISION });
+      expect(executed).toBe(false);
+      expect(findings[0]).toMatch(/no confirmation flow|not.*configured/i);
+    });
+
+    test("a read-only (confirmBefore: false) tool is unaffected by a configured confirmFlow — executes immediately as usual", async () => {
+      let executed = false;
+      const getOrder = tool("getOrder", async () => { executed = true; return { toolName: "getOrder", ok: true, data: { status: "shipped" } }; });
+      const confirmFlow = flow();
+      const invoke = createToolInvoker({ model: decisionModel({ toolName: "getOrder", args: {} }), tools: [getOrder], confirmFlow });
+      await invoke({ message: message("where's my order"), decision: DECISION });
+      expect(executed).toBe(true);
+      expect(await confirmFlow.getPending("c1")).toBeUndefined();
     });
   });
 

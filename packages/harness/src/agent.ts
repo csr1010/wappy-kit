@@ -6,11 +6,14 @@ import { windowHistory } from "./history-window.js";
 import { selectTools } from "./tool-selector.js";
 import { TOOL_SCHEMAS_BUDGET_FRACTION } from "./assemble.js";
 import type { SkillRegistry } from "./skills.js";
+import { CANCEL_SELECTION_ID, CONFIRM_SELECTION_ID, type ConfirmFlow } from "./confirm.js";
 
 const SCOPE_GUARDRAIL = "If the user's request is genuinely unrelated to what you're configured to help with, say so honestly and directly rather than guessing or making something up.";
 
 const REFUSAL_TEXT = "That message is too long for me to process — could you send it as a shorter message?";
 const OVERSIZED_PLACEHOLDER = "(the user sent a message too large to process)";
+const NOTHING_PENDING_TEXT = "There's nothing pending to confirm right now.";
+const CONFIRM_TOOL_UNAVAILABLE_TEXT = "Sorry, I couldn't complete that — please try again, or our team will follow up.";
 
 /** Used when the caller doesn't supply one — a conservative, safe-by-default budget (§10 T6.1). */
 const DEFAULT_CONTEXT_BUDGET: ContextBudget = createContextBudget("unrecognized");
@@ -37,6 +40,14 @@ export interface AgentDeps {
    * tools to the model (for the prompt's textual tool-schema disclosure) is separate from actually
    * invoking one (that's `invokeTools`, e.g. `createToolInvoker({tools, ...})` using this same pool). Default []. */
   tools?: Tool[];
+  /** Confirm-before-write flow (§8/§9 T8.5) — when set, an inbound message carrying
+   * `selectionId: "confirm"`/`"cancel"` is intercepted HERE, before routing, and resolves the
+   * contact's pending confirmation (executing the held tool call exactly once, or discarding it)
+   * instead of going through the normal skill/RAG/tool/compose pipeline. Requesting a confirmation
+   * in the first place is `createToolInvoker`'s job (via this same flow, passed to it separately) —
+   * this dependency is what RESOLVES one once the user replies. Default: confirm/cancel selection
+   * ids are treated as ordinary messages (no interception) when unset. */
+  confirmFlow?: ConfirmFlow;
   /** Bounds the whole assembled prompt (T6.1/T6.2); default is a conservative, model-agnostic budget. */
   contextBudget?: ContextBudget;
   /** Turns kept verbatim in the prompt; older history is summarized (T6.3). Default 20. */
@@ -116,6 +127,42 @@ async function safeCall<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 }
 
 /**
+ * Resolves a contact's pending confirmation in response to a "confirm"/"cancel" button reply (T8.5).
+ * `resolve()` is awaited BEFORE the tool ever runs (not after) so the pending state is gone the
+ * instant this function starts acting on it — combined with `createAgent`'s own per-contact
+ * serialization (two messages for the same contact are never handled concurrently), a duplicate
+ * "confirm" delivered twice back-to-back can never execute the tool twice: the second one finds
+ * nothing pending (§9 "confirm executes once even if 'yes' is delivered twice").
+ */
+async function resolvePendingConfirmation(message: InboundMessage, confirmFlow: ConfirmFlow, deps: AgentDeps): Promise<SmartMessage> {
+  const pending = await safeCall(() => confirmFlow.getPending(message.contactId), undefined);
+  if (!pending) return { text: NOTHING_PENDING_TEXT };
+
+  await safeCall(async () => {
+    await confirmFlow.resolve(message.contactId);
+    return undefined;
+  }, undefined);
+
+  if (message.selectionId === CANCEL_SELECTION_ID) {
+    trace(deps.tracer, "tools", "invoke", { toolName: pending.toolName, confirmOutcome: "canceled" });
+    return { text: `Okay, I've canceled that — ${pending.summary} was not carried out.` };
+  }
+
+  trace(deps.tracer, "tools", "invoke", { toolName: pending.toolName, confirmOutcome: "confirmed" });
+  const tool = deps.tools?.find((t) => t.name === pending.toolName);
+  if (!tool) return { text: CONFIRM_TOOL_UNAVAILABLE_TEXT };
+
+  const toolResult = await safeCall(() => tool.execute(pending.args), { toolName: pending.toolName, ok: false, error: "internal error invoking tool" });
+  if (toolResult.ok) return { text: `Done — ${pending.summary} completed.` };
+
+  await safeCall(async () => {
+    await deps.onEscalate?.(message, { intent: "confirm", needsRAG: false, needsTool: true, escalate: true, confidence: 1 });
+    return undefined;
+  }, undefined);
+  return { text: `I couldn't complete that (${toolResult.error ?? "unknown error"}) — I've let the team know and they'll follow up.` };
+}
+
+/**
  * A textual stand-in for what was persisted to memory: `SmartMessage.text` is independent of
  * `buttons`/`list`/`cta`/`media` (§6.3 "the model controls UX intent — buttons vs list vs text"), so
  * a rich reply with no `text` set would otherwise persist as `Turn.text: undefined` — which
@@ -174,6 +221,11 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
   let reply: SmartMessage;
   if (bounded?.refuse) {
     reply = { text: REFUSAL_TEXT };
+  } else if (deps.confirmFlow && (message.selectionId === CONFIRM_SELECTION_ID || message.selectionId === CANCEL_SELECTION_ID)) {
+    // A confirm/cancel button reply carries no routable intent of its own (a bare "confirm" means
+    // nothing to the router without the pending-confirmation context) — resolved here, before
+    // routing, instead of through the normal skill/RAG/tool/compose pipeline.
+    reply = await resolvePendingConfirmation(message, deps.confirmFlow, deps);
   } else {
     trace(deps.tracer, "router", "route");
     let decision: RouterDecision;
