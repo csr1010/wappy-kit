@@ -39,9 +39,11 @@ function trace(tracer: Tracer | undefined, event: string, data?: unknown): void 
  * curation"): once unsummarized history exceeds `maxRecentTurns`, the oldest excess is summarized
  * via a cheap model call and the summary persisted to Memory as a turn (so a later call reusing the
  * same history sees it and doesn't re-summarize already-covered turns). On summarizer failure (a
- * thrown error, or a degenerate empty response), NOTHING is persisted — marking those turns as
- * "covered" by a content-free placeholder would be permanent and unrecoverable, whereas returning the
- * full unsummarized set for just this call lets the very next call retry summarization from scratch.
+ * thrown error, or a degenerate empty response), falls back to plain truncation (§10/T6.3) — still
+ * only `recentTurns` (the same slice the success path would keep) goes to the caller for THIS call —
+ * but NOTHING is persisted to Memory: marking the older turns "covered" by a content-free placeholder
+ * would be permanent and unrecoverable, whereas persisting nothing lets the very next call retry
+ * summarization from scratch instead of being permanently short-circuited.
  */
 export async function windowHistory(opts: WindowHistoryOptions): Promise<WindowedHistory> {
   const summaryTurns = opts.history.filter(isSummaryTurn);
@@ -72,13 +74,13 @@ export async function windowHistory(opts: WindowHistoryOptions): Promise<Windowe
     const result = await opts.model.generate({ prompt });
     if (!result.text) {
       trace(opts.tracer, "summarize", { ok: false });
-      return { summary: latestSummary?.text, recentTurns: unsummarized };
+      return { summary: latestSummary?.text, recentTurns };
     }
     summaryText = result.text;
     trace(opts.tracer, "summarize", { ok: true });
   } catch {
     trace(opts.tracer, "summarize", { ok: false });
-    return { summary: latestSummary?.text, recentTurns: unsummarized };
+    return { summary: latestSummary?.text, recentTurns };
   }
 
   const summaryTurnId = `summary:${lastSummarizedTurn.id}`;
