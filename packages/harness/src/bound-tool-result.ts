@@ -22,6 +22,13 @@ function byteSize(value: unknown): number {
  * paged to `maxArrayItems` (and further trimmed if still over `maxBytes`); strings are truncated to
  * `maxBytes`; anything else that's oversized is JSON-stringified and truncated the same way. Never
  * passes raw megabytes through untouched.
+ *
+ * Deliberately NOT wired into any real call path yet: `AgentDeps.invokeTools` (agent.ts) returns
+ * pre-stringified `string[]` findings, not the raw tool-result objects this function expects to
+ * bound. Real tool execution — where raw results actually exist to bound — lands in M7's
+ * tools-openapi engine; that's the natural place to wire this in, matching M5/M6's established
+ * precedent of leaving a built-and-tested piece unwired until its real caller exists (e.g.
+ * createVercelModel's tool loop, Memory.recall not yet the default RAG implementation).
  */
 export function boundToolResult(data: unknown, opts: BoundToolResultOptions): BoundedToolResult {
   const totalBytes = byteSize(data);

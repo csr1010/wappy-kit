@@ -91,6 +91,28 @@ describe("createAgent — tool schema selection (T6.5 wired into T6.2's assemble
   });
 });
 
+describe("createAgent — tool findings vs RAG snippets priority under budget pressure (review fix #4)", () => {
+  test("tool-invocation findings survive budget pressure that drops generic RAG snippets first", async () => {
+    let seenPrompt = "";
+    const model: Model = { generate: async (req) => { seenPrompt = req.prompt; return { structured: { text: "ok" } }; } };
+    const tightBudget = createContextBudget("x", { overrides: { contextWindow: 260, reservedOutputTokens: 0 } });
+    const ragSnippets = Array.from({ length: 20 }, (_, i) => `generic rag filler snippet number ${i} with padding text`);
+    const agent = createAgent({
+      channel: fakeChannel("whatsapp"),
+      memory: fakeMemory(),
+      router: fakeRouter([{ intent: "order-status", needsRAG: true, needsTool: true, escalate: false, confidence: 0.9 }]),
+      model,
+      clock: systemClock,
+      tracer: createInMemoryTracer(),
+      contextBudget: tightBudget,
+      retrieveRag: async () => ragSnippets,
+      invokeTools: async () => ["order 8842: shipped"],
+    });
+    await agent.handle(msg({ text: "where's my order 8842?" }));
+    expect(seenPrompt).toContain("Tool result: order 8842: shipped");
+  });
+});
+
 describe("createAgent — context budget wiring (T6.1/T6.2/T6.8)", () => {
   test("a custom contextBudget is actually used — a tiny budget still produces a reply, never crashes", async () => {
     const tinyBudget = createContextBudget("x", { overrides: { contextWindow: 30, reservedOutputTokens: 0 } });
@@ -195,5 +217,31 @@ describe("createAgent — history windowing wired in (T6.3)", () => {
     });
     await agent.handle(msg());
     expect(calls).toBe(1); // only the compose call — no summarization model call for a fresh contact
+  });
+
+  test("when summarization actually fires, its own model call is traced separately under 'llm' (review fix #6)", async () => {
+    const memory = fakeMemory();
+    for (let i = 0; i < 20; i++) await memory.append(turn(i));
+    const tracer = createInMemoryTracer();
+    const model: Model = {
+      generate: async (req) => {
+        if (req.prompt.includes("Summarize the following")) return { text: "SUMMARY_TEXT" };
+        return { structured: { text: "ok" } };
+      },
+    };
+    const agent = createAgent({
+      channel: fakeChannel("whatsapp"),
+      memory,
+      router: fakeRouter([{ intent: "greeting", needsRAG: false, needsTool: false, escalate: false, confidence: 0.9 }]),
+      model,
+      clock: systemClock,
+      tracer,
+      maxRecentTurns: 5,
+    });
+    await agent.handle(msg({ id: "m21", text: "hi again" }));
+    const llmEvents = tracer.events().filter((e) => e.system === "llm");
+    expect(llmEvents).toHaveLength(2); // one for the summarizer call, one for compose
+    expect(llmEvents.some((e) => e.event === "summarize")).toBe(true);
+    expect(llmEvents.some((e) => e.event === "compose")).toBe(true);
   });
 });

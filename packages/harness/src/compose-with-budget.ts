@@ -51,7 +51,7 @@ export async function composeWithBudget(opts: ComposeWithBudgetOptions): Promise
     const assembled = assemblePrompt(input, budget);
     lastAssembled = assembled;
     try {
-      const result = await opts.model.generate({ prompt: assembled.prompt, responseSchema: smartMessageJsonSchema });
+      const result = await opts.model.generate({ prompt: assembled.prompt, system: opts.input.system, responseSchema: smartMessageJsonSchema });
       if (result.text) lastText = result.text;
       const parsed = SmartMessageSchema.safeParse(result.structured);
       if (parsed.success) return { reply: parsed.data, usage: assembled.usage, dropped: assembled.dropped, shrunkForContextLength };

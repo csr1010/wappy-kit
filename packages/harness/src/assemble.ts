@@ -27,6 +27,11 @@ const DEFAULT_SECTION_FRACTIONS: Record<OptionalSection, number> = {
   recentTurns: 0.3,
 };
 
+/** Exported so callers that must pre-budget content BEFORE handing it to assemblePrompt (e.g.
+ * tool-selector.ts's BM25 cutoff) can use the same share of the budget assemblePrompt will apply to
+ * the `toolSchemas` section a moment later, instead of guessing or duplicating the fraction. */
+export const TOOL_SCHEMAS_BUDGET_FRACTION = DEFAULT_SECTION_FRACTIONS.toolSchemas;
+
 /** Fixed assembly order (stable prefix — prompt-cache friendly) is ALSO the order sections are
  * dropped in reverse when even individually-capped sections don't fit the total budget: lowest
  * priority (recalledSnippets) drops first, recentTurns last (before the mandatory sections). */

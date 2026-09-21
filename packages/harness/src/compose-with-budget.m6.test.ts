@@ -33,6 +33,16 @@ describe("composeWithBudget — happy path", () => {
     expect(result.usage.system).toBeGreaterThan(0);
     expect(result.dropped).toEqual([]);
   });
+
+  test("input.system is forwarded to model.generate as req.system, not just folded into the prompt text", async () => {
+    let seenSystem: string | undefined;
+    const model = scriptedModel((req) => {
+      seenSystem = req.system;
+      return { structured: { text: "hi!" } };
+    });
+    await composeWithBudget({ model, input: { system: "SYS_GUARDRAIL", userMessage: "hello" }, budget });
+    expect(seenSystem).toBe("SYS_GUARDRAIL");
+  });
 });
 
 describe("composeWithBudget — context-length error: shrink and retry once", () => {
