@@ -28,3 +28,6 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
 
 - 2026-09-21: gate M4 --allow-test-change: M4 replaces M3's documented placeholder send() with the required smart-send + window-guard behavior (already logged for this milestone; re-running gate after a review-driven fix)
   M	packages/whatsapp/src/channel.m3.test.ts
+
+- 2026-09-21: gate M4 --allow-test-change: M4 replaces M3's documented placeholder send() with the required smart-send + window-guard behavior (already logged for this milestone; re-running gate after review-driven fixes)
+  M	packages/whatsapp/src/channel.m3.test.ts
