@@ -104,6 +104,13 @@ describe("curate — max caps the result via lexical ranking against tags/includ
     expect(result.tools[0]?.name).toBe("getThing");
   });
 
+  test("HEAD is preferred the same way GET is in the readOnly fallback", () => {
+    const headOp = tool({ operationId: "headThing", name: "headThing", method: "head" });
+    const postOp = tool({ operationId: "postThing", name: "postThing", method: "post" });
+    const result = curate([postOp, headOp], { max: 1 });
+    expect(result.tools[0]?.name).toBe("headThing");
+  });
+
   test("max larger than the candidate count is a no-op", () => {
     const result = curate([ORDERS, PRODUCTS], { max: 10 });
     expect(result.tools).toHaveLength(2);

@@ -199,3 +199,83 @@ describe("generateTools — non-operation path-item keys are ignored", () => {
     expect(tools).toHaveLength(1);
   });
 });
+
+describe("generateTools — defensive edge cases", () => {
+  test("a document with no paths at all produces zero tools, not a crash", () => {
+    const spec = { openapi: "3.0.3", info: { title: "x", version: "1" } } as OpenAPIV3.Document;
+    const { tools } = generateTools(spec);
+    expect(tools).toEqual([]);
+  });
+
+  test("a null path-item entry is skipped, not a crash", () => {
+    const spec = doc({ paths: { "/null-item": null as unknown as OpenAPIV3.PathItemObject, "/x": { get: { operationId: "op", responses: { 200: { description: "ok" } } } } } });
+    const { tools } = generateTools(spec);
+    expect(tools.map((t) => t.name)).toEqual(["op"]);
+  });
+
+  test("a triple name collision (base, _2, and _3 all taken) still resolves to a unique name", () => {
+    const spec = doc({
+      paths: {
+        "/a": { get: { operationId: "dup", responses: { 200: { description: "ok" } } } },
+        "/b": { get: { operationId: "dup", responses: { 200: { description: "ok" } } } },
+        "/c": { get: { operationId: "dup", responses: { 200: { description: "ok" } } } },
+      },
+    });
+    const { tools } = generateTools(spec);
+    expect(tools.map((t) => t.name).sort()).toEqual(["dup", "dup_2", "dup_3"]);
+  });
+});
+
+describe("generateTools — $ref'd parameters and request bodies (components/parameters, components/requestBodies)", () => {
+  test("a parameter given as a $ref to components/parameters resolves correctly", () => {
+    const spec = doc({
+      paths: { "/x/{id}": { get: { operationId: "op", parameters: [{ $ref: "#/components/parameters/IdParam" }], responses: { 200: { description: "ok" } } } } },
+      components: { parameters: { IdParam: { name: "id", in: "path", required: true, schema: { type: "string" } } } },
+    } as unknown as Partial<OpenAPIV3.Document>);
+    const { tools } = generateTools(spec);
+    const props = tools[0]!.parameters.properties as Record<string, Record<string, unknown>>;
+    expect(props.id).toMatchObject({ type: "string", "x-wappy-in": "path" });
+  });
+
+  test("a request body given as a $ref to components/requestBodies resolves correctly", () => {
+    const spec = doc({
+      paths: { "/x": { post: { operationId: "op", requestBody: { $ref: "#/components/requestBodies/Body" }, responses: { 200: { description: "ok" } } } } },
+      components: { requestBodies: { Body: { required: true, content: { "application/json": { schema: { type: "object", properties: { name: { type: "string" } } } } } } } },
+    } as unknown as Partial<OpenAPIV3.Document>);
+    const { tools } = generateTools(spec);
+    const props = tools[0]!.parameters.properties as Record<string, Record<string, unknown>>;
+    expect(props.body).toBeDefined();
+    expect(tools[0]!.parameters.required).toContain("body");
+  });
+
+  test("a parameter with no schema field degrades to an empty (any) schema, not a crash", () => {
+    const spec = doc({ paths: { "/x": { get: { operationId: "op", parameters: [{ name: "q", in: "query" } as OpenAPIV3.ParameterObject], responses: { 200: { description: "ok" } } } } } });
+    const { tools } = generateTools(spec);
+    const props = tools[0]!.parameters.properties as Record<string, Record<string, unknown>>;
+    expect(props.q).toEqual({ "x-wappy-in": "query" });
+  });
+
+  test("a request body whose selected media type has no schema field degrades to an empty body schema, and required defaults to absent", () => {
+    const spec = doc({ paths: { "/x": { post: { operationId: "op", requestBody: { content: { "application/json": {} } }, responses: { 200: { description: "ok" } } } } } });
+    const { tools } = generateTools(spec);
+    const props = tools[0]!.parameters.properties as Record<string, Record<string, unknown>>;
+    expect(props.body).toEqual({ "x-wappy-in": "body", "x-wappy-media-type": "application/json" });
+    expect(tools[0]!.parameters.required).toBeUndefined();
+  });
+
+  test("a request body with no content field at all is skipped entirely (no body property added)", () => {
+    const spec = doc({ paths: { "/x": { post: { operationId: "op", requestBody: { required: true } as OpenAPIV3.RequestBodyObject, responses: { 200: { description: "ok" } } } } } });
+    const { tools } = generateTools(spec);
+    const props = tools[0]!.parameters.properties as Record<string, Record<string, unknown>>;
+    expect(props.body).toBeUndefined();
+  });
+
+  test("a request body offering only a non-JSON media type falls back to that media type", () => {
+    const spec = doc({
+      paths: { "/x": { post: { operationId: "op", requestBody: { content: { "application/xml": { schema: { type: "string" } } } }, responses: { 200: { description: "ok" } } } } },
+    });
+    const { tools } = generateTools(spec);
+    const props = tools[0]!.parameters.properties as Record<string, Record<string, unknown>>;
+    expect(props.body).toMatchObject({ "x-wappy-media-type": "application/xml" });
+  });
+});

@@ -35,7 +35,7 @@ function tokenize(text: string): string[] {
 /** Fraction of the query's distinct words found in the tool's own text (name/description/tags) — the
  * same dependency-free lexical-overlap approach as harness's recall-budget.ts/tool-selector.ts. */
 function lexicalRelevance(queryWords: Set<string>, tool: GeneratedTool): number {
-  if (queryWords.size === 0) return 0;
+  // Only called from the max-cap ranking branch below, which is itself gated on keywords.size > 0.
   const toolWords = new Set(tokenize([tool.name, tool.description, ...(tool.operation.tags ?? [])].join(" ")));
   let matches = 0;
   for (const w of queryWords) if (toolWords.has(w)) matches++;

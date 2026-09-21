@@ -5,3 +5,4 @@ dist
 .wappy/
 *.log
 coverage
+.vitest

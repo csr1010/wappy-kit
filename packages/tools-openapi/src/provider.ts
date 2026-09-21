@@ -41,9 +41,10 @@ export interface CreateOpenApiToolProviderResult {
 }
 
 /** Strips the internal "x-wappy-*" location metadata operations.ts/executor.ts rely on before a
- * schema is exposed as a public Tool.parameters — a model consuming the tool shouldn't see it. */
+ * schema is exposed as a public Tool.parameters — a model consuming the tool shouldn't see it.
+ * Every value it's called on (top-level, and recursively over `properties`) is itself a JsonSchema
+ * object produced by schema.ts's resolveSchema() — never null or a non-object primitive. */
 function stripLocationMetadata(schema: JsonSchema): JsonSchema {
-  if (typeof schema !== "object" || schema === null) return schema;
   const out: JsonSchema = {};
   for (const [key, value] of Object.entries(schema)) {
     if (key === "x-wappy-in" || key === "x-wappy-media-type") continue;
@@ -89,7 +90,8 @@ export async function createOpenApiToolProvider(opts: CreateOpenApiToolProviderO
   for (const tool of afterAuth) {
     const decision = applyPolicy(tool, opts.policy);
     if (!decision.included) {
-      skipReport.push({ name: tool.name, method: tool.method, path: tool.path, reason: decision.reason ?? "Excluded by policy." });
+      // applyPolicy() always sets `reason` on every `included: false` return — no fallback needed.
+      skipReport.push({ name: tool.name, method: tool.method, path: tool.path, reason: decision.reason! });
       continue;
     }
     afterPolicy.push(tool);

@@ -124,3 +124,15 @@ describe("fetchSafely — redirects are re-validated on every hop", () => {
     expect(fetchImpl.mock.calls[1]?.[0]?.toString()).toBe("https://api.example.com/y");
   });
 });
+
+describe("assertSafeUrl — the real default DNS resolver (no injected resolveHostname)", () => {
+  test("'localhost' (real DNS, no injected resolver) resolves to loopback and is blocked", async () => {
+    await expect(assertSafeUrl("http://localhost/")).rejects.toThrow(SsrfBlockedError);
+  });
+});
+
+describe("assertSafeUrl — a resolved address that isn't a parseable IP at all is treated as unsafe, not a crash", () => {
+  test("a custom resolveHostname returning garbage (not an IP) fails safe rather than throwing an unhandled error", async () => {
+    await expect(assertSafeUrl("https://weird.example.com/", { resolveHostname: async () => ["not-an-ip-address"] })).rejects.toThrow(SsrfBlockedError);
+  });
+});
