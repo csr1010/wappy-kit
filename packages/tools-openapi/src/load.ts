@@ -1,6 +1,8 @@
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { convertObj } from "swagger2openapi";
+import { load as loadYaml } from "js-yaml";
 import type { OpenAPIV3 } from "openapi-types";
+import { fetchSafely, type SafeFetchOptions } from "./ssrf.js";
 
 export interface SpecPointerError {
   /** JSON pointer into the spec document, e.g. "/paths/~1pets/get/responses" ("" if unknown). */
@@ -39,6 +41,22 @@ function pointerErrorsFrom(e: unknown): SpecPointerError[] {
   return details.map((d) => ({ pointer: d.instancePath || "/", message: d.message ?? "invalid" }));
 }
 
+const URL_PATTERN = /^https?:\/\//i;
+
+async function fetchEntrySpec(url: string, ssrfOptions: SafeFetchOptions | undefined): Promise<unknown> {
+  // Never hands the raw URL to SwaggerParser.parse() — its own built-in HTTP resolver has no SSRF
+  // guard, so the entry spec URL is fetched and re-validated (incl. every redirect hop) here first,
+  // and only the already-fetched TEXT is handed downstream (§8 T7.8, "spec-URL fetch").
+  const response = await fetchSafely(url, ssrfOptions);
+  if (!response.ok) throw new SpecLoadError(`Fetching spec from "${url}" failed: HTTP ${response.status}`);
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return loadYaml(text);
+  }
+}
+
 function detectVersion(raw: unknown): "2.0" | "3.0" | "3.1" {
   const obj = raw as { swagger?: unknown; openapi?: unknown };
   if (typeof obj.swagger === "string" && obj.swagger.startsWith("2.")) return "2.0";
@@ -50,13 +68,23 @@ function detectVersion(raw: unknown): "2.0" | "3.0" | "3.1" {
 /**
  * Loads an OpenAPI/Swagger spec from a URL, a local file path, or an already-parsed object;
  * normalizes Swagger 2.0 to OpenAPI 3.x; validates against the OAS 2.0/3.0/3.1 JSON Schema with
- * pointer-level errors; bundles external `$ref`s into one self-contained document (§8 T7.1).
+ * pointer-level errors; bundles external `$ref`s into one self-contained document (§8 T7.1). When
+ * `source` is an http(s) URL, it's fetched through the SSRF guard (§8 T7.8) — `ssrfOptions` is
+ * passed straight to `fetchSafely` (e.g. `{allowPrivateNetworks: true}` for a local dev spec server).
+ * Note: this guards the ENTRY spec URL and its redirects; a spec's own EXTERNAL `$ref`s (resolved
+ * during validate/bundle below) are fetched by swagger-parser's own resolver, not this guard — a
+ * narrower, documented v0.1 scope limit (loading a spec is already a trust decision the caller makes).
  */
-export async function loadSpec(source: string | Record<string, unknown>): Promise<LoadedSpec> {
+export async function loadSpec(source: string | Record<string, unknown>, ssrfOptions?: SafeFetchOptions): Promise<LoadedSpec> {
   let raw: unknown;
   try {
-    raw = typeof source === "string" ? await SwaggerParser.parse(source) : source;
+    if (typeof source === "string" && URL_PATTERN.test(source)) {
+      raw = await fetchEntrySpec(source, ssrfOptions);
+    } else {
+      raw = typeof source === "string" ? await SwaggerParser.parse(source) : source;
+    }
   } catch (e) {
+    if (e instanceof SpecLoadError) throw e;
     const message = e instanceof Error ? e.message : String(e);
     throw new SpecLoadError(`Could not load spec from "${typeof source === "string" ? source : "<object>"}": ${message}`);
   }
