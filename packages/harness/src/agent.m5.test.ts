@@ -250,11 +250,16 @@ describe("createAgent — retry after a failed send (the exact scenario the idem
     const first = await agent.handle(msg());
     expect(first).toEqual({ status: "failed", reason: "network down" });
     expect(memory.turns.filter((t) => t.role === "agent")).toHaveLength(0); // nothing persisted on failure
+    expect(memory.turns.filter((t) => t.role === "user")).toHaveLength(1); // the user's message is still recorded
 
     const second = await agent.handle(msg()); // same message.id, a legitimate retry
     expect(second.status).toBe("sent");
     expect(channel.sent).toHaveLength(2); // both attempts genuinely reached channel.send() — the retry wasn't skipped
     expect(memory.turns.filter((t) => t.role === "agent")).toHaveLength(1); // persisted exactly once, by the retry
+    // The retry must not re-append the user's turn a second time — Memory.append isn't required by
+    // its own interface to dedupe by id (createLibsqlMemory happens to, but fakeMemory here does not).
+    expect(memory.turns.filter((t) => t.role === "user")).toHaveLength(1);
+    expect(memory.turns).toHaveLength(2); // exactly one user turn + one agent turn, total, across both attempts
   });
 
   test("a queued (window-closed) result also persists no reply turn, so retrying once the window reopens still composes/sends for real", async () => {
@@ -275,6 +280,7 @@ describe("createAgent — retry after a failed send (the exact scenario the idem
     expect(second).toEqual({ status: "sent", messageId: "wamid.retry" });
     expect(calls).toBe(2);
     expect(memory.turns.filter((t) => t.role === "agent")).toHaveLength(1);
+    expect(memory.turns.filter((t) => t.role === "user")).toHaveLength(1); // not duplicated across the retry
   });
 });
 
