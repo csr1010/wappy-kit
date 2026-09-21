@@ -259,6 +259,10 @@ export function buildExecutor(tool: GeneratedTool, opts: ExecutorOptions): (args
         }
 
         if (response.status >= 500 && attempt < attemptsAllowed - 1) {
+          // This attempt's body is discarded (we're retrying, not returning it) — drain it so the
+          // connection fetchSafely()'s dispatcher fire-and-forget-closes doesn't leak, same reasoning
+          // as readBodyCapped() below for the response that IS returned.
+          if (response.body) await response.body.cancel().catch(() => undefined);
           lastError = `HTTP ${response.status}`;
           continue;
         }

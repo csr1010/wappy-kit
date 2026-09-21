@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadSpec, SpecLoadError } from "./load.js";
@@ -128,6 +128,13 @@ describe("loadSpec — URL loading goes through the SSRF guard (T7.8)", () => {
   test("a non-OK HTTP response fetching the spec URL fails loudly with the status code", async () => {
     const fetchImpl = async () => ({ ok: false, status: 404, headers: new Headers(), text: async () => "not found" }) as Response;
     await expect(loadSpec("https://spec.example.com/missing.json", { resolveHostname: async () => ["93.184.216.34"], fetchImpl })).rejects.toThrow(/404/);
+  });
+
+  test("a non-OK HTTP response's body is still drained before the error is thrown, not left unread (leaked connection)", async () => {
+    const text = vi.fn(async () => "not found");
+    const fetchImpl = async () => ({ ok: false, status: 404, headers: new Headers(), text }) as unknown as Response;
+    await expect(loadSpec("https://spec.example.com/missing.json", { resolveHostname: async () => ["93.184.216.34"], fetchImpl })).rejects.toThrow(SpecLoadError);
+    expect(text).toHaveBeenCalledTimes(1);
   });
 
   test("a spec URL serving YAML (not JSON) is parsed correctly", async () => {

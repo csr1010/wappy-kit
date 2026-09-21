@@ -158,6 +158,11 @@ export async function fetchSafely(rawUrl: string, opts: SafeFetchOptions = {}): 
       const isRedirect = response.status >= 300 && response.status < 400;
       const location = response.headers.get("location");
       if (isRedirect && location) {
+        // An intermediate redirect hop's body is never returned to the caller, so nothing will ever
+        // read it — drain it here (redirect bodies are typically empty/tiny, so this is cheap) rather
+        // than leaving the connection open until GC/timeout. Safe to await: this doesn't touch the
+        // dispatcher, which stays open across hops and is only closed once after the final response.
+        if (response.body) await response.body.cancel().catch(() => undefined);
         currentUrl = new URL(location, validated).toString();
         continue;
       }
