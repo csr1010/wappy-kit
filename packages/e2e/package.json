@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@libsql/client": "0.18.0",
     "@wappy/core": "workspace:*",
     "@wappy/harness": "workspace:*",
     "@wappy/testkit": "workspace:*",
