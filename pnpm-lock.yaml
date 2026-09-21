@@ -290,6 +290,9 @@ importers:
       '@apidevtools/swagger-parser':
         specifier: ^13.1.0
         version: 13.1.0(openapi-types@12.1.3)
+      '@wappy/core':
+        specifier: workspace:*
+        version: link:../core
       swagger2openapi:
         specifier: ^7.0.8
         version: 7.0.8
