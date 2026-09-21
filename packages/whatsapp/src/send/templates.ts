@@ -2,7 +2,11 @@ import type { CloudApiOutboundPayload } from "./render.js";
 
 export interface TemplateButtonDef {
   type: "quick_reply" | "url";
+  /** Static fallback value (the payload for quick_reply, or the {{1}} URL-suffix text for url) used when `variable` is unset. */
   text: string;
+  /** Name of a per-send variable (looked up in the same `variables` record passed to renderTemplate,
+   * alongside the body's) supplying this button's dynamic value instead of the static `text`. */
+  variable?: string;
 }
 
 export interface TemplateDef {
@@ -37,7 +41,8 @@ export function renderTemplate(registry: TemplateRegistry, to: string, name: str
   const def = registry.get(name);
   if (!def) return { ok: false, error: `template "${name}" is not registered` };
 
-  const missing = def.variables.filter((v) => !(v in variables));
+  const buttonVariables = (def.buttons ?? []).map((b) => b.variable).filter((v): v is string => v !== undefined);
+  const missing = [...new Set([...def.variables, ...buttonVariables])].filter((v) => !(v in variables));
   if (missing.length > 0) return { ok: false, error: `template "${name}" is missing variables: ${missing.join(", ")}` };
 
   const components: Record<string, unknown>[] = [
@@ -45,13 +50,16 @@ export function renderTemplate(registry: TemplateRegistry, to: string, name: str
   ];
   // A button's dynamic value: the payload returned in the click webhook for quick_reply, or the
   // {{1}} URL-suffix text for url (§6.1 "variable + button mapping"). Meta's own approved template
-  // already fixes each button's static label/URL — this component only supplies the per-send part.
+  // already fixes each button's static label/URL — this component only supplies the per-send part,
+  // resolved from `variables` by name (same as the body) when `variable` is set, else `text` as a
+  // fixed fallback for a button whose value genuinely never changes between sends.
   for (const [index, button] of (def.buttons ?? []).entries()) {
+    const value = button.variable !== undefined ? variables[button.variable] : button.text;
     components.push({
       type: "button",
       sub_type: button.type,
       index: String(index),
-      parameters: [button.type === "quick_reply" ? { type: "payload", payload: button.text } : { type: "text", text: button.text }],
+      parameters: [button.type === "quick_reply" ? { type: "payload", payload: value } : { type: "text", text: value }],
     });
   }
 

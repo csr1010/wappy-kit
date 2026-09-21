@@ -54,3 +54,6 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
 
 - 2026-09-21: gate M4 --allow-test-change: M4 replaces M3's documented placeholder send() with the required smart-send + window-guard behavior (already logged for this milestone; re-running gate after ninth review-driven fix round: renderTemplate now actually emits button components from TemplateDef.buttons, matching SPEC §6.1's 'variable + button mapping' requirement — previously buttons was defined but silently ignored)
   M	packages/whatsapp/src/channel.m3.test.ts
+
+- 2026-09-21: gate M4 --allow-test-change: M4 replaces M3's documented placeholder send() with the required smart-send + window-guard behavior (already logged for this milestone; re-running gate after tenth review-driven fix round: template buttons now resolve a per-send variable via new TemplateButtonDef.variable instead of echoing a fixed literal on every send)
+  M	packages/whatsapp/src/channel.m3.test.ts
