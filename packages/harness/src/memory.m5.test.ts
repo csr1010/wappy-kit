@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createClient } from "@libsql/client";
 import { runMemoryConformance } from "@wappy/testkit";
 import { createLibsqlMemory } from "./memory.js";
 
@@ -32,6 +33,25 @@ describe("createLibsqlMemory — conformance", () => {
       turn: { id: "t1", contactId: "c1", role: "agent", text: "hello!", timestamp: 1000 },
     });
     expect(violations).toEqual([]);
+  });
+});
+
+describe("createLibsqlMemory — schema init resilience", () => {
+  test("a transient failure creating the schema is retried on the next call, not permanently cached", async () => {
+    const client = createClient({ url: ":memory:" });
+    const originalExecuteMultiple = client.executeMultiple.bind(client);
+    let executeMultipleCalls = 0;
+    client.executeMultiple = (sql: string) => {
+      executeMultipleCalls++;
+      if (executeMultipleCalls === 1) return Promise.reject(new Error("transient connection blip"));
+      return originalExecuteMultiple(sql);
+    };
+    const memory = createLibsqlMemory({ client });
+
+    await expect(memory.load("c1")).rejects.toThrow("transient connection blip");
+    // A second call must retry schema creation rather than replaying the same cached rejection forever.
+    expect(await memory.load("c1")).toEqual([]);
+    expect(executeMultipleCalls).toBe(2);
   });
 });
 

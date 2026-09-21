@@ -1,4 +1,4 @@
-import { generateObject, generateText, jsonSchema, stepCountIs, tool, type JSONSchema7, type LanguageModel, type ModelMessage } from "ai";
+import { generateObject, generateText, jsonSchema, NoObjectGeneratedError, stepCountIs, tool, type JSONSchema7, type LanguageModel, type ModelMessage } from "ai";
 import type { Model, ModelRequest, ModelResult, Turn } from "@wappy/core";
 
 export interface VercelModelOptions {
@@ -29,8 +29,17 @@ export function createVercelModel(opts: VercelModelOptions): Model {
       const messages: ModelMessage[] = [...toModelMessages(req.history ?? []), { role: "user", content: req.prompt }];
 
       if (req.responseSchema) {
-        const result = await generateObject({ model: opts.model, messages, schema: jsonSchema(req.responseSchema as JSONSchema7), abortSignal, allowSystemInMessages: true, maxRetries: opts.maxRetries });
-        return { structured: result.object };
+        try {
+          const result = await generateObject({ model: opts.model, messages, schema: jsonSchema(req.responseSchema as JSONSchema7), abortSignal, allowSystemInMessages: true, maxRetries: opts.maxRetries });
+          return { structured: result.object };
+        } catch (e) {
+          // On a schema-validation failure, generateObject() throws rather than resolving with a
+          // usable result — but the model may still have produced perfectly fine free text (its raw
+          // attempt). Surface that as `text` so a caller like compose.ts's repair-then-degrade can
+          // actually use it, instead of losing it behind a generic thrown error.
+          if (NoObjectGeneratedError.isInstance(e) && e.text) return { text: e.text };
+          throw e;
+        }
       }
 
       if (req.tools && req.tools.length > 0) {

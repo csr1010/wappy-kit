@@ -8,6 +8,8 @@ const routerDecisionJsonSchema = z.toJSONSchema(RouterDecisionSchema);
  * output -> safe default"). */
 const SAFE_DEFAULT: RouterDecision = { intent: "general", needsRAG: false, needsTool: false, escalate: false, confidence: 0 };
 
+const REPAIR_NOTE = "\n\n(Your previous response didn't match the required JSON schema — respond again with valid JSON only.)";
+
 export interface LlmRouterOptions {
   model: Model;
   /** Overrides the default prompt built from RouterInput. */
@@ -33,8 +35,9 @@ export function createLlmRouter(opts: LlmRouterOptions): Router {
   const buildPrompt = opts.buildPrompt ?? defaultPrompt;
   return {
     async route(input) {
-      const prompt = buildPrompt(input);
+      const basePrompt = buildPrompt(input);
       for (let attempt = 0; attempt < 2; attempt++) {
+        const prompt = attempt === 0 ? basePrompt : basePrompt + REPAIR_NOTE;
         let structured: unknown;
         try {
           structured = (await opts.model.generate({ prompt, responseSchema: routerDecisionJsonSchema })).structured;
