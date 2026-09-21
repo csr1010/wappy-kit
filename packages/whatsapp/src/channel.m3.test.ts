@@ -59,6 +59,13 @@ describe("createWhatsAppChannel — reliability", () => {
     expect(events).toHaveLength(1);
   });
 
+  test("concurrent duplicate deliveries of the same status only fire onStatus once", async () => {
+    const events: StatusEvent[] = [];
+    const channel = createWhatsAppChannel({ phoneNumberId: "pn1", accessToken: "t", onStatus: (e) => events.push(e) });
+    await Promise.all([channel.receive(statusOnlyWebhook), channel.receive(statusOnlyWebhook), channel.receive(statusOnlyWebhook)]);
+    expect(events).toHaveLength(1);
+  });
+
   test("a throwing onStatus leaves the status retryable, not permanently lost", async () => {
     const events: StatusEvent[] = [];
     let shouldThrow = true;

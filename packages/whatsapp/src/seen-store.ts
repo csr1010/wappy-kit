@@ -12,11 +12,11 @@ export interface SeenStore {
    */
   checkAndSet(id: string, now: number): Promise<boolean>;
   /**
-   * Peek without marking. For callers that must only mark an id seen AFTER something that can fail
-   * has succeeded (e.g. a status-update handler) — check `has()`, do the work, then `checkAndSet()`
-   * once it succeeds, so a failure leaves the id retryable instead of permanently swallowed.
+   * Un-marks an id. For a caller that does work AFTER a successful checkAndSet() and that work can
+   * fail: forget() on failure so the id is retryable again (e.g. on the next webhook retry) instead
+   * of being permanently treated as already-handled.
    */
-  has(id: string, now: number): Promise<boolean>;
+  forget(id: string): Promise<void>;
 }
 
 export interface MemorySeenStoreOptions {
@@ -41,11 +41,6 @@ export function createMemorySeenStore(opts: MemorySeenStoreOptions = {}): SeenSt
   return {
     size: () => expiresAt.size,
 
-    async has(id, now) {
-      const existing = expiresAt.get(id);
-      return existing !== undefined && existing > now;
-    },
-
     // No `await` between the read/sweep and the write below, so this is atomic even under
     // concurrent callers racing on the same event-loop turn — exactly one observes `true`.
     async checkAndSet(id, now) {
@@ -54,6 +49,10 @@ export function createMemorySeenStore(opts: MemorySeenStoreOptions = {}): SeenSt
       sweep(now);
       expiresAt.set(id, now + ttlMs);
       return true;
+    },
+
+    async forget(id) {
+      expiresAt.delete(id);
     },
   };
 }

@@ -113,6 +113,13 @@ describe("parseWebhookPayload — additional branch coverage", () => {
     expect(messages[0]?.text).toBe("[unsupported WhatsApp message type: unknown]");
   });
 
+  test("an interactive message that's neither a button nor a list reply (e.g. a Flow nfm_reply) is flagged unsupported, not returned empty", () => {
+    const payload = { entry: [{ changes: [{ field: "messages", value: { messages: [{ id: "x", from: "y", type: "interactive", interactive: { type: "nfm_reply", nfm_reply: { response_json: "{}" } } }] } }] }] };
+    const { messages } = parseWebhookPayload(payload);
+    expect(messages[0]?.text).toBe("[unsupported WhatsApp message type: interactive/nfm_reply]");
+    expect(messages[0]?.selectionId).toBeUndefined();
+  });
+
   test("a status error with a numeric code but no title falls back to a generic error message", () => {
     const payload = { entry: [{ changes: [{ field: "messages", value: { statuses: [{ id: "s1", status: "failed", recipient_id: "r1", errors: [{ code: 500 }] }] } }] }] };
     const { statuses } = parseWebhookPayload(payload);
