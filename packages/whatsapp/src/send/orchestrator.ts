@@ -60,7 +60,12 @@ export async function sendSmartMessage(message: SmartMessage, to: string, deps: 
 
   const numbered = renderNumberedFallback(constrained);
   deps.fallbackStore?.record(to, numbered.options, now);
-  const fallbackResult = await attemptAndReport(renderSmartMessage({ text: numbered.text }, to), to, deps, deps.idempotencyKey ? `${deps.idempotencyKey}:fallback` : undefined);
+  const fallbackResult = await attemptAndReport(
+    renderSmartMessage({ text: numbered.text, quoteId: constrained.quoteId }, to),
+    to,
+    deps,
+    deps.idempotencyKey ? `${deps.idempotencyKey}:fallback` : undefined,
+  );
   if (fallbackResult.status === "sent") return { status: "fellBack", messageId: fallbackResult.messageId, reason: primary.reason };
   return { status: "failed", reason: fallbackResult.reason };
 }
@@ -78,16 +83,16 @@ async function attemptAndReport(payload: CloudApiOutboundPayload, to: string, de
     return result.ok ? { status: "sent", messageId: result.messageId } : { status: "failed", reason: result.reason };
   }
 
-  const existing = deps.queue.enqueue({ idempotencyKey, to, payload }, deps.clock.now());
+  const existing = await deps.queue.enqueue({ idempotencyKey, to, payload }, deps.clock.now());
   if (existing.status === "sent") return { status: "sent", messageId: existing.metaMessageId }; // crash-safe: already delivered before, never resend
 
-  deps.queue.update(idempotencyKey, { status: "pending", attempts: existing.attempts + 1 }, deps.clock.now());
+  await deps.queue.update(idempotencyKey, { status: "pending", attempts: existing.attempts + 1 }, deps.clock.now());
   const result = await sendWithRetry(payload, deps);
   if (result.ok) {
-    deps.queue.update(idempotencyKey, { status: "sent", metaMessageId: result.messageId }, deps.clock.now());
+    await deps.queue.update(idempotencyKey, { status: "sent", metaMessageId: result.messageId }, deps.clock.now());
     return { status: "sent", messageId: result.messageId };
   }
-  deps.queue.update(idempotencyKey, { status: "failed", lastError: result.reason }, deps.clock.now());
+  await deps.queue.update(idempotencyKey, { status: "failed", lastError: result.reason }, deps.clock.now());
   return { status: "failed", reason: result.reason };
 }
 
@@ -99,13 +104,13 @@ async function attemptAndReport(payload: CloudApiOutboundPayload, to: string, de
 export async function replayPendingSends(deps: Pick<SendDeps, "queue" | "clock" | "graphApiBaseUrl" | "phoneNumberId" | "accessToken" | "fetchImpl" | "maxAttempts" | "backoff">): Promise<DeliveryResult[]> {
   if (!deps.queue) return [];
   const results: DeliveryResult[] = [];
-  for (const item of deps.queue.pending()) {
+  for (const item of await deps.queue.pending()) {
     const result = await sendWithRetry(item.payload, deps);
     if (result.ok) {
-      deps.queue.update(item.idempotencyKey, { status: "sent", metaMessageId: result.messageId }, deps.clock.now());
+      await deps.queue.update(item.idempotencyKey, { status: "sent", metaMessageId: result.messageId }, deps.clock.now());
       results.push({ status: "sent", messageId: result.messageId });
     } else {
-      deps.queue.update(item.idempotencyKey, { status: "failed", lastError: result.reason }, deps.clock.now());
+      await deps.queue.update(item.idempotencyKey, { status: "failed", lastError: result.reason }, deps.clock.now());
       results.push({ status: "failed", reason: result.reason });
     }
   }

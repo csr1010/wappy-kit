@@ -122,8 +122,8 @@ describe("sendSmartMessage — fallback ladder", () => {
     const deps = baseDeps({ fetchImpl, queue, idempotencyKey: "reply-to:wamid.inbound3" });
     const result = await sendSmartMessage({ text: "Pick", buttons: [{ id: "a", title: "A" }] }, "c1", deps);
     expect(result.status).toBe("fellBack");
-    expect(queue.get("reply-to:wamid.inbound3")).toMatchObject({ status: "failed" });
-    expect(queue.get("reply-to:wamid.inbound3:fallback")).toMatchObject({ status: "sent", metaMessageId: "wamid.fb" });
+    expect(await queue.get("reply-to:wamid.inbound3")).toMatchObject({ status: "failed" });
+    expect(await queue.get("reply-to:wamid.inbound3:fallback")).toMatchObject({ status: "sent", metaMessageId: "wamid.fb" });
   });
 
   test("if the fallback attempt ALSO fails, reports failed with the fallback's reason", async () => {
@@ -177,8 +177,8 @@ describe("sendSmartMessage — outbound media preflight", () => {
 describe("replayPendingSends", () => {
   test("re-attempts every pending item and updates the queue", async () => {
     const queue = createMemoryOutboundQueue();
-    queue.enqueue({ idempotencyKey: "k1", to: "c1", payload: { type: "text" } }, 0);
-    queue.enqueue({ idempotencyKey: "k2", to: "c1", payload: { type: "text" } }, 0);
+    await queue.enqueue({ idempotencyKey: "k1", to: "c1", payload: { type: "text" } }, 0);
+    await queue.enqueue({ idempotencyKey: "k2", to: "c1", payload: { type: "text" } }, 0);
     let calls = 0;
     const fetchImpl = (async () => {
       calls++;
@@ -187,7 +187,7 @@ describe("replayPendingSends", () => {
     const results = await replayPendingSends({ graphApiBaseUrl: "https://api", phoneNumberId: "pn1", accessToken: "t", fetchImpl, clock, queue });
     expect(results).toHaveLength(2);
     expect(results.every((r) => r.status === "sent")).toBe(true);
-    expect(queue.pending()).toEqual([]);
+    expect(await queue.pending()).toEqual([]);
   });
 
   test("no queue configured -> nothing to replay", async () => {
@@ -196,11 +196,11 @@ describe("replayPendingSends", () => {
 
   test("a failed replay is recorded as failed again, not left pending forever", async () => {
     const queue = createMemoryOutboundQueue();
-    queue.enqueue({ idempotencyKey: "k1", to: "c1", payload: { type: "text" } }, 0);
+    await queue.enqueue({ idempotencyKey: "k1", to: "c1", payload: { type: "text" } }, 0);
     const fetchImpl = (async () => new Response(JSON.stringify({ error: { code: 131026, message: "still undeliverable" } }), { status: 400 })) as typeof fetch;
     const results = await replayPendingSends({ graphApiBaseUrl: "https://api", phoneNumberId: "pn1", accessToken: "t", fetchImpl, clock, queue });
     expect(results).toEqual([{ status: "failed", reason: "meta 131026: still undeliverable" }]);
-    expect(queue.get("k1")?.status).toBe("failed");
+    expect((await queue.get("k1"))?.status).toBe("failed");
   });
 });
 
@@ -226,7 +226,7 @@ describe("sendSmartMessage — outbound queue integration", () => {
     const deps = baseDeps({ fetchImpl, queue, idempotencyKey: "reply-to:wamid.inbound2" });
     const result = await sendSmartMessage({ text: "hi" }, "c1", deps);
     expect(result).toEqual({ status: "failed", reason: "meta 131026: undeliverable" });
-    expect(queue.get("reply-to:wamid.inbound2")).toMatchObject({ status: "failed", lastError: "meta 131026: undeliverable" });
+    expect(await queue.get("reply-to:wamid.inbound2")).toMatchObject({ status: "failed", lastError: "meta 131026: undeliverable" });
   });
 
   test("without a queue, sending twice hits the network twice (no dedupe)", async () => {

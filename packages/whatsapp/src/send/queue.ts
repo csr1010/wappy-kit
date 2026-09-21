@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { CloudApiOutboundPayload } from "./render.js";
 
@@ -18,6 +19,11 @@ export interface QueueItem {
 
 /**
  * Persistent outbound queue (§10 "idempotency key so a retry after crash never double-sends").
+ * Async throughout — this sits on channel.send()'s hot path, so it must never block the event loop
+ * with synchronous disk I/O. Every read-modify-write is serialized through one promise chain per
+ * queue instance (see `serialize` below) so concurrent enqueue()/update() calls can't race and
+ * silently drop each other's writes.
+ *
  * Honest limit: Meta's /messages endpoint has no client-supplied idempotency key of its own, so
  * this can't guarantee Meta-side exactly-once delivery for a crash mid-HTTP-call (we genuinely
  * don't know if they received it). What it DOES guarantee: OUR process re-queuing the same
@@ -26,50 +32,72 @@ export interface QueueItem {
  */
 export interface OutboundQueue {
   /** No-op (returns the existing item) if idempotencyKey is already queued — crash-safe re-submission. */
-  enqueue(item: { idempotencyKey: string; to: string; payload: CloudApiOutboundPayload }, now: number): QueueItem;
-  update(idempotencyKey: string, patch: Partial<Pick<QueueItem, "status" | "attempts" | "metaMessageId" | "lastError">>, now: number): void;
-  get(idempotencyKey: string): QueueItem | undefined;
-  pending(): QueueItem[];
+  enqueue(item: { idempotencyKey: string; to: string; payload: CloudApiOutboundPayload }, now: number): Promise<QueueItem>;
+  update(idempotencyKey: string, patch: Partial<Pick<QueueItem, "status" | "attempts" | "metaMessageId" | "lastError">>, now: number): Promise<void>;
+  get(idempotencyKey: string): Promise<QueueItem | undefined>;
+  pending(): Promise<QueueItem[]>;
 }
 
-function loadQueueFile(path: string): QueueItem[] {
+async function loadQueueFile(path: string): Promise<QueueItem[]> {
   if (!existsSync(path)) return [];
   try {
-    const raw = JSON.parse(readFileSync(path, "utf8"));
+    const raw = JSON.parse(await readFile(path, "utf8"));
     return Array.isArray(raw?.items) ? raw.items : [];
   } catch {
     return []; // a corrupt queue file starts fresh rather than crashing the process — outbound sends are re-derived from the agent, not the sole record of truth
   }
 }
 
-function saveQueueFile(path: string, items: QueueItem[]): void {
+async function saveQueueFile(path: string, items: QueueItem[]): Promise<void> {
   const dir = dirname(path);
-  mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
   const tmp = join(dir, `.${basename(path)}.${process.pid}.${Date.now()}.tmp`);
-  writeFileSync(tmp, JSON.stringify({ items }, null, 2));
-  renameSync(tmp, path);
+  await writeFile(tmp, JSON.stringify({ items }, null, 2));
+  try {
+    await rename(tmp, path);
+  } catch (e) {
+    try {
+      await unlink(tmp);
+    } catch {
+      /* best-effort cleanup */
+    }
+    throw e;
+  }
 }
 
 export function createFileOutboundQueue(path: string): OutboundQueue {
-  let items = loadQueueFile(path);
+  let items: QueueItem[] | undefined;
+  // Every mutation (and the lazy initial load) chains off this promise, so concurrent callers
+  // never interleave their read-modify-write and clobber each other's writes.
+  let chain: Promise<unknown> = Promise.resolve();
+  const serialize = <T>(fn: () => Promise<T>): Promise<T> => {
+    const result = chain.then(fn);
+    chain = result.catch(() => {}); // one failed op must not wedge the chain for everyone after it
+    return result;
+  };
+  const ensureLoaded = async (): Promise<QueueItem[]> => (items ??= await loadQueueFile(path));
 
   return {
-    enqueue(item, now) {
-      const existing = items.find((i) => i.idempotencyKey === item.idempotencyKey);
-      if (existing) return existing;
-      const record: QueueItem = { ...item, status: "pending", attempts: 0, createdAt: now, updatedAt: now };
-      items = [...items, record];
-      saveQueueFile(path, items);
-      return record;
-    },
+    enqueue: (item, now) =>
+      serialize(async () => {
+        const current = await ensureLoaded();
+        const existing = current.find((i) => i.idempotencyKey === item.idempotencyKey);
+        if (existing) return existing;
+        const record: QueueItem = { ...item, status: "pending", attempts: 0, createdAt: now, updatedAt: now };
+        items = [...current, record];
+        await saveQueueFile(path, items);
+        return record;
+      }),
 
-    update(idempotencyKey, patch, now) {
-      items = items.map((i) => (i.idempotencyKey === idempotencyKey ? { ...i, ...patch, updatedAt: now } : i));
-      saveQueueFile(path, items);
-    },
+    update: (idempotencyKey, patch, now) =>
+      serialize(async () => {
+        const current = await ensureLoaded();
+        items = current.map((i) => (i.idempotencyKey === idempotencyKey ? { ...i, ...patch, updatedAt: now } : i));
+        await saveQueueFile(path, items);
+      }),
 
-    get: (idempotencyKey) => items.find((i) => i.idempotencyKey === idempotencyKey),
-    pending: () => items.filter((i) => i.status === "pending"),
+    get: (idempotencyKey) => serialize(async () => (await ensureLoaded()).find((i) => i.idempotencyKey === idempotencyKey)),
+    pending: () => serialize(async () => (await ensureLoaded()).filter((i) => i.status === "pending")),
   };
 }
 
@@ -77,18 +105,22 @@ export function createFileOutboundQueue(path: string): OutboundQueue {
 export function createMemoryOutboundQueue(): OutboundQueue {
   const items: QueueItem[] = [];
   return {
-    enqueue(item, now) {
+    async enqueue(item, now) {
       const existing = items.find((i) => i.idempotencyKey === item.idempotencyKey);
       if (existing) return existing;
       const record: QueueItem = { ...item, status: "pending", attempts: 0, createdAt: now, updatedAt: now };
       items.push(record);
       return record;
     },
-    update(idempotencyKey, patch, now) {
+    async update(idempotencyKey, patch, now) {
       const i = items.findIndex((x) => x.idempotencyKey === idempotencyKey);
       if (i !== -1) items[i] = { ...items[i]!, ...patch, updatedAt: now };
     },
-    get: (idempotencyKey) => items.find((i) => i.idempotencyKey === idempotencyKey),
-    pending: () => items.filter((i) => i.status === "pending"),
+    async get(idempotencyKey) {
+      return items.find((i) => i.idempotencyKey === idempotencyKey);
+    },
+    async pending() {
+      return items.filter((i) => i.status === "pending");
+    },
   };
 }
