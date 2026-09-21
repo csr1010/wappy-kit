@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
+import { APICallError } from "ai";
 import { createVercelModel } from "./model.js";
 import type { Tool } from "@wappy/core";
 
@@ -173,6 +174,38 @@ describe("createVercelModel — tool loop", () => {
     const model = createVercelModel({ model: mock });
     const result = await model.generate({ prompt: "hi", tools: [getOrder] });
     expect(result).toEqual({ text: "hi!" });
+  });
+});
+
+describe("createVercelModel — 429/5xx backoff retry", () => {
+  test("a retryable transient failure is retried (delegated to the AI SDK's own maxRetries), not surfaced as an error", async () => {
+    let attempts = 0;
+    const mock = new MockLanguageModelV4({
+      doGenerate: async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw new APICallError({ message: "rate limited", url: "https://example.test", requestBodyValues: {}, statusCode: 429, isRetryable: true });
+        }
+        return { content: [{ type: "text", text: "ok after retry" }], finishReason: { unified: "stop", raw: "stop" }, usage: { inputTokens: {}, outputTokens: {} }, warnings: [] };
+      },
+    });
+    const model = createVercelModel({ model: mock, maxRetries: 2 });
+    const result = await model.generate({ prompt: "hi" });
+    expect(result).toEqual({ text: "ok after retry" });
+    expect(attempts).toBe(2);
+  });
+
+  test("a non-retryable failure is not retried and propagates", async () => {
+    let attempts = 0;
+    const mock = new MockLanguageModelV4({
+      doGenerate: async () => {
+        attempts++;
+        throw new APICallError({ message: "bad request", url: "https://example.test", requestBodyValues: {}, statusCode: 400, isRetryable: false });
+      },
+    });
+    const model = createVercelModel({ model: mock, maxRetries: 2 });
+    await expect(model.generate({ prompt: "hi" })).rejects.toThrow();
+    expect(attempts).toBe(1);
   });
 });
 

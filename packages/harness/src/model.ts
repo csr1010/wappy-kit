@@ -9,6 +9,10 @@ export interface VercelModelOptions {
   /** Max model round-trips when tools are involved: 1 tool-call step + follow-up steps where the
    * model sees results and composes its final reply (§9 Scenario C). Default 5. */
   maxToolSteps?: number;
+  /** Retries a transient failure (429/5xx) with backoff before giving up — delegated to the AI
+   * SDK's own retry handling rather than reimplemented here (§10 "429 -> backoff retry"). SDK
+   * default (2) if unset. */
+  maxRetries?: number;
 }
 
 function toModelMessages(history: Turn[]): ModelMessage[] {
@@ -25,7 +29,7 @@ export function createVercelModel(opts: VercelModelOptions): Model {
       const messages: ModelMessage[] = [...toModelMessages(req.history ?? []), { role: "user", content: req.prompt }];
 
       if (req.responseSchema) {
-        const result = await generateObject({ model: opts.model, messages, schema: jsonSchema(req.responseSchema as JSONSchema7), abortSignal, allowSystemInMessages: true });
+        const result = await generateObject({ model: opts.model, messages, schema: jsonSchema(req.responseSchema as JSONSchema7), abortSignal, allowSystemInMessages: true, maxRetries: opts.maxRetries });
         return { structured: result.object };
       }
 
@@ -40,12 +44,12 @@ export function createVercelModel(opts: VercelModelOptions): Model {
             }),
           ]),
         );
-        const result = await generateText({ model: opts.model, messages, tools, stopWhen: stepCountIs(opts.maxToolSteps ?? 5), abortSignal, allowSystemInMessages: true });
+        const result = await generateText({ model: opts.model, messages, tools, stopWhen: stepCountIs(opts.maxToolSteps ?? 5), abortSignal, allowSystemInMessages: true, maxRetries: opts.maxRetries });
         const toolCalls = result.toolCalls.map((c) => ({ name: c.toolName, args: c.input }));
         return toolCalls.length > 0 ? { text: result.text || undefined, toolCalls } : { text: result.text };
       }
 
-      const result = await generateText({ model: opts.model, messages, abortSignal, allowSystemInMessages: true });
+      const result = await generateText({ model: opts.model, messages, abortSignal, allowSystemInMessages: true, maxRetries: opts.maxRetries });
       return { text: result.text };
     },
   };
