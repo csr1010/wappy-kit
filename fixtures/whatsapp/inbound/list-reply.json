@@ -1,0 +1,30 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102290129340398",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "15550001111", "phone_number_id": "106540352242922" },
+            "contacts": [{ "profile": { "name": "Ada Lovelace" }, "wa_id": "15550002222" }],
+            "messages": [
+              {
+                "from": "15550002222",
+                "id": "wamid.LIST0001",
+                "timestamp": "1750000200",
+                "type": "interactive",
+                "interactive": {
+                  "type": "list_reply",
+                  "list_reply": { "id": "order_8842", "title": "Order #8842", "description": "Placed Jun 12" }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
