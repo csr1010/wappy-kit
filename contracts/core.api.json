@@ -85,19 +85,19 @@
   },
   "InboundMedia": {
     "kind": "TypeAliasDeclaration",
-    "type": "{    kind: \"image\" | \"document\" | \"video\" | \"audio\" | \"voice\" | \"location\";    url?: string | undefined;    mimeType?: string | undefined;    caption?: string | undefined;}"
+    "type": "{    kind: \"image\" | \"document\" | \"video\" | \"audio\" | \"voice\" | \"location\";    url?: string | undefined;    mimeType?: string | undefined;    caption?: string | undefined;    latitude?: number | undefined;    longitude?: number | undefined;}"
   },
   "InboundMediaSchema": {
     "kind": "VariableDeclaration",
-    "type": "z.ZodObject<{    kind: z.ZodEnum<{        image: \"image\";        document: \"document\";        video: \"video\";        audio: \"audio\";        voice: \"voice\";        location: \"location\";    }>;    url: z.ZodOptional<z.ZodString>;    mimeType: z.ZodOptional<z.ZodString>;    caption: z.ZodOptional<z.ZodString>;}, z.core.$strip>"
+    "type": "z.ZodObject<{    kind: z.ZodEnum<{        image: \"image\";        document: \"document\";        video: \"video\";        audio: \"audio\";        voice: \"voice\";        location: \"location\";    }>;    url: z.ZodOptional<z.ZodString>;    mimeType: z.ZodOptional<z.ZodString>;    caption: z.ZodOptional<z.ZodString>;    latitude: z.ZodOptional<z.ZodNumber>;    longitude: z.ZodOptional<z.ZodNumber>;}, z.core.$strip>"
   },
   "InboundMessage": {
     "kind": "TypeAliasDeclaration",
-    "type": "{    id: string;    contactId: string;    channel: string;    timestamp: number;    text?: string | undefined;    media?: {        kind: \"image\" | \"document\" | \"video\" | \"audio\" | \"voice\" | \"location\";        url?: string | undefined;        mimeType?: string | undefined;        caption?: string | undefined;    } | undefined;    raw?: unknown;}"
+    "type": "{    id: string;    contactId: string;    channel: string;    timestamp: number;    text?: string | undefined;    media?: {        kind: \"image\" | \"document\" | \"video\" | \"audio\" | \"voice\" | \"location\";        url?: string | undefined;        mimeType?: string | undefined;        caption?: string | undefined;        latitude?: number | undefined;        longitude?: number | undefined;    } | undefined;    selectionId?: string | undefined;    raw?: unknown;}"
   },
   "InboundMessageSchema": {
     "kind": "VariableDeclaration",
-    "type": "z.ZodObject<{    id: z.ZodString;    contactId: z.ZodString;    channel: z.ZodString;    text: z.ZodOptional<z.ZodString>;    media: z.ZodOptional<z.ZodObject<{        kind: z.ZodEnum<{            image: \"image\";            document: \"document\";            video: \"video\";            audio: \"audio\";            voice: \"voice\";            location: \"location\";        }>;        url: z.ZodOptional<z.ZodString>;        mimeType: z.ZodOptional<z.ZodString>;        caption: z.ZodOptional<z.ZodString>;    }, z.core.$strip>>;    timestamp: z.ZodNumber;    raw: z.ZodOptional<z.ZodUnknown>;}, z.core.$strip>"
+    "type": "z.ZodObject<{    id: z.ZodString;    contactId: z.ZodString;    channel: z.ZodString;    text: z.ZodOptional<z.ZodString>;    media: z.ZodOptional<z.ZodObject<{        kind: z.ZodEnum<{            image: \"image\";            document: \"document\";            video: \"video\";            audio: \"audio\";            voice: \"voice\";            location: \"location\";        }>;        url: z.ZodOptional<z.ZodString>;        mimeType: z.ZodOptional<z.ZodString>;        caption: z.ZodOptional<z.ZodString>;        latitude: z.ZodOptional<z.ZodNumber>;        longitude: z.ZodOptional<z.ZodNumber>;    }, z.core.$strip>>;    selectionId: z.ZodOptional<z.ZodString>;    timestamp: z.ZodNumber;    raw: z.ZodOptional<z.ZodUnknown>;}, z.core.$strip>"
   },
   "isLockStale": {
     "kind": "FunctionDeclaration",

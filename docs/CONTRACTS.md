@@ -6,7 +6,7 @@ gate on a breaking change. Later sessions should only need this file, not core s
 
 ## Data schemas (zod, `schemas.ts`)
 
-- `InboundMessageSchema` -> `InboundMessage`: `{ id, contactId, channel, text?, media?, timestamp, raw? }`.
+- `InboundMessageSchema` -> `InboundMessage`: `{ id, contactId, channel, text?, media?, selectionId?, timestamp, raw? }`. `selectionId` (added M3) is the stable id of a picked button/list-row/quick-reply — routing must key off this, never off `text` (titles can be duplicated/localized/renamed). `InboundMedia` (added M3) also carries `latitude?`/`longitude?`, meaningful only when `kind === "location"`.
 - `SmartMessageSchema` -> `SmartMessage`: `{ text?, buttons?, list?, cta?, media?, quoteId?, flow? }`, at least one of text/buttons/list/cta/media required.
   - **Layering rule (§6.1):** this schema enforces *structural* limits only — max 3 buttons, max 10 list rows total. It does **not** enforce string-length limits (button title <=20, list row title <=24, description <=72); those are truncated by `@wappy/whatsapp` at send time (M4). An over-length string is valid input here.
   - `flow` is a reserved, unvalidated slot for WhatsApp Flows/forms (deferred; SPEC §6.1).

@@ -79,8 +79,11 @@ function parseOneMessage(raw: unknown, channel: string): InboundMessage | null {
 
   if (type === "interactive") {
     const interactive = record(r.interactive);
-    const title = str(record(interactive.button_reply).title) ?? str(record(interactive.list_reply).title);
-    return { ...base, text: title };
+    const buttonReply = record(interactive.button_reply);
+    const listReply = record(interactive.list_reply);
+    const title = str(buttonReply.title) ?? str(listReply.title);
+    const selectionId = str(buttonReply.id) ?? str(listReply.id);
+    return { ...base, text: title, selectionId };
   }
 
   if ((MEDIA_TYPES as readonly string[]).includes(type)) {
@@ -98,7 +101,9 @@ function parseOneMessage(raw: unknown, channel: string): InboundMessage | null {
 
   if (type === "location") {
     const loc = record(r.location);
-    return { ...base, media: { kind: "location", caption: str(loc.name) } };
+    const latitude = typeof loc.latitude === "number" ? loc.latitude : undefined;
+    const longitude = typeof loc.longitude === "number" ? loc.longitude : undefined;
+    return { ...base, media: { kind: "location", caption: str(loc.name), latitude, longitude } };
   }
 
   if (type === "reaction") {
