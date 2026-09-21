@@ -161,6 +161,16 @@ export function isComplete(answers: InterviewAnswers): boolean {
   return nextStep(answers) === null;
 }
 
+/** Every step's answer is present — the shape the generators (T9.3) require. */
+export type CompleteInterviewAnswers = Required<InterviewAnswers>;
+
+/** Narrows `answers` to `CompleteInterviewAnswers`, throwing a clear error if any step is still
+ * unanswered — generation should never silently proceed on a partial interview. */
+export function assertComplete(answers: InterviewAnswers): asserts answers is CompleteInterviewAnswers {
+  const missing = nextStep(answers);
+  if (missing !== null) throw new Error(`Interview is incomplete — "${missing}" hasn't been answered yet.`);
+}
+
 function nonEmpty(s: string | undefined, label: string): string[] {
   return s && s.trim().length > 0 ? [] : [`${label} is required and cannot be empty.`];
 }

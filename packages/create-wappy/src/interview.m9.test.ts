@@ -130,6 +130,26 @@ describe("applyAnswer — invalid combos blocked", () => {
     const result = applyAnswer(answers, "whatsapp", { mode: "now", phoneNumberId: "106540352242922", accessToken: "EAAtest", verifyToken: "my-verify-token" });
     expect(result.ok).toBe(true);
   });
+
+  test("an explicit undefined value (e.g. a missing non-interactive flag) is rejected for every step that requires one", () => {
+    expect(applyAnswer(fillThrough("model"), "framework", undefined as never).ok).toBe(false);
+    expect(applyAnswer(fillThrough("framework"), "skills", undefined as never).ok).toBe(false);
+    expect(applyAnswer(fillThrough("skills"), "tools", undefined as never).ok).toBe(false);
+    expect(applyAnswer(fillThrough("tools"), "memory", undefined as never).ok).toBe(false);
+    expect(applyAnswer(fillThrough("memory"), "router", undefined as never).ok).toBe(false);
+    expect(applyAnswer(fillThrough("router"), "whatsapp", undefined as never).ok).toBe(false);
+  });
+
+  test("an unrecognized tools/router/whatsapp value (e.g. from malformed non-interactive input) is rejected, not silently accepted", () => {
+    const afterSkills = fillThrough("skills");
+    expect(applyAnswer(afterSkills, "tools", { kind: "carrier-pigeon" } as never).ok).toBe(false);
+
+    const afterMemory = fillThrough("memory");
+    expect(applyAnswer(afterMemory, "router", { router: "carrier-pigeon" } as never).ok).toBe(false);
+
+    const afterRouter = fillThrough("router");
+    expect(applyAnswer(afterRouter, "whatsapp", { mode: "carrier-pigeon" } as never).ok).toBe(false);
+  });
 });
 
 describe("goBack — revise an earlier answer", () => {
