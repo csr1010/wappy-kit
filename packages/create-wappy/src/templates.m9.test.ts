@@ -160,6 +160,39 @@ describe("renderProject — .env.sample covers every env var the generated code 
   });
 });
 
+describe("renderProject — products skill (catalog browsing + stock)", () => {
+  test("wires createProductsSkill, its own skills/products.ts file, and doesn't touch order tools", () => {
+    const files = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" }, skills: { skills: ["products"] } }), versions: VERSIONS }));
+    expect(files.get("index.ts")).toContain("createProductsSkill");
+    expect(files.get("index.ts")).toContain("skills.register(createProductsSkill());");
+    expect(files.get("skills/products.ts")).toContain("import { createProductsSkill } from \"@wappy/harness\";");
+    expect(files.get("skills/products.ts")).toContain("export const productsSkill = createProductsSkill();");
+    expect(files.has("skills/orders.ts")).toBe(false);
+  });
+
+  test("all three skills together register independently, each with its own file", () => {
+    const files = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" }, skills: { skills: ["store-info", "orders", "products"] } }), versions: VERSIONS }));
+    for (const path of ["skills/store-info.ts", "skills/orders.ts", "skills/products.ts"]) expect(files.has(path)).toBe(true);
+    const indexTs = files.get("index.ts")!;
+    expect(indexTs).toContain("skills.register(STORE_INFO_SKILL);");
+    expect(indexTs).toContain("skills.register(createOrdersSkill());");
+    expect(indexTs).toContain("skills.register(createProductsSkill());");
+  });
+
+  test("a store-specific draft for products is inlined the same way as orders/store-info", () => {
+    const files = fileMap(
+      renderProject({
+        answers: complete({ tools: { kind: "shopify" }, skills: { skills: ["products"] } }),
+        versions: VERSIONS,
+        storeSkillDrafts: { products: { promptFragment: "We sell candles and wax melts." } },
+      }),
+    );
+    const skillFile = files.get("skills/products.ts")!;
+    expect(skillFile).toContain("...createProductsSkill()");
+    expect(skillFile).toContain(JSON.stringify("We sell candles and wax melts."));
+  });
+});
+
 describe("renderProject — WhatsApp credentials are never asked for", () => {
   test("every project lists the four WhatsApp keys, blank, in .env.sample — whatever else was chosen", () => {
     for (const answers of [complete(), complete({ tools: { kind: "shopify" } }), complete({ model: { provider: "ollama" } })]) {

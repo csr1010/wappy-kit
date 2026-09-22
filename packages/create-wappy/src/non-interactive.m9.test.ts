@@ -66,7 +66,7 @@ describe("errors", () => {
   });
 
   test("an unknown skill lists the valid ones", () => {
-    expect(errors({ model: "openai", api: "shopify", skills: "orders,refunds" })).toEqual(['--skills has unknown skill(s): refunds. Valid: store-info, orders, or "none".']);
+    expect(errors({ model: "openai", api: "shopify", skills: "orders,refunds" })).toEqual(['--skills has unknown skill(s): refunds. Valid: store-info, orders, products, or "none".']);
   });
 
   test("--skills without a store is rejected (skills only apply to the Shopify path)", () => {

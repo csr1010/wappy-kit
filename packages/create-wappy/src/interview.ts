@@ -29,7 +29,7 @@ export interface ModelAnswer {
 /** The reference skills v0.1 actually ships — matches `@wappy/harness`'s
  * `STORE_INFO_SKILL`/`createOrdersSkill` exactly; NOT an open-ended list (no downloading external
  * skills yet, per spec). They are Shopify-flavored examples, offered only on the Shopify path. */
-export const REFERENCE_SKILLS = ["store-info", "orders"] as const;
+export const REFERENCE_SKILLS = ["store-info", "orders", "products"] as const;
 export type ReferenceSkillName = (typeof REFERENCE_SKILLS)[number];
 export interface SkillsAnswer {
   /** Empty array = "none". */
@@ -80,6 +80,7 @@ const QUESTIONS: Record<InterviewStepId, InterviewQuestionMeta> = {
     choices: [
       { value: "store-info", label: "Store info (hours, location, policies via RAG)" },
       { value: "orders", label: "Orders (order status via tools)" },
+      { value: "products", label: "Products (catalog browsing + stock via tools)" },
     ],
   },
 };

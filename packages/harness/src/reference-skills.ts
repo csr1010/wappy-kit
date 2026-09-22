@@ -47,3 +47,32 @@ export function createOrdersSkill(opts: CreateOrdersSkillOptions = {}): Skill {
     memorySchema: { lastOrderId: "string | undefined — the most recently discussed order id, if an app wants to persist it" },
   };
 }
+
+/** Tool names this skill expects — `searchProducts`/`getProduct` (browsing) and
+ * `getInventoryLevels` (stock) match the Shopify connector's own tool names; any OpenAPI-generated
+ * provider exposing tools under these same names works identically. */
+export const DEFAULT_PRODUCTS_SKILL_TOOLS = ["searchProducts", "getProduct", "getInventoryLevels"];
+
+export interface CreateProductsSkillOptions {
+  /** Override if the wired ToolProvider names its product tools differently. Default
+   * `DEFAULT_PRODUCTS_SKILL_TOOLS`. */
+  toolNames?: string[];
+}
+
+/**
+ * products: tool-grounded browsing — "what do you sell", "do you have X", "is Y in stock". The
+ * prompt fragment specifically steers toward SmartMessage's `list` shape (§6.1/§6.3: the model
+ * emits the rich-response schema directly) for MULTIPLE results, since a scrolling WhatsApp list
+ * reads far better than a wall of text — plain formatted text is still correct for a single
+ * product or a stock check. Distinct from `orders` (which never touches product/catalog tools) so
+ * a deployment can wire one without the other.
+ */
+export function createProductsSkill(opts: CreateProductsSkillOptions = {}): Skill {
+  return {
+    name: "products",
+    description: "Answers questions about what the store sells, product details, and stock levels using the store's catalog tools.",
+    promptFragment:
+      "You can search the store's products, get details on one product, and check stock levels using the available tools. Only describe what a tool result actually returned — never invent a product, price, or stock level. When a tool returns several products, prefer WhatsApp's list message (a title and one line per product — name and price) over a long paragraph; for a single product or a stock check, a short formatted reply is fine. If nothing matches, say so honestly rather than guessing.",
+    tools: opts.toolNames ?? DEFAULT_PRODUCTS_SKILL_TOOLS,
+  };
+}
