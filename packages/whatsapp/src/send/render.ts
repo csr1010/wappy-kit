@@ -7,6 +7,17 @@ function context(message: SmartMessage): Record<string, unknown> {
   return message.quoteId ? { context: { message_id: message.quoteId } } : {};
 }
 
+/** Meta HARD-rejects an interactive message with an empty `body.text` — confirmed against the real
+ * Cloud API (400: "The parameter interactive.body.text is required."), not assumed. A model
+ * emitting `list`/`buttons`/`cta` without its own intro `text` (common — it's easy to put
+ * everything into the rows/buttons and forget the intro sentence) used to send `text: ""`,
+ * causing every such send to fail and silently degrade to the numbered-text fallback ladder —
+ * found by hand-testing a real product list. These are the fallback ONLY when the model didn't
+ * supply real intro text; a skill/prompt writing its own text still wins (§6.3: model controls UX intent). */
+function bodyText(message: SmartMessage, fallback: string): string {
+  return message.text && message.text.length > 0 ? message.text : fallback;
+}
+
 /**
  * Renders an already-constraint-checked SmartMessage into a Cloud API payload. Picks the richest
  * type the message actually asks for: buttons > list > cta > media > plain text (§6.1). Text
@@ -22,7 +33,7 @@ export function renderSmartMessage(message: SmartMessage, to: string): CloudApiO
       type: "interactive",
       interactive: {
         type: "button",
-        body: { text: message.text ?? "" },
+        body: { text: bodyText(message, "Please choose an option:") },
         action: { buttons: message.buttons.map((b) => ({ type: "reply", reply: { id: b.id, title: b.title } })) },
       },
     };
@@ -34,7 +45,7 @@ export function renderSmartMessage(message: SmartMessage, to: string): CloudApiO
       type: "interactive",
       interactive: {
         type: "list",
-        body: { text: message.text ?? "" },
+        body: { text: bodyText(message, "Here's what I found:") },
         action: {
           button: message.list.buttonText,
           sections: message.list.sections.map((s) => ({
@@ -52,7 +63,7 @@ export function renderSmartMessage(message: SmartMessage, to: string): CloudApiO
       type: "interactive",
       interactive: {
         type: "cta_url",
-        body: { text: message.text ?? "" },
+        body: { text: bodyText(message, "Here's a link that might help:") },
         action: { name: "cta_url", parameters: { display_text: message.cta.text, url: message.cta.url } },
       },
     };
