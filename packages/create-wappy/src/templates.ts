@@ -129,7 +129,7 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   const tools = toolsSetup(answers.tools);
   const skills = skillsOf(answers);
 
-  const harnessImports = new Set<string>(["createAgent", "createVercelModel", "createLibsqlMemory", "createLlmRouter", "createInMemoryTracer"]);
+  const harnessImports = new Set<string>(["createAgent", "createVercelModel", "createLibsqlMemory", "createLlmRouter"]);
   if (skills.length > 0) harnessImports.add("createSkillRegistry");
   for (const s of skills) harnessImports.add(SKILL_IMPORT_NAMES[s]);
   if (skills.includes("store-info")) {
@@ -142,7 +142,7 @@ function renderIndexTs(opts: RenderProjectOptions): string {
 
   const lines: string[] = [];
   lines.push('import "dotenv/config";');
-  lines.push('import { systemClock } from "@wappy/core";');
+  lines.push('import { createInMemoryTracer, systemClock } from "@wappy/core";');
   if (skills.includes("store-info")) lines.push('import { createClient } from "@libsql/client";');
   lines.push(`import { ${[...harnessImports].sort().join(", ")} } from "@wappy/harness";`);
   lines.push('import { createWhatsAppChannel } from "@wappy/whatsapp";');
