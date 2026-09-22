@@ -93,12 +93,30 @@ describe("createShopifyToolProvider — searchProducts", () => {
     expect((seenBody as { variables: { q: string; first: number } }).variables).toEqual({ q: "shoe", first: 5 });
   });
 
-  test("a missing query argument fails without a network call", async () => {
-    const fetchImpl = vi.fn();
-    const p = provider(fetchImpl);
+  // Corrected v2.5 (SPEC.md decisions log, --allow-test-change): query is optional, not required —
+  // Shopify's own GraphQL products(first, query) field accepts a null query and lists unfiltered
+  // results; the old hard rejection here made plain browsing ("show me your products") impossible.
+  test("a missing query argument lists products unfiltered (query sent as null, not required)", async () => {
+    let seenVariables: { q: unknown; first: number } | undefined;
+    const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
+      seenVariables = JSON.parse(init!.body as string).variables;
+      return jsonResponse({ data: { products: { edges: [{ node: { id: "gid://shopify/Product/1", title: "Red Shoe", handle: "red-shoe", status: "ACTIVE", totalInventory: 12, priceRangeV2: { minVariantPrice: { amount: "19.99", currencyCode: "USD" }, maxVariantPrice: { amount: "19.99", currencyCode: "USD" } } } }] } } });
+    };
+    const p = provider(fetchImpl as never);
     const result = await p.listTools().find((t) => t.name === "searchProducts")!.execute({});
-    expect(result.ok).toBe(false);
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(seenVariables).toEqual({ q: null, first: 10 });
+  });
+
+  test("an empty-string query is also treated as no filter (sent as null), not a literal empty search", async () => {
+    let seenVariables: { q: unknown } | undefined;
+    const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
+      seenVariables = JSON.parse(init!.body as string).variables;
+      return jsonResponse({ data: { products: { edges: [] } } });
+    };
+    const p = provider(fetchImpl as never);
+    await p.listTools().find((t) => t.name === "searchProducts")!.execute({ query: "" });
+    expect(seenVariables!.q).toBeNull();
   });
 
   test("limit is clamped into [1, 50]", async () => {
