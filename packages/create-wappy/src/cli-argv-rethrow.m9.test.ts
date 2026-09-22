@@ -18,7 +18,7 @@ describe("runCli — an unexpected (non-ArgvError) parse failure propagates inst
   test("rethrows rather than reporting it as a normal flag error", async () => {
     const { runCli } = await import("./cli.js");
     await expect(
-      runCli({ argv: [], cwd: "/tmp", versions: { core: "0", harness: "0", whatsapp: "0", toolsOpenapi: "0" }, runInteractive: async () => { throw new Error("unused"); }, print: () => {} }),
+      runCli({ argv: [], cwd: "/tmp", versions: { core: "0", harness: "0", whatsapp: "0", toolsOpenapi: "0", createWappy: "0" }, runInteractive: async () => { throw new Error("unused"); }, print: () => {} }),
     ).rejects.toThrow("boom — not an ArgvError");
   });
 });

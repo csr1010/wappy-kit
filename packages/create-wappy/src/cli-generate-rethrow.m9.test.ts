@@ -20,7 +20,7 @@ describe("runCli — an unexpected (non-StateLoadError) generation failure propa
       runCli({
         argv: ["--yes", "--model", "openai", "--api", "none"],
         cwd: "/tmp",
-        versions: { core: "0", harness: "0", whatsapp: "0", toolsOpenapi: "0" },
+        versions: { core: "0", harness: "0", whatsapp: "0", toolsOpenapi: "0", createWappy: "0" },
         runInteractive: async () => {
           throw new Error("unused");
         },

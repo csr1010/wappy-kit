@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { DEFAULT_ANSWERS, type CompleteInterviewAnswers, type InterviewAnswers } from "./interview.js";
 import { renderProject, type PartVersions, type RenderProjectOptions } from "./templates.js";
 
-const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", toolsOpenapi: "0.1.0" };
+const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", toolsOpenapi: "0.1.0", createWappy: "0.1.0" };
 
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
   const model = overrides.model ?? DEFAULT_ANSWERS.model;
@@ -91,6 +91,7 @@ describe("renderProject — golden path (openai + shopify + store-info/orders)",
     expect(pkg.dependencies["@wappy/core"]).toBe("0.1.0");
     expect(pkg.dependencies["@wappy/harness"]).toBe("0.1.0");
     expect(pkg.dependencies["@wappy/tools-openapi"]).toBe("0.1.0");
+    expect(pkg.dependencies["create-wappy"]).toBe("0.1.0"); // provides the `wappy` bin `npm run dev` needs
     expect(pkg.dependencies["@ai-sdk/openai"]).toBeDefined();
     expect(pkg.dependencies["@libsql/client"]).toBeDefined(); // store-info needs Knowledge's LibSQL client
   });
