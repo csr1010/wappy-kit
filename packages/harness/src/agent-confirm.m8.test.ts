@@ -11,7 +11,7 @@ function msg(overrides: Partial<InboundMessage> = {}): InboundMessage {
 }
 
 function textModel(text = "reply"): Model {
-  return { generate: async () => ({ structured: { text } }) };
+  return { generate: async () => ({ structured: { formatRationale: "test rationale", message: { text } } }) };
 }
 
 const GREETING: RouterDecision = { intent: "greeting", needsRAG: false, needsTool: false, escalate: false, confidence: 0.9 };

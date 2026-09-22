@@ -10,6 +10,25 @@ import { CANCEL_ACTION, parseConfirmSelection, type ConfirmFlow, type ParsedConf
 
 const SCOPE_GUARDRAIL = "If the user's request is genuinely unrelated to what you're configured to help with, say so honestly and directly rather than guessing or making something up.";
 
+/** M12: replaces every per-skill format hint that used to be hand-authored per domain (e.g. a
+ * products skill saying "prefer a list for multiple items"). One fixed instruction, zero domain
+ * language, applies to every reply regardless of what connector or skill produced the content —
+ * a cognitive question series, not a flat command, per the design this milestone settled on.
+ * Runs on every compose call, including the cheapest path ("hi") — a deliberate trade against the
+ * router's own cheapest-path principle, made explicitly, not by accident. */
+const FORMAT_REASONING = `Before you reply, work through these questions about how to present it, not just what to say:
+1. What formats can I actually use? Plain text. Up to 3 quick-reply buttons. A list of up to 10 options. A single link as a tappable button. An image, video, or document, optionally paired with buttons or a list.
+2. Does this reply have 2 or more distinct things the person could choose between? If yes, a list or buttons let them tap instead of type.
+3. Is there exactly one clear next action, like opening a link? A tappable link button beats a raw URL in text.
+4. Would an image, video, or document actually help here? If yes, attach it — pair it with buttons or a list too if you're also offering a choice.
+5. Is this just a short, conversational answer with nothing to structure? Plain text is correct then. Don't force structure onto it.
+6. Given all that, which single format fits best, and why? State that reason in formatRationale, specific to this exact reply, not a generic justification you'd give for any reply.`;
+
+/** M12: the single, generic honesty rule that replaced three near-identical, hand-written
+ * sentences (store-info/orders/products' own skill fragments each said this in different words). */
+const GROUNDING_HONESTY =
+  "Only state what a tool call or retrieved document actually returned. Never invent a detail, a value, or a status that wasn't actually provided. If nothing relevant was found, or a tool call failed, say so honestly rather than guessing.";
+
 const REFUSAL_TEXT = "That message is too long for me to process — could you send it as a shorter message?";
 const OVERSIZED_PLACEHOLDER = "(the user sent a message too large to process)";
 const NOTHING_PENDING_TEXT = "There's nothing pending to confirm right now.";
@@ -323,7 +342,7 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     const composed = await composeWithBudget({
       model: deps.model,
       input: {
-        system: SCOPE_GUARDRAIL,
+        system: `${SCOPE_GUARDRAIL}\n\n${FORMAT_REASONING}\n\n${GROUNDING_HONESTY}`,
         skillFragments,
         toolSchemas,
         summary: windowed.summary,
@@ -336,7 +355,7 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     // One "llm" event (not two) carries both the compose step and its token-usage-per-section (T6.9)
     // — spine A's own assertion counts "llm" trace events as a proxy for underlying model calls, and
     // this compose step is exactly one such call (retries/shrinks happen inside composeWithBudget).
-    trace(deps.tracer, "llm", "compose", { usage: composed.usage, dropped: composed.dropped, shrunkForContextLength: composed.shrunkForContextLength });
+    trace(deps.tracer, "llm", "compose", { usage: composed.usage, dropped: composed.dropped, shrunkForContextLength: composed.shrunkForContextLength, formatRationale: composed.formatRationale });
     reply = composed.reply;
   }
 

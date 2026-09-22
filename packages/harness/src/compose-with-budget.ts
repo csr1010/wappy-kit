@@ -1,9 +1,26 @@
-import { SmartMessageSchema, smartMessageJsonSchema, type Model, type SmartMessage } from "@wappy/core";
+import { z } from "zod";
+import { SmartMessageSchema, type Model, type SmartMessage } from "@wappy/core";
 import { assemblePrompt, type AssembleInput, type AssembleResult } from "./assemble.js";
 import type { ContextBudget } from "./context-budget.js";
 
 const REPAIR_NOTE = "\n\n(Your previous reply didn't match the required JSON schema — respond again with valid JSON only.)";
 const FALLBACK_TEXT = "Sorry, I'm having trouble putting together a reply right now — please try again shortly.";
+/** Used only on the fallback-degrade path (no real compose ever succeeded) — never a fabricated
+ * justification for a format the model didn't actually choose. */
+const FALLBACK_RATIONALE = "(no rationale — compose failed, this is the honest-degrade fallback text)";
+
+/**
+ * M12: the compose call's response is wrapped with `formatRationale`, LOCAL to this module only —
+ * this does NOT change the core `SmartMessage`/`MessageChannel.send()` contract; `reply` below is
+ * still exactly a `SmartMessage`, unwrapped, before it ever reaches a caller. Capturing the
+ * rationale (not just prompting for good format choice and discarding the reasoning) makes a bad
+ * format choice debuggable later — traced by agent.ts after a successful call.
+ */
+const ComposeResponseSchema = z.object({
+  formatRationale: z.string().min(1).max(300),
+  message: SmartMessageSchema,
+});
+const composeResponseJsonSchema = z.toJSONSchema(ComposeResponseSchema);
 
 /** Provider-agnostic detection of a "context too long" failure (§10 T6.8): checks the normalized
  * `code` convention used by testkit's mockModel first, then falls back to matching common phrasing
@@ -26,6 +43,9 @@ export interface ComposeWithBudgetOptions {
 
 export interface ComposeWithBudgetResult {
   reply: SmartMessage;
+  /** M12: the model's own stated reason for the format it picked — captured for tracing, never
+   * sent to WhatsApp. `FALLBACK_RATIONALE` on the honest-degrade path (no real compose succeeded). */
+  formatRationale: string;
   usage: Record<string, number>;
   dropped: string[];
   /** True if a context-length error triggered the shrink-and-retry (§10 T6.8). */
@@ -33,12 +53,12 @@ export interface ComposeWithBudgetResult {
 }
 
 /**
- * Assembles a prompt (T6.2) and composes a SmartMessage, with ONE repair attempt across two
- * distinct failure modes: malformed/invalid structured output (or any other error) gets the same
- * repair-note retry as compose.ts's composeSmartMessage; a context-length error specifically SHRINKS
- * the budget by 25% and retries instead (adding a repair note would only make an oversized prompt
- * worse). Still degrades to whatever text either attempt produced, or an honest fallback, never a
- * crash or a silent reply (§10).
+ * Assembles a prompt (T6.2) and composes a SmartMessage (+ M12's formatRationale), with ONE repair
+ * attempt across two distinct failure modes: malformed/invalid structured output (or any other
+ * error) gets the same repair-note retry as compose.ts's composeSmartMessage; a context-length
+ * error specifically SHRINKS the budget by 25% and retries instead (adding a repair note would
+ * only make an oversized prompt worse). Still degrades to whatever text either attempt produced,
+ * or an honest fallback, never a crash or a silent reply (§10).
  */
 export async function composeWithBudget(opts: ComposeWithBudgetOptions): Promise<ComposeWithBudgetResult> {
   let budget = opts.budget;
@@ -51,10 +71,12 @@ export async function composeWithBudget(opts: ComposeWithBudgetOptions): Promise
     const assembled = assemblePrompt(input, budget);
     lastAssembled = assembled;
     try {
-      const result = await opts.model.generate({ prompt: assembled.prompt, system: opts.input.system, responseSchema: smartMessageJsonSchema });
+      const result = await opts.model.generate({ prompt: assembled.prompt, system: opts.input.system, responseSchema: composeResponseJsonSchema });
       if (result.text) lastText = result.text;
-      const parsed = SmartMessageSchema.safeParse(result.structured);
-      if (parsed.success) return { reply: parsed.data, usage: assembled.usage, dropped: assembled.dropped, shrunkForContextLength };
+      const parsed = ComposeResponseSchema.safeParse(result.structured);
+      if (parsed.success) {
+        return { reply: parsed.data.message, formatRationale: parsed.data.formatRationale, usage: assembled.usage, dropped: assembled.dropped, shrunkForContextLength };
+      }
       input = { ...opts.input, userMessage: opts.input.userMessage + REPAIR_NOTE };
     } catch (e) {
       if (isContextLengthError(e)) {
@@ -69,5 +91,5 @@ export async function composeWithBudget(opts: ComposeWithBudgetOptions): Promise
 
   // lastAssembled is always set: the loop above runs at least twice (attempt < 2 starts at 0) and
   // assigns it unconditionally on every iteration before anything that could exit early.
-  return { reply: { text: lastText ?? FALLBACK_TEXT }, usage: lastAssembled!.usage, dropped: lastAssembled!.dropped, shrunkForContextLength };
+  return { reply: { text: lastText ?? FALLBACK_TEXT }, formatRationale: FALLBACK_RATIONALE, usage: lastAssembled!.usage, dropped: lastAssembled!.dropped, shrunkForContextLength };
 }

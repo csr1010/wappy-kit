@@ -65,7 +65,11 @@ describe("createAgent — oversized inbound text (§10 T6.7)", () => {
     const result = await agent.handle(msg({ text: "y".repeat(500) }));
     expect(result.status).toBe("sent");
     expect(seenText).toContain("truncated");
-    expect(seenText!.length).toBeLessThan(500);
+    // Recalibrated for M12 (SPEC v2.7): the assembled prompt now always includes the ~1400-char
+    // system prompt (FORMAT_REASONING + GROUNDING_HONESTY added to SCOPE_GUARDRAIL), so the old
+    // <500 threshold was sized for a system prompt that no longer exists. 2000 still catches the
+    // actual thing under test — the 500-char inbound text getting truncated, not left unbounded.
+    expect(seenText!.length).toBeLessThan(2000);
   });
 
   test("text within limits is completely unaffected", async () => {

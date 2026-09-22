@@ -19,7 +19,7 @@ describe("composeWithBudget — happy path", () => {
     let calls = 0;
     const model = scriptedModel(() => {
       calls++;
-      return { structured: { text: "hi!" } };
+      return { structured: { formatRationale: "test rationale", message: { text: "hi!" } } };
     });
     const result = await composeWithBudget({ model, input: { system: "SYS", userMessage: "hello" }, budget });
     expect(result.reply).toEqual({ text: "hi!" });
@@ -28,7 +28,7 @@ describe("composeWithBudget — happy path", () => {
   });
 
   test("usage/dropped from the assembler are surfaced on the result", async () => {
-    const model = scriptedModel(() => ({ structured: { text: "hi!" } }));
+    const model = scriptedModel(() => ({ structured: { formatRationale: "test rationale", message: { text: "hi!" } } }));
     const result = await composeWithBudget({ model, input: { system: "SYS", userMessage: "hello" }, budget });
     expect(result.usage.system).toBeGreaterThan(0);
     expect(result.dropped).toEqual([]);
@@ -38,7 +38,7 @@ describe("composeWithBudget — happy path", () => {
     let seenSystem: string | undefined;
     const model = scriptedModel((req) => {
       seenSystem = req.system;
-      return { structured: { text: "hi!" } };
+      return { structured: { formatRationale: "test rationale", message: { text: "hi!" } } };
     });
     await composeWithBudget({ model, input: { system: "SYS_GUARDRAIL", userMessage: "hello" }, budget });
     expect(seenSystem).toBe("SYS_GUARDRAIL");
@@ -51,7 +51,7 @@ describe("composeWithBudget — context-length error: shrink and retry once", ()
     const model = scriptedModel((req, i) => {
       seenPrompts.push(req.prompt);
       if (i === 0) throw contextLengthError();
-      return { structured: { text: "fits now" } };
+      return { structured: { formatRationale: "test rationale", message: { text: "fits now" } } };
     });
     const result = await composeWithBudget({ model, input: { system: "SYS", userMessage: "hello" }, budget });
     expect(result.reply).toEqual({ text: "fits now" });
@@ -73,7 +73,7 @@ describe("composeWithBudget — context-length error: shrink and retry once", ()
     const model = scriptedModel((req, i) => {
       seenPrompts.push(req.prompt);
       if (i === 0) throw contextLengthError();
-      return { structured: { text: "ok" } };
+      return { structured: { formatRationale: "test rationale", message: { text: "ok" } } };
     });
     const recalledSnippets = Array.from({ length: 50 }, (_, i) => `snippet ${i} with some real content in it`);
     await composeWithBudget({ model, input: { system: "SYS", recalledSnippets, userMessage: "hello" }, budget: bigBudget });
@@ -87,7 +87,7 @@ describe("composeWithBudget — malformed (non-context-length) output still gets
     const model = scriptedModel((req, i) => {
       seenPrompts.push(req.prompt);
       if (i === 0) return { structured: { garbage: true } };
-      return { structured: { text: "fixed" } };
+      return { structured: { formatRationale: "test rationale", message: { text: "fixed" } } };
     });
     const result = await composeWithBudget({ model, input: { system: "SYS", userMessage: "hello" }, budget });
     expect(result.reply).toEqual({ text: "fixed" });
@@ -98,7 +98,7 @@ describe("composeWithBudget — malformed (non-context-length) output still gets
   test("a non-Error, non-string thrown value is still stringified without crashing the detection logic", async () => {
     const model = scriptedModel((_req, i) => {
       if (i === 0) throw "just a plain string throw";
-      return { structured: { text: "recovered" } };
+      return { structured: { formatRationale: "test rationale", message: { text: "recovered" } } };
     });
     const result = await composeWithBudget({ model, input: { system: "SYS", userMessage: "hello" }, budget });
     expect(result.reply).toEqual({ text: "recovered" });
@@ -108,7 +108,7 @@ describe("composeWithBudget — malformed (non-context-length) output still gets
   test("a non-context-length error is also treated as malformed and retried with a repair note", async () => {
     const model = scriptedModel((_req, i) => {
       if (i === 0) throw new Error("some transient network blip");
-      return { structured: { text: "recovered" } };
+      return { structured: { formatRationale: "test rationale", message: { text: "recovered" } } };
     });
     const result = await composeWithBudget({ model, input: { system: "SYS", userMessage: "hello" }, budget });
     expect(result.reply).toEqual({ text: "recovered" });
