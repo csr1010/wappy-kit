@@ -20,7 +20,6 @@
     "@clack/prompts": "^1.8.1",
     "@wappy/core": "workspace:*",
     "@wappy/harness": "workspace:*",
-    "@wappy/tools-openapi": "workspace:*",
     "@wappy/whatsapp": "workspace:*",
     "dotenv": "^17.0.0",
     "localtunnel": "^2.0.2"
