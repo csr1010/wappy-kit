@@ -32,13 +32,24 @@ We tested this by hand, end to end, against a real Shopify store and a real What
 
 ## What's actually in the box
 
+### Core — the SDK itself
+
+Every `create-wappy` install pulls in exactly these, and nothing else. No connector, no Shopify, no API-specific code rides along by default.
+
 | Package | What it is |
 |---|---|
 | `@wappy/core` | Contracts, the plugin registry, the install-state ledger. The hub everything else depends on. |
 | `@wappy/harness` | The agent runtime — model loop, router, memory, skills, RAG, tool invocation. |
 | `@wappy/whatsapp` | The WhatsApp channel — rich message rendering, delivery retries, fallback ladder, real webhook server, typing indicators. |
-| `@wappy/tools-openapi` | Point it at any OpenAPI/Swagger spec, get back real callable tools. Plus a hand-built Shopify connector (see below). |
-| `create-wappy` | The CLI. Interview → runnable project. Installing it pulls in only the generic agent + WhatsApp pieces — nothing store-specific comes along for the ride. |
+| `create-wappy` | The CLI. Interview → runnable project. This is the *only* package whose install you pay for — it depends on the three above, nothing more. |
+
+### Connectors — opt-in, added only if you ask for them
+
+Not part of the core install. A generated project only depends on these if you pick them in the interview — their dependencies (and Shopify's, specifically) never land on your machine otherwise.
+
+| Package | What it is |
+|---|---|
+| `@wappy/tools-openapi` | Point it at any OpenAPI/Swagger spec, get back real callable tools. Includes a hand-built Shopify connector (products, orders, inventory, customers over Shopify's real GraphQL Admin API), since Shopify doesn't publish an OpenAPI spec of its own. |
 
 **One command install, one webhook server, one real agent:**
 
