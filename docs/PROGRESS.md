@@ -146,3 +146,6 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
 
 - 2026-09-22: gate M8 --allow-test-change: SPEC v2.6 - Meta rejects empty interactive.body.text, render.m4.test.ts corrected accordingly
   M	packages/whatsapp/src/send/render.m4.test.ts
+
+- 2026-09-22: gate M8 --allow-test-change: SPEC v2.6 - Meta rejects empty interactive.body.text, render.m4.test.ts corrected accordingly (already logged, re-detected every run since M9-M11 aren't tagged done yet)
+  M	packages/whatsapp/src/send/render.m4.test.ts

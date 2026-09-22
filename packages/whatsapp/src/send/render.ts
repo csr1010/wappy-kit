@@ -18,6 +18,22 @@ function bodyText(message: SmartMessage, fallback: string): string {
   return message.text && message.text.length > 0 ? message.text : fallback;
 }
 
+/** Renders `SmartMessage.header` into the Cloud API's `interactive.header` shape (§6.1/M12) —
+ * only ever called when `message.header` is set, which the core schema already guarantees means
+ * buttons/list/cta is also present (Meta's own constraint: header is meaningless standalone). */
+function headerPayload(header: NonNullable<SmartMessage["header"]>): Record<string, unknown> {
+  switch (header.type) {
+    case "text":
+      return { type: "text", text: header.text };
+    case "image":
+      return { type: "image", image: { link: header.url } };
+    case "video":
+      return { type: "video", video: { link: header.url } };
+    case "document":
+      return { type: "document", document: { link: header.url, ...(header.filename ? { filename: header.filename } : {}) } };
+  }
+}
+
 /**
  * Renders an already-constraint-checked SmartMessage into a Cloud API payload. Picks the richest
  * type the message actually asks for: buttons > list > cta > media > plain text (§6.1). Text
@@ -33,6 +49,7 @@ export function renderSmartMessage(message: SmartMessage, to: string): CloudApiO
       type: "interactive",
       interactive: {
         type: "button",
+        ...(message.header ? { header: headerPayload(message.header) } : {}),
         body: { text: bodyText(message, "Please choose an option:") },
         action: { buttons: message.buttons.map((b) => ({ type: "reply", reply: { id: b.id, title: b.title } })) },
       },
@@ -45,6 +62,7 @@ export function renderSmartMessage(message: SmartMessage, to: string): CloudApiO
       type: "interactive",
       interactive: {
         type: "list",
+        ...(message.header ? { header: headerPayload(message.header) } : {}),
         body: { text: bodyText(message, "Here's what I found:") },
         action: {
           button: message.list.buttonText,
@@ -63,6 +81,7 @@ export function renderSmartMessage(message: SmartMessage, to: string): CloudApiO
       type: "interactive",
       interactive: {
         type: "cta_url",
+        ...(message.header ? { header: headerPayload(message.header) } : {}),
         body: { text: bodyText(message, "Here's a link that might help:") },
         action: { name: "cta_url", parameters: { display_text: message.cta.text, url: message.cta.url } },
       },
