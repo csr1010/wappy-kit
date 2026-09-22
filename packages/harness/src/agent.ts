@@ -250,7 +250,19 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     trace(deps.tracer, "router", "route");
     let decision: RouterDecision;
     try {
-      decision = await deps.router.route({ message: { ...message, text: effectiveText }, history, availableSkills: deps.skills?.names() ?? [], availableTools: [] });
+      // The full tool pool's names, not just a skill's own subset — the router decides needsTool
+      // (and which skill) BEFORE a skill is chosen, so it can't yet know a skill-scoped list.
+      // Previously hardcoded to [] here, which made the router's own prompt literally say
+      // "Available tools: (none)" even when tools existed — found by hand-testing a real
+      // conversation: "show me your products" was declined because the router, told there were no
+      // tools at all, never set needsTool even though searchProducts was fully wired.
+      // The full tool pool's names, not just a skill's own subset — the router decides needsTool
+      // (and which skill) BEFORE a skill is chosen, so it can't yet know a skill-scoped list.
+      // Previously hardcoded to [] here, which made the router's own prompt literally say
+      // "Available tools: (none)" even when tools existed — found by hand-testing a real
+      // conversation: "show me your products" was declined because the router, told there were no
+      // tools at all, never set needsTool even though searchProducts was fully wired.
+      decision = await deps.router.route({ message: { ...message, text: effectiveText }, history, availableSkills: deps.skills?.names() ?? [], availableTools: deps.tools?.map((t) => t.name) ?? [] });
     } catch {
       decision = { intent: "general", needsRAG: false, needsTool: false, escalate: false, confidence: 0 };
     }
