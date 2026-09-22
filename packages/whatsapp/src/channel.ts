@@ -7,6 +7,16 @@ import type { FallbackOptionsStore } from "./send/fallback.js";
 import type { TemplateRegistry } from "./send/templates.js";
 import type { OutboundQueue } from "./send/queue.js";
 import type { BackoffOptions } from "./send/backoff.js";
+import { markReadAndTyping as sendMarkReadAndTyping, type MarkReadAndTypingResult } from "./presence.js";
+
+/** `createWhatsAppChannel`'s return type: the core `MessageChannel` contract, plus one
+ * WhatsApp-specific extra (§6.1 "presence") that doesn't belong on the generic core interface —
+ * not every channel has a typing indicator. `webhook-server.ts` (T9.7) checks for this method's
+ * presence rather than requiring it, so a `MessageChannel` from any other implementation still
+ * works with the webhook server, just without the typing indicator. */
+export interface WhatsAppMessageChannel extends MessageChannel {
+  markReadAndTyping(messageId: string): Promise<MarkReadAndTypingResult>;
+}
 
 export interface WhatsAppChannelOptions {
   /** Meta phone_number_id to send from. */
@@ -39,7 +49,7 @@ export interface WhatsAppChannelOptions {
   backoff?: BackoffOptions;
 }
 
-export function createWhatsAppChannel(opts: WhatsAppChannelOptions): MessageChannel {
+export function createWhatsAppChannel(opts: WhatsAppChannelOptions): WhatsAppMessageChannel {
   const base = opts.graphApiBaseUrl ?? "https://graph.facebook.com/v21.0";
   const fetchFn = opts.fetchImpl ?? fetch;
   // One clock drives both receive()'s window/dedup bookkeeping and send()'s window check + retry
@@ -102,6 +112,10 @@ export function createWhatsAppChannel(opts: WhatsAppChannelOptions): MessageChan
         idempotencyKey: opts.idempotencyKeyFor?.(to, message),
       };
       return sendSmartMessage(message, to, deps);
+    },
+
+    markReadAndTyping(messageId: string) {
+      return sendMarkReadAndTyping({ graphApiBaseUrl: base, phoneNumberId: opts.phoneNumberId, accessToken: opts.accessToken, messageId, fetchImpl: fetchFn });
     },
   };
 }
