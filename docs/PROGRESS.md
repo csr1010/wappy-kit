@@ -120,3 +120,10 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
 
 - 2026-09-22: gate M8 --allow-test-change: Meta rejects empty interactive.body.text (confirmed via real API 400); render.ts now defaults to sensible non-empty text (SPEC v2.6), old test pinned the broken empty-string default
   M	packages/whatsapp/src/send/render.m4.test.ts
+
+- 2026-09-22: gate M8 --allow-test-change: already logged in SPEC.md v2.6: Meta rejects empty interactive.body.text, old test pinned the broken '' default
+  M	packages/whatsapp/src/send/render.m4.test.ts
+
+- 2026-09-22: gate M8 --allow-test-change: already logged in SPEC.md v2.6: Meta rejects empty interactive.body.text, old test pinned the broken '' default
+  M	packages/whatsapp/src/send/render.m4.test.ts
+- 2026-09-21 (step 1 of the deferred connector-marketplace decision, see the earlier entry above): source-level decoupling done, WITHOUT moving anything to a separate package/repo (that part is still deferred, per the user's explicit "let's not worry about this now"). Everything Shopify-specific in create-wappy — `shopifyToolsSetup()`, `renderShopifyToolsFile()`, the tools/shopify.ts env vars — moved out of templates.ts into a new packages/create-wappy/src/shopify.ts. templates.ts now composes: base WhatsApp+harness wiring (already self-sufficient when tools=none) + this module's additions on top, when Shopify is chosen. Skills (orders/products) were confirmed generic (not Shopify-specific — reference-skills.ts's own doc comment already said any OpenAPI-generated provider exposing the same tool names works identically), so they stayed where they are. Zero behavior change: all 133 existing create-wappy tests passed UNCHANGED (proving the refactor preserved output byte-for-byte), plus a new shopify.m9.test.ts guards the module boundary itself. This makes a future extraction (e.g. to @wappy/connector-shopify) a matter of moving one file, not untangling interleaved code.

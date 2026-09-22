@@ -1,4 +1,5 @@
-import type { CompleteInterviewAnswers, ModelProvider, ReferenceSkillName, ToolsAnswer } from "./interview.js";
+import type { CompleteInterviewAnswers, ModelProvider, ReferenceSkillName } from "./interview.js";
+import { renderShopifyToolsFile, shopifyToolsSetup } from "./shopify.js";
 import { assertComplete, skillsOf } from "./interview.js";
 
 /**
@@ -103,31 +104,6 @@ const MEMORY_ENV: EnvVarSpec = {
   description: "LibSQL URL for conversation memory. Default: a local file at .wappy/memory.db (nothing to set).",
 };
 
-interface ToolsSetup {
-  importLine: string;
-  /** A complete expression evaluating to a `ToolProvider`, used as-is at every call site. */
-  providerExpr: string;
-  envVars: EnvVarSpec[];
-  fileName: string;
-}
-
-function toolsSetup(tools: ToolsAnswer): ToolsSetup | undefined {
-  if (tools.kind === "none") return undefined;
-  return {
-    importLine: 'import { createShopifyToolProvider } from "@wappy/tools-openapi";',
-    // SHOPIFY_GRAPHQL_URL_OVERRIDE is undocumented-to-end-users on purpose (not in .env.sample): it
-    // exists so this exact generated code can be pointed at a local mock Shopify server for
-    // testing, without touching real store credentials. Real installs never set it.
-    providerExpr:
-      'createShopifyToolProvider({ storeDomain: process.env.SHOPIFY_STORE_DOMAIN!, accessTokenEnvVar: "SHOPIFY_ACCESS_TOKEN", graphqlUrlOverride: process.env.SHOPIFY_GRAPHQL_URL_OVERRIDE, ssrf: process.env.SHOPIFY_GRAPHQL_URL_OVERRIDE ? { allowPrivateNetworks: true } : undefined })',
-    fileName: "shopify",
-    envVars: [
-      { name: "SHOPIFY_STORE_DOMAIN", required: true, group: "Shopify", description: 'Your store domain, e.g. "my-shop.myshopify.com".' },
-      { name: "SHOPIFY_ACCESS_TOKEN", required: true, group: "Shopify", description: "Admin API access token: Shopify admin > Settings > Apps and sales channels > Develop apps > create a custom app, grant read scopes (products, orders, inventory, customers), install it, then copy the token." },
-    ],
-  };
-}
-
 const SKILL_IMPORT_NAMES: Record<ReferenceSkillName, string> = { "store-info": "STORE_INFO_SKILL", orders: "createOrdersSkill", products: "createProductsSkill" };
 
 /** Per-skill rendering: `store-info` is a static import (STORE_INFO_SKILL is a plain object, not a
@@ -142,7 +118,7 @@ const SKILL_RENDER: Record<ReferenceSkillName, { varName: string; isFactory: boo
 function renderIndexTs(opts: RenderProjectOptions): string {
   const { answers } = opts;
   const model = modelSetup(answers.model.provider);
-  const tools = toolsSetup(answers.tools);
+  const tools = shopifyToolsSetup(answers.tools);
   const skills = skillsOf(answers);
 
   const harnessImports = new Set<string>(["createAgent", "createVercelModel", "createLibsqlMemory", "createLlmRouter"]);
@@ -245,7 +221,7 @@ const WHATSAPP_ENV: EnvVarSpec[] = [
 export function collectEnvVars(opts: RenderProjectOptions): EnvVarSpec[] {
   const { answers } = opts;
   const vars: EnvVarSpec[] = [...modelSetup(answers.model.provider).envVars, ...WHATSAPP_ENV];
-  const tools = toolsSetup(answers.tools);
+  const tools = shopifyToolsSetup(answers.tools);
   if (tools) vars.push(...tools.envVars);
   vars.push(MEMORY_ENV);
   if (skillsOf(answers).includes("store-info")) {
@@ -356,12 +332,6 @@ function renderReadme(opts: RenderProjectOptions): string {
   return lines.join("\n");
 }
 
-function renderToolsFile(opts: RenderProjectOptions): GeneratedFile | undefined {
-  const tools = toolsSetup(opts.answers.tools);
-  if (!tools) return undefined;
-  const lines: string[] = [tools.importLine, "", `export const toolProvider = ${tools.providerExpr};`, ""];
-  return { path: `tools/${tools.fileName}.ts`, content: lines.join("\n") };
-}
 
 function renderSkillFiles(opts: RenderProjectOptions): GeneratedFile[] {
   const files: GeneratedFile[] = [];
@@ -396,7 +366,7 @@ export function renderProject(opts: RenderProjectOptions): GeneratedFile[] {
     { path: "package.json", content: renderPackageJson(opts) },
     { path: "README.md", content: renderReadme(opts) },
   ];
-  const toolsFile = renderToolsFile(opts);
+  const toolsFile = renderShopifyToolsFile(opts.answers.tools);
   if (toolsFile) files.push(toolsFile);
   files.push(...renderSkillFiles(opts));
   return files;
