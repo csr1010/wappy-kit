@@ -18,6 +18,7 @@ Derived from [SPEC.md](SPEC.md) v2.0. One file per milestone in [milestones/](mi
 | M9 | create-wappy CLI | §4, §12 | M2, M4–M8 | One command → runnable project |
 | M10 | Optional backends (Jev, Mem0, Cognee, Postgres) | §7, §15.3 | M5, M9 | Swappability holds; conformance suites pass |
 | M11 | Integration, release hardening, live check | §11, §12, §14 | all | v0.1.0 is publishable |
+| M12 | Generic cognitive prompting; reference skills removed | §6.1, §6.3, §13 | M4, M6, M8, M9 | Format + honesty are generic, not per-skill; RAG/tools work with zero skills registered |
 
 Parallelism: after M1, **M2, M3→M4, M5→M6, M7** are independent tracks (they touch different packages). M8 needs M5–M7. M9 needs everything it wires. Single-session default: go in numeric order.
 
