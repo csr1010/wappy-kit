@@ -43,7 +43,7 @@ describe("runCli — non-interactive mode (any interview-step flag present)", ()
     let interactiveCalled = false;
     const cwd = tmpDir();
     const result = await runCli({
-      argv: ["--yes", "--model", "openai", "--memory", "local", "--router", "llm", "--api", "none", "--whatsapp", "later"],
+      argv: ["--yes", "--model", "openai", "--api", "none"],
       cwd,
       versions: VERSIONS,
       runInteractive: async () => {
@@ -146,7 +146,7 @@ describe("runCli — bad argv", () => {
 describe("runCli — resume summary mentions skipped (already-done) files", () => {
   test("re-running against a project that already has some files generated reports both written and skipped counts", async () => {
     const cwd = tmpDir();
-    const argv = ["--yes", "--model", "openai", "--memory", "local", "--router", "llm", "--api", "none", "--whatsapp", "later"];
+    const argv = ["--yes", "--model", "openai", "--api", "none"];
     await runCli({ argv, cwd, versions: VERSIONS, runInteractive: async () => golden(), print: () => {} });
 
     const printed: string[] = [];
@@ -160,7 +160,7 @@ describe("runCli — --dir resolves the target project directory relative to cwd
   test("files are written under cwd/--dir, not cwd itself", async () => {
     const cwd = tmpDir();
     const result = await runCli({
-      argv: ["--yes", "--model", "openai", "--memory", "local", "--router", "llm", "--api", "none", "--whatsapp", "later", "--dir", "my-bot"],
+      argv: ["--yes", "--model", "openai", "--api", "none", "--dir", "my-bot"],
       cwd,
       versions: VERSIONS,
       runInteractive: async () => golden(),
@@ -180,7 +180,7 @@ describe("runCli — a corrupt existing state.json surfaces a clear error, not a
 
     const printed: string[] = [];
     const result = await runCli({
-      argv: ["--yes", "--model", "openai", "--memory", "local", "--router", "llm", "--api", "none", "--whatsapp", "later"],
+      argv: ["--yes", "--model", "openai", "--api", "none"],
       cwd,
       versions: VERSIONS,
       runInteractive: async () => golden(),

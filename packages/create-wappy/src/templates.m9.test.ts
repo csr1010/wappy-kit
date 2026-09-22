@@ -1,29 +1,26 @@
 import { describe, expect, test } from "vitest";
-import { applyAnswer, DEFAULT_ANSWERS, type CompleteInterviewAnswers, type InterviewAnswers } from "./interview.js";
-import { NotYetImplementedError, renderProject, type PartVersions, type RenderProjectOptions } from "./templates.js";
+import { DEFAULT_ANSWERS, type CompleteInterviewAnswers, type InterviewAnswers } from "./interview.js";
+import { renderProject, type PartVersions, type RenderProjectOptions } from "./templates.js";
 
 const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", toolsOpenapi: "0.1.0" };
 
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
-  let answers: InterviewAnswers = {};
-  for (const [step, value] of Object.entries(DEFAULT_ANSWERS)) {
-    const r = applyAnswer(answers, step as keyof InterviewAnswers, (overrides as InterviewAnswers)[step as keyof InterviewAnswers] ?? value);
-    if (!r.ok) throw new Error(`test setup: invalid answer for ${step}: ${r.errors.join(", ")}`);
-    answers = r.answers;
-  }
-  return answers as CompleteInterviewAnswers;
+  const model = overrides.model ?? DEFAULT_ANSWERS.model;
+  const tools = overrides.tools ?? DEFAULT_ANSWERS.tools;
+  // skills only exist on the Shopify path (the interview never asks otherwise)
+  return tools.kind === "shopify" ? { model, tools, skills: overrides.skills ?? DEFAULT_ANSWERS.skills } : { model, tools };
 }
 
 function fileMap(files: { path: string; content: string }[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));
 }
 
-describe("renderProject — golden path (openai + shopify + store-info/orders + local + llm + later)", () => {
+describe("renderProject — golden path (openai + shopify + store-info/orders)", () => {
   const opts: RenderProjectOptions = {
     answers: complete({
       model: { provider: "openai" },
       skills: { skills: ["store-info", "orders"] },
-      tools: { kind: "shopify", storeDomain: "luna-and-co.myshopify.com" },
+      tools: { kind: "shopify" },
     }),
     versions: VERSIONS,
     projectName: "luna-and-co-bot",
@@ -31,7 +28,7 @@ describe("renderProject — golden path (openai + shopify + store-info/orders + 
   const files = fileMap(renderProject(opts));
 
   test("renders exactly the §4.1-listed output files, plus per-tool/per-skill files", () => {
-    expect([...files.keys()].sort()).toEqual(["README.md", ".env.example", ".gitignore", "index.ts", "package.json", "skills/orders.ts", "skills/store-info.ts", "tools/shopify.ts"].sort());
+    expect([...files.keys()].sort()).toEqual(["README.md", ".env.sample", ".gitignore", "index.ts", "package.json", "skills/orders.ts", "skills/store-info.ts", "tools/shopify.ts"].sort());
   });
 
   test("index.ts imports the OpenAI adapter and wires model/memory/router/tools/skills/rag/channel", () => {
@@ -50,7 +47,7 @@ describe("renderProject — golden path (openai + shopify + store-info/orders + 
     expect(indexTs).toContain("export const agent = createAgent({");
   });
 
-  test("tools/shopify.ts wires the real Shopify connector with the store's own domain", () => {
+  test("tools/shopify.ts wires the real Shopify connector with the domain read from env", () => {
     const toolsFile = files.get("tools/shopify.ts")!;
     expect(toolsFile).toContain('import { createShopifyToolProvider } from "@wappy/tools-openapi";');
     expect(toolsFile).toContain("storeDomain: process.env.SHOPIFY_STORE_DOMAIN!");
@@ -61,16 +58,24 @@ describe("renderProject — golden path (openai + shopify + store-info/orders + 
     expect(files.get("skills/orders.ts")).toContain("createOrdersSkill()");
   });
 
-  test(".env.example lists placeholder keys only — never a real secret value", () => {
-    const env = files.get(".env.example")!;
-    expect(env).toContain("OPENAI_API_KEY=\n");
-    expect(env).toContain("SHOPIFY_STORE_DOMAIN=\n");
-    expect(env).toContain("SHOPIFY_ACCESS_TOKEN=\n");
-    expect(env).toContain("WHATSAPP_PHONE_NUMBER_ID=\n");
-    // No line looks like a filled-in secret (KEY=<something>) beyond the bare "KEY=" placeholder form.
-    for (const line of env.split("\n").filter((l) => l.includes("="))) {
-      expect(line.endsWith("=")).toBe(true);
+  test(".env.sample lists every key needed to run, blank — never a real secret value", () => {
+    const env = files.get(".env.sample")!;
+    for (const key of ["OPENAI_API_KEY", "SHOPIFY_STORE_DOMAIN", "SHOPIFY_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_ACCESS_TOKEN", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_APP_SECRET"]) {
+      expect(env).toContain(`\n${key}=\n`);
     }
+    // Every non-comment line is a bare "KEY=" placeholder.
+    for (const line of env.split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"))) {
+      expect(line).toMatch(/^[A-Z0-9_]+=$/);
+    }
+  });
+
+  test(".env.sample is grouped, explains where each key comes from, and comments out optional keys", () => {
+    const env = files.get(".env.sample")!;
+    for (const group of ["Model", "WhatsApp", "Shopify", "Memory"]) expect(env).toContain(`── ${group} `);
+    expect(env).toContain("https://platform.openai.com/api-keys");
+    expect(env).toContain("Develop apps");
+    expect(env).toContain("\n# MEMORY_DB_URL=\n"); // optional: default applies unless uncommented
+    expect(env).not.toContain("\nMEMORY_DB_URL=");
   });
 
   test(".gitignore excludes .env and .wappy/", () => {
@@ -94,6 +99,9 @@ describe("renderProject — golden path (openai + shopify + store-info/orders + 
     const readme = files.get("README.md")!;
     expect(readme).toContain("OPENAI_API_KEY");
     expect(readme).toContain("SHOPIFY_STORE_DOMAIN");
+    expect(readme).toContain("cp .env.sample .env");
+    expect(readme).toContain("WHATSAPP_APP_SECRET");
+    expect(readme).toContain("Memory:** local SQLite");
     expect(readme).toMatch(/Model:\*\* openai/);
     expect(readme).toContain("wappy dev");
   });
@@ -102,7 +110,7 @@ describe("renderProject — golden path (openai + shopify + store-info/orders + 
 describe("renderProject — store-specific skill drafts are embedded, not the static import", () => {
   test("a generateStoreSkill()-style draft is inlined as an object literal overriding promptFragment", () => {
     const opts: RenderProjectOptions = {
-      answers: complete({ skills: { skills: ["store-info"] }, tools: { kind: "shopify", storeDomain: "luna-and-co.myshopify.com" } }),
+      answers: complete({ skills: { skills: ["store-info"] }, tools: { kind: "shopify" } }),
       versions: VERSIONS,
       storeSkillDrafts: { "store-info": { promptFragment: "You can help with candles, 45-day returns, and 2-3 day shipping." } },
     };
@@ -116,7 +124,7 @@ describe("renderProject — store-specific skill drafts are embedded, not the st
   test("a draft for the orders skill is inlined over createOrdersSkill(), with an overridden description too", () => {
     const files = fileMap(
       renderProject({
-        answers: complete({ skills: { skills: ["orders"] } }),
+        answers: complete({ skills: { skills: ["orders"] }, tools: { kind: "shopify" } }),
         versions: VERSIONS,
         storeSkillDrafts: { orders: { promptFragment: "Look up Luna & Co. orders.", description: "Luna & Co. order lookups." } },
       }),
@@ -137,23 +145,26 @@ describe("renderProject — model provider branches", () => {
     const files = fileMap(renderProject({ answers: complete({ model: { provider } }), versions: VERSIONS }));
     expect(files.get("index.ts")).toContain(`from "${pkg}"`);
     expect(files.get("index.ts")).toContain(ctorPrefix);
-    expect(files.get(".env.example")).toContain(`${envVar}=`);
+    expect(files.get(".env.sample")).toContain(`${envVar}=`);
   });
 });
 
-describe("renderProject — whatsapp mode=now still only writes placeholder keys to .env.example", () => {
-  test("credential names are listed but no value from the interview answer leaks into .env.example", () => {
-    const files = fileMap(
-      renderProject({
-        answers: complete({ whatsapp: { mode: "now", phoneNumberId: "106540352242922", accessToken: "EAA-real-secret-value", verifyToken: "my-real-verify-token" } }),
-        versions: VERSIONS,
-      }),
-    );
-    const env = files.get(".env.example")!;
-    expect(env).toContain("WHATSAPP_ACCESS_TOKEN=\n");
-    expect(env).not.toContain("EAA-real-secret-value");
-    expect(env).not.toContain("my-real-verify-token");
-    expect(files.get("README.md")).toContain("credentials entered during setup");
+describe("renderProject — .env.sample covers every env var the generated code reads", () => {
+  test("the store-info skill adds its optional KNOWLEDGE_DB_URL (commented out); without it the key is absent", () => {
+    const withSkill = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" }, skills: { skills: ["store-info"] } }), versions: VERSIONS }));
+    expect(withSkill.get("index.ts")).toContain("KNOWLEDGE_DB_URL");
+    expect(withSkill.get(".env.sample")).toContain("\n# KNOWLEDGE_DB_URL=\n");
+    const without = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" }, skills: { skills: ["orders"] } }), versions: VERSIONS }));
+    expect(without.get(".env.sample")).not.toContain("KNOWLEDGE_DB_URL");
+  });
+});
+
+describe("renderProject — WhatsApp credentials are never asked for", () => {
+  test("every project lists the four WhatsApp keys, blank, in .env.sample — whatever else was chosen", () => {
+    for (const answers of [complete(), complete({ tools: { kind: "shopify" } }), complete({ model: { provider: "ollama" } })]) {
+      const env = fileMap(renderProject({ answers, versions: VERSIONS })).get(".env.sample")!;
+      for (const key of ["WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_ACCESS_TOKEN", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_APP_SECRET"]) expect(env).toContain(`\n${key}=\n`);
+    }
   });
 });
 
@@ -164,37 +175,21 @@ describe("renderProject — tools variants", () => {
     expect(files.get("index.ts")).not.toContain("invokeTools");
     expect(JSON.parse(files.get("package.json")!).dependencies["@wappy/tools-openapi"]).toBeUndefined();
   });
-
-  test("tools: openapi renders an awaited provider and the source URL baked into tools/api.ts", () => {
-    const files = fileMap(renderProject({ answers: complete({ tools: { kind: "openapi", source: "https://api.example.com/openapi.json" } }), versions: VERSIONS }));
-    const toolsFile = files.get("tools/api.ts")!;
-    expect(toolsFile).toContain("await createOpenApiToolProvider(");
-    expect(toolsFile).toContain('"https://api.example.com/openapi.json"');
-    const indexTs = files.get("index.ts")!;
-    expect(indexTs).toContain("const toolProvider = (await createOpenApiToolProvider(");
-    expect(indexTs).not.toMatch(/await \(await/); // no redundant double-await
-  });
 });
 
-describe("renderProject — skills: none", () => {
-  test("no skills/*.ts files and no skill registry wiring in index.ts", () => {
-    const files = fileMap(renderProject({ answers: complete({ skills: { skills: [] } }), versions: VERSIONS }));
+describe("renderProject — skills", () => {
+  test("no store connected: no skills/*.ts files and no skill registry wiring in index.ts", () => {
+    const files = fileMap(renderProject({ answers: complete(), versions: VERSIONS }));
     expect([...files.keys()].some((p) => p.startsWith("skills/"))).toBe(false);
     expect(files.get("index.ts")).not.toContain("createSkillRegistry");
-  });
-});
-
-describe("renderProject — not-yet-implemented combos fail loud at generation time", () => {
-  test("a framework other than 'none' throws NotYetImplementedError", () => {
-    expect(() => renderProject({ answers: complete({ framework: { framework: "mastra" } }), versions: VERSIONS })).toThrow(NotYetImplementedError);
+    expect(files.get("README.md")).toContain("Skills:** none");
   });
 
-  test("a memory backend other than 'local' throws NotYetImplementedError", () => {
-    expect(() => renderProject({ answers: complete({ memory: { backend: "mem0" } }), versions: VERSIONS })).toThrow(NotYetImplementedError);
-  });
-
-  test("the jev router throws NotYetImplementedError", () => {
-    expect(() => renderProject({ answers: complete({ router: { router: "jev", jevKeyPath: "/keys/jev.json" } }), versions: VERSIONS })).toThrow(NotYetImplementedError);
+  test("Shopify connected but no skills picked: tools are wired, skills are not", () => {
+    const files = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" }, skills: { skills: [] } }), versions: VERSIONS }));
+    expect(files.has("tools/shopify.ts")).toBe(true);
+    expect([...files.keys()].some((p) => p.startsWith("skills/"))).toBe(false);
+    expect(files.get("index.ts")).not.toContain("createSkillRegistry");
   });
 });
 

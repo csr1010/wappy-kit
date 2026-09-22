@@ -1,8 +1,8 @@
-import type { CompleteInterviewAnswers, FrameworkChoice, MemoryBackend, ModelProvider, ReferenceSkillName, RouterAnswer, ToolsAnswer } from "./interview.js";
-import { assertComplete } from "./interview.js";
+import type { CompleteInterviewAnswers, ModelProvider, ReferenceSkillName, ToolsAnswer } from "./interview.js";
+import { assertComplete, skillsOf } from "./interview.js";
 
 /**
- * T9.3 generators (SPEC.md §4.1 output: `index.ts`, `tools/*.ts`, `skills/*.ts`, `.env.example`,
+ * T9.3 generators (SPEC.md §4.1 output: `index.ts`, `tools/*.ts`, `skills/*.ts`, `.env.sample`,
  * `.gitignore`, `README.md`, `package.json`) — see the session decision this follows: enum-driven
  * choices (model/framework/memory/router) are rendered by picking between pre-written, already-
  * shipped code paths (a `switch` selecting a one-line adapter constructor), never freshly invented
@@ -12,13 +12,11 @@ import { assertComplete } from "./interview.js";
  * via `storeSkillDrafts`, keeping this whole module pure — no I/O, no model calls, fully
  * snapshot-testable (T9.8 builds on this).
  *
- * Every enum branch not yet backed by real code (non-"none" framework — T9.4; non-"local" memory
- * and the "jev" router — M10) throws `NotYetImplementedError` at GENERATION time rather than
- * emitting code that would fail at runtime — matches this codebase's established "fail loud at
- * install, not runtime" convention (§10).
+ * Memory (local LibSQL file) and the router (LLM) are fixed in v0.1 — the interview no longer offers
+ * alternatives that aren't implemented, so there is nothing here that can fail at generation time
+ * for lack of code. `.env.sample` is the single place every credential goes; the interview never
+ * asks for one.
  */
-
-export class NotYetImplementedError extends Error {}
 
 export interface GeneratedFile {
   path: string;
@@ -29,6 +27,8 @@ export interface EnvVarSpec {
   name: string;
   required: boolean;
   description: string;
+  /** Section heading in `.env.sample`. */
+  group: string;
 }
 
 /** Version strings for this project's own npm packages, resolved by the caller (e.g. read from
@@ -69,68 +69,40 @@ function modelSetup(provider: ModelProvider): ModelSetup {
       return {
         importLine: 'import { openai } from "@ai-sdk/openai";',
         constructorExpr: 'openai(process.env.OPENAI_MODEL ?? "gpt-4o")',
-        envVars: [{ name: "OPENAI_API_KEY", required: true, description: "Your OpenAI API key." }],
+        envVars: [{ name: "OPENAI_API_KEY", required: true, group: "Model", description: "OpenAI API key — create one at https://platform.openai.com/api-keys" }],
       };
     case "anthropic":
       return {
         importLine: 'import { anthropic } from "@ai-sdk/anthropic";',
         constructorExpr: 'anthropic(process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5")',
-        envVars: [{ name: "ANTHROPIC_API_KEY", required: true, description: "Your Anthropic API key." }],
+        envVars: [{ name: "ANTHROPIC_API_KEY", required: true, group: "Model", description: "Anthropic API key — create one at https://console.anthropic.com/settings/keys" }],
       };
     case "gemini":
       return {
         importLine: 'import { google } from "@ai-sdk/google";',
         constructorExpr: 'google(process.env.GEMINI_MODEL ?? "gemini-2.0-flash")',
-        envVars: [{ name: "GOOGLE_GENERATIVE_AI_API_KEY", required: true, description: "Your Google AI Studio API key." }],
+        envVars: [{ name: "GOOGLE_GENERATIVE_AI_API_KEY", required: true, group: "Model", description: "Google AI Studio API key — create one at https://aistudio.google.com/apikey" }],
       };
     case "ollama":
       return {
         importLine: 'import { ollama } from "ollama-ai-provider";',
         constructorExpr: 'ollama(process.env.OLLAMA_MODEL ?? "llama3.1")',
-        envVars: [{ name: "OLLAMA_BASE_URL", required: false, description: "Local Ollama server URL (default http://localhost:11434)." }],
+        envVars: [{ name: "OLLAMA_BASE_URL", required: false, group: "Model", description: "Local Ollama server URL. Default: http://localhost:11434 (no API key needed)." }],
       };
   }
 }
 
-interface MemorySetup {
-  importLine: string;
-  constructorExpr: string;
-  envVars: EnvVarSpec[];
-}
-
-function memorySetup(backend: MemoryBackend): MemorySetup {
-  if (backend !== "local") {
-    throw new NotYetImplementedError(`Memory backend "${backend}" isn't implemented yet (coming in M10). Choose "local" for now.`);
-  }
-  return {
-    importLine: 'import { createLibsqlMemory } from "@wappy/harness";',
-    constructorExpr: 'createLibsqlMemory({ url: process.env.MEMORY_DB_URL ?? "file:.wappy/memory.db" })',
-    envVars: [{ name: "MEMORY_DB_URL", required: false, description: "LibSQL URL for conversation memory (default: a local file under .wappy/)." }],
-  };
-}
-
-interface RouterSetup {
-  importLine: string;
-  constructorExpr: string;
-}
-
-function routerSetup(router: RouterAnswer): RouterSetup {
-  if (router.router !== "llm") {
-    throw new NotYetImplementedError(`Router "${router.router}" isn't implemented yet (coming in M10). Choose "llm" for now.`);
-  }
-  return { importLine: 'import { createLlmRouter } from "@wappy/harness";', constructorExpr: "createLlmRouter({ model })" };
-}
-
-function assertFrameworkSupported(framework: FrameworkChoice): void {
-  if (framework !== "none") {
-    throw new NotYetImplementedError(`Framework adapter stubs for "${framework}" aren't implemented yet (coming in a later step, T9.4). Choose "None" for now.`);
-  }
-}
+/** Conversation memory: a local LibSQL (SQLite) file — the only backend in v0.1. */
+const MEMORY_ENV: EnvVarSpec = {
+  name: "MEMORY_DB_URL",
+  required: false,
+  group: "Memory",
+  description: "LibSQL URL for conversation memory. Default: a local file at .wappy/memory.db (nothing to set).",
+};
 
 interface ToolsSetup {
   importLine: string;
-  /** A complete expression evaluating to a `ToolProvider` — already includes its own `await` when
-   * needed (openapi), so every call site uses it as-is, never wrapping it in a further `await`. */
+  /** A complete expression evaluating to a `ToolProvider`, used as-is at every call site. */
   providerExpr: string;
   envVars: EnvVarSpec[];
   fileName: string;
@@ -138,23 +110,14 @@ interface ToolsSetup {
 
 function toolsSetup(tools: ToolsAnswer): ToolsSetup | undefined {
   if (tools.kind === "none") return undefined;
-  if (tools.kind === "shopify") {
-    return {
-      importLine: 'import { createShopifyToolProvider } from "@wappy/tools-openapi";',
-      providerExpr: 'createShopifyToolProvider({ storeDomain: process.env.SHOPIFY_STORE_DOMAIN!, accessTokenEnvVar: "SHOPIFY_ACCESS_TOKEN" })',
-      fileName: "shopify",
-      envVars: [
-        { name: "SHOPIFY_STORE_DOMAIN", required: true, description: 'Your Shopify store domain, e.g. "my-shop.myshopify.com".' },
-        { name: "SHOPIFY_ACCESS_TOKEN", required: true, description: "A custom-app access token from your Shopify admin." },
-      ],
-    };
-  }
-  // openapi
   return {
-    importLine: 'import { createOpenApiToolProvider } from "@wappy/tools-openapi";',
-    providerExpr: `(await createOpenApiToolProvider({ name: "api", source: ${JSON.stringify(tools.source)}, envPrefix: "API_" })).provider`,
-    fileName: "api",
-    envVars: [{ name: "API_API_KEY", required: false, description: "Auth credential(s) your OpenAPI spec requires — see tools/api.ts for the exact env var name(s) after generation." }],
+    importLine: 'import { createShopifyToolProvider } from "@wappy/tools-openapi";',
+    providerExpr: 'createShopifyToolProvider({ storeDomain: process.env.SHOPIFY_STORE_DOMAIN!, accessTokenEnvVar: "SHOPIFY_ACCESS_TOKEN" })',
+    fileName: "shopify",
+    envVars: [
+      { name: "SHOPIFY_STORE_DOMAIN", required: true, group: "Shopify", description: 'Your store domain, e.g. "my-shop.myshopify.com".' },
+      { name: "SHOPIFY_ACCESS_TOKEN", required: true, group: "Shopify", description: "Admin API access token: Shopify admin > Settings > Apps and sales channels > Develop apps > create a custom app, grant read scopes (products, orders, inventory, customers), install it, then copy the token." },
+    ],
   };
 }
 
@@ -162,15 +125,10 @@ const SKILL_IMPORT_NAMES: Record<ReferenceSkillName, string> = { "store-info": "
 
 function renderIndexTs(opts: RenderProjectOptions): string {
   const { answers } = opts;
-  assertFrameworkSupported(answers.framework.framework);
   const model = modelSetup(answers.model.provider);
-  const memory = memorySetup(answers.memory.backend);
-  const router = routerSetup(answers.router);
   const tools = toolsSetup(answers.tools);
-  const skills = answers.skills.skills;
+  const skills = skillsOf(answers);
 
-  // memorySetup/routerSetup only ever return their "local"/"llm" shape today (anything else already
-  // threw above), so their imports are named directly here rather than parsed back out of them.
   const harnessImports = new Set<string>(["createAgent", "createVercelModel", "createLibsqlMemory", "createLlmRouter", "createInMemoryTracer"]);
   if (skills.length > 0) harnessImports.add("createSkillRegistry");
   for (const s of skills) harnessImports.add(SKILL_IMPORT_NAMES[s]);
@@ -193,8 +151,8 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("");
 
   lines.push(`const model = createVercelModel({ model: ${model.constructorExpr} });`);
-  lines.push(`const memory = ${memory.constructorExpr};`);
-  lines.push(`const router = ${router.constructorExpr};`);
+  lines.push('const memory = createLibsqlMemory({ url: process.env.MEMORY_DB_URL ?? "file:.wappy/memory.db" });');
+  lines.push("const router = createLlmRouter({ model });");
   lines.push("const tracer = createInMemoryTracer();");
   lines.push("");
 
@@ -255,34 +213,49 @@ function renderInlineSkill(name: ReferenceSkillName, draft: StoreSkillDraft, bas
   return baseExpr ? `{ ...${baseExpr}, ${overrides.join(", ")} }` : `{ ...STORE_INFO_SKILL, ${overrides.join(", ")} }`;
 }
 
-/** Exposed for the ledger-driven orchestrator (`generate.ts`), which needs the same env-var list to
- * declare the `.env.example` step's `SetupManifest.envKeys` — kept as one source of truth rather
- * than re-deriving it. */
+/** WhatsApp Cloud API credentials — never asked in the interview; always listed in `.env.sample`. */
+const WHATSAPP_ENV: EnvVarSpec[] = [
+  { name: "WHATSAPP_PHONE_NUMBER_ID", required: true, group: "WhatsApp", description: "Meta developer app > WhatsApp > API Setup > Phone number ID." },
+  { name: "WHATSAPP_ACCESS_TOKEN", required: true, group: "WhatsApp", description: "Meta developer app > WhatsApp > API Setup > access token (the temporary one expires in 24h; create a System User token for production)." },
+  { name: "WHATSAPP_VERIFY_TOKEN", required: true, group: "WhatsApp", description: "Any string you choose (e.g. a random password). Enter the same value in Meta's webhook config." },
+  { name: "WHATSAPP_APP_SECRET", required: true, group: "WhatsApp", description: "Meta developer app > App settings > Basic > App secret. Used to verify webhook signatures, so forged requests are rejected." },
+];
+
+/** Every env var the generated project needs, in `.env.sample` order. Exposed for the ledger-driven
+ * orchestrator (`generate.ts`), which declares the `.env.sample` step's `SetupManifest.envKeys`
+ * from it — one source of truth rather than re-deriving it. */
 export function collectEnvVars(opts: RenderProjectOptions): EnvVarSpec[] {
   const { answers } = opts;
-  const vars: EnvVarSpec[] = [...modelSetup(answers.model.provider).envVars, ...memorySetup(answers.memory.backend).envVars];
+  const vars: EnvVarSpec[] = [...modelSetup(answers.model.provider).envVars, ...WHATSAPP_ENV];
   const tools = toolsSetup(answers.tools);
   if (tools) vars.push(...tools.envVars);
-  if (answers.whatsapp.mode === "now") {
-    vars.push(
-      { name: "WHATSAPP_PHONE_NUMBER_ID", required: true, description: "Your WhatsApp Cloud API phone number id." },
-      { name: "WHATSAPP_ACCESS_TOKEN", required: true, description: "Your WhatsApp Cloud API access token." },
-      { name: "WHATSAPP_VERIFY_TOKEN", required: true, description: "A token you choose — used to verify the webhook with Meta." },
-    );
-  } else {
-    vars.push(
-      { name: "WHATSAPP_PHONE_NUMBER_ID", required: true, description: "Fill in once you have WhatsApp Cloud API credentials — see README." },
-      { name: "WHATSAPP_ACCESS_TOKEN", required: true, description: "Fill in once you have WhatsApp Cloud API credentials — see README." },
-      { name: "WHATSAPP_VERIFY_TOKEN", required: true, description: "Fill in once you have WhatsApp Cloud API credentials — see README." },
-    );
+  vars.push(MEMORY_ENV);
+  if (skillsOf(answers).includes("store-info")) {
+    vars.push({ name: "KNOWLEDGE_DB_URL", required: false, group: "Memory", description: "LibSQL URL for the store-info knowledge base. Default: a local file at .wappy/knowledge.db (nothing to set)." });
   }
   return vars;
 }
 
-function renderEnvExample(opts: RenderProjectOptions): string {
+/** `.env.sample`: copy to `.env` and fill in. Grouped by concern; required keys are left blank,
+ * optional ones are commented out so the default applies unless the user opts in. */
+function renderEnvSample(opts: RenderProjectOptions): string {
   const vars = collectEnvVars(opts);
-  const lines = vars.map((v) => `# ${v.description}${v.required ? "" : " (optional)"}\n${v.name}=`);
-  return `${lines.join("\n\n")}\n`;
+  const groups: string[] = [];
+  for (const v of vars) if (!groups.includes(v.group)) groups.push(v.group);
+  const out: string[] = [
+    "# Copy this file to .env and fill in the values. Never commit .env (it is git-ignored).",
+    "# Lines starting with # and a KEY are optional: uncomment to override the default.",
+    "",
+  ];
+  for (const g of groups) {
+    out.push(`# ── ${g} ${"─".repeat(Math.max(3, 60 - g.length))}`);
+    for (const v of vars.filter((x) => x.group === g)) {
+      out.push(`# ${v.description}`);
+      out.push(v.required ? `${v.name}=` : `# ${v.name}=`);
+    }
+    out.push("");
+  }
+  return out.join("\n");
 }
 
 function renderGitignore(): string {
@@ -310,7 +283,7 @@ function renderPackageJson(opts: RenderProjectOptions): string {
   if (answers.tools.kind !== "none") {
     deps["@wappy/tools-openapi"] = versions.toolsOpenapi;
   }
-  if (answers.skills.skills.includes("store-info")) {
+  if (skillsOf(answers).includes("store-info")) {
     deps["@libsql/client"] = "^0.18.0";
   }
   const pkg = {
@@ -327,30 +300,35 @@ function renderPackageJson(opts: RenderProjectOptions): string {
 function renderReadme(opts: RenderProjectOptions): string {
   const { answers } = opts;
   const vars = collectEnvVars(opts);
+  const skills = skillsOf(answers);
   const lines: string[] = [];
   lines.push(`# ${opts.projectName ?? "wappy-bot"}`);
   lines.push("");
-  lines.push("A WhatsApp agent generated by `create-wappy`. Fill in the env keys below, then run `wappy dev`.");
+  lines.push("A WhatsApp agent generated by `create-wappy`.");
   lines.push("");
-  lines.push("## 1. Getting WhatsApp Cloud API credentials");
+  lines.push("## 1. Add your credentials");
   lines.push("");
-  lines.push("1. Create a Meta developer app at https://developers.facebook.com/apps and add the WhatsApp product.");
-  lines.push("2. From the app's WhatsApp > API Setup page, copy the **temporary access token** and **phone number ID**.");
-  lines.push('3. Pick any string as your **verify token** (e.g. a random password) — you\'ll enter the same value on both sides.');
-  lines.push("4. Run `wappy dev` — it prints a public webhook URL. Paste that URL + your verify token into the app's webhook config.");
+  lines.push("```sh");
+  lines.push("cp .env.sample .env   # then fill in every key that has no default");
+  lines.push("```");
   lines.push("");
-  lines.push("## 2. Env keys");
+  lines.push("`.env` is git-ignored — secrets never leave your machine. Where to get each key:");
   lines.push("");
   for (const v of vars) lines.push(`- \`${v.name}\`${v.required ? "" : " (optional)"} — ${v.description}`);
+  lines.push("");
+  lines.push("## 2. Connect WhatsApp");
+  lines.push("");
+  lines.push("1. Create a Meta developer app at https://developers.facebook.com/apps and add the WhatsApp product.");
+  lines.push("2. Copy the phone number ID, access token and app secret into `.env` (see the list above).");
+  lines.push("3. Choose any string as `WHATSAPP_VERIFY_TOKEN` — you enter the same value on both sides.");
+  lines.push("4. Run `wappy dev` — it prints a public webhook URL. Paste that URL + your verify token into the app's webhook config.");
   lines.push("");
   lines.push("## 3. What was generated");
   lines.push("");
   lines.push(`- **Model:** ${answers.model.provider}`);
-  lines.push(`- **Memory:** ${answers.memory.backend}`);
-  lines.push(`- **Router:** ${answers.router.router}`);
-  lines.push(`- **Tools:** ${answers.tools.kind}`);
-  lines.push(`- **Skills:** ${answers.skills.skills.length > 0 ? answers.skills.skills.join(", ") : "none"}`);
-  lines.push(`- **WhatsApp:** ${answers.whatsapp.mode === "now" ? "credentials entered during setup" : "deferred — fill in .env yourself"}`);
+  lines.push("- **Memory:** local SQLite file (`.wappy/memory.db`)");
+  lines.push(`- **Tools:** ${answers.tools.kind === "shopify" ? "Shopify" : "none"}`);
+  lines.push(`- **Skills:** ${skills.length > 0 ? skills.join(", ") : "none"}`);
   lines.push("");
   lines.push("Run `wappy status` any time to see what's done vs. pending, and `wappy doctor` to validate your env + connectivity.");
   lines.push("");
@@ -366,7 +344,7 @@ function renderToolsFile(opts: RenderProjectOptions): GeneratedFile | undefined 
 
 function renderSkillFiles(opts: RenderProjectOptions): GeneratedFile[] {
   const files: GeneratedFile[] = [];
-  for (const s of opts.answers.skills.skills) {
+  for (const s of skillsOf(opts.answers)) {
     const draft = opts.storeSkillDrafts?.[s];
     if (s === "store-info") {
       files.push({
@@ -398,7 +376,7 @@ export function renderProject(opts: RenderProjectOptions): GeneratedFile[] {
   assertComplete(opts.answers);
   const files: GeneratedFile[] = [
     { path: "index.ts", content: renderIndexTs(opts) },
-    { path: ".env.example", content: renderEnvExample(opts) },
+    { path: ".env.sample", content: renderEnvSample(opts) },
     { path: ".gitignore", content: renderGitignore() },
     { path: "package.json", content: renderPackageJson(opts) },
     { path: "README.md", content: renderReadme(opts) },
