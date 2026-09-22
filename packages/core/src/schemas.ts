@@ -74,6 +74,17 @@ export const SmartCtaSchema = z.object({
   url: z.string().url(),
 });
 
+/** An interactive message's header (§6.1/M12): image/video/document/text alongside body + action.
+ * Meta's real Cloud API supports this on button/list interactive messages — verified against
+ * their docs, not assumed — for a "preview, then text, then CTA/list" reply. Valid only alongside
+ * buttons/list/cta (enforced below); a header on a plain text/media-only send is meaningless. */
+export const SmartHeaderSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), text: z.string().min(1), subText: z.string().optional() }),
+  z.object({ type: z.literal("image"), url: z.string().min(1) }),
+  z.object({ type: z.literal("video"), url: z.string().min(1) }),
+  z.object({ type: z.literal("document"), url: z.string().min(1), filename: z.string().optional() }),
+]);
+
 export const SmartMediaSchema = z.object({
   kind: z.enum(["image", "document", "video", "audio", "voice"]),
   url: z.string().min(1),
@@ -89,6 +100,7 @@ export const SmartMessageSchema = z
     list: SmartListSchema.optional(),
     cta: SmartCtaSchema.optional(),
     media: SmartMediaSchema.optional(),
+    header: SmartHeaderSchema.optional(),
     /** id of an inbound message this reply quotes ("reply in context"). */
     quoteId: z.string().optional(),
     /** Reserved slot for WhatsApp Flows/forms (deferred; SPEC §6.1). Not validated in v0.1. */
@@ -96,6 +108,9 @@ export const SmartMessageSchema = z
   })
   .refine((m) => Boolean(m.text ?? m.buttons ?? m.list ?? m.cta ?? m.media), {
     message: "SmartMessage: at least one of text/buttons/list/cta/media is required",
+  })
+  .refine((m) => !m.header || Boolean(m.buttons ?? m.list ?? m.cta), {
+    message: "SmartMessage: header is only valid alongside buttons/list/cta (Meta's own constraint)",
   });
 export type SmartMessage = z.infer<typeof SmartMessageSchema>;
 
