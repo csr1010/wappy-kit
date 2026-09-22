@@ -168,6 +168,14 @@ describe("renderProject — WhatsApp credentials are never asked for", () => {
   });
 });
 
+describe("renderProject — Shopify tool wiring supports a test-only local override", () => {
+  test("tools/shopify.ts reads SHOPIFY_GRAPHQL_URL_OVERRIDE (for pointing at a mock server) but the key never appears in .env.sample", () => {
+    const files = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" } }), versions: VERSIONS }));
+    expect(files.get("tools/shopify.ts")).toContain("SHOPIFY_GRAPHQL_URL_OVERRIDE");
+    expect(files.get(".env.sample")).not.toContain("SHOPIFY_GRAPHQL_URL_OVERRIDE");
+  });
+});
+
 describe("renderProject — tools variants", () => {
   test("tools: none renders no tools/*.ts file and no tool-invocation wiring in index.ts", () => {
     const files = fileMap(renderProject({ answers: complete({ tools: { kind: "none" } }), versions: VERSIONS }));
