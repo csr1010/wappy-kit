@@ -231,6 +231,18 @@
     "kind": "FunctionDeclaration",
     "type": "(version: string, range: string) => boolean"
   },
+  "SessionProfile": {
+    "kind": "TypeAliasDeclaration",
+    "type": "{    contactId: string;    facts: Record<string, string>;    expiresAt: number;    currentState?: string | undefined;    summary?: string | undefined;}"
+  },
+  "SessionProfileSchema": {
+    "kind": "VariableDeclaration",
+    "type": "z.ZodObject<{    contactId: z.ZodString;    facts: z.ZodRecord<z.ZodString, z.ZodString>;    currentState: z.ZodOptional<z.ZodString>;    summary: z.ZodOptional<z.ZodString>;    expiresAt: z.ZodNumber;}, z.core.$strip>"
+  },
+  "SessionProfileStore": {
+    "kind": "InterfaceDeclaration",
+    "type": "SessionProfileStore"
+  },
   "SetupManifest": {
     "kind": "InterfaceDeclaration",
     "type": "SetupManifest"

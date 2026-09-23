@@ -1,4 +1,4 @@
-import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, SmartMessage, TracedSystem, Tool, Tracer, Turn } from "@wappy/core";
+import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, SessionProfile, SessionProfileStore, SmartMessage, TracedSystem, Tool, Tracer, Turn } from "@wappy/core";
 import { boundInboundText, DEFAULT_INBOUND_TEXT_LIMITS, type InboundTextLimits } from "./bound-inbound-text.js";
 import { composeWithBudget } from "./compose-with-budget.js";
 import { createContextBudget, type ContextBudget } from "./context-budget.js";
@@ -38,6 +38,10 @@ const CONFIRM_TOOL_UNAVAILABLE_TEXT = "Sorry, I couldn't complete that — pleas
 /** Used when the caller doesn't supply one — a conservative, safe-by-default budget (§10 T6.1). */
 const DEFAULT_CONTEXT_BUDGET: ContextBudget = createContextBudget("unrecognized");
 const DEFAULT_MAX_RECENT_TURNS = 20;
+/** M13: session profile TTL — renewed on every successful turn (a plain `set()`, no separate
+ * "touch" verb). 30 minutes of inactivity resets the session to empty, matching the design's own
+ * "session-scoped, not a permanent user profile" boundary (docs/milestones/M13.md). */
+const DEFAULT_SESSION_PROFILE_TTL_MS = 30 * 60 * 1000;
 
 /** TracedSystem values a MessageChannel is allowed to be traced under — deliberately closed (not
  * `channel.name` verbatim) so a customized channel name can't inject an out-of-union label into
@@ -52,6 +56,13 @@ export interface AgentDeps {
   clock: Clock;
   tracer: Tracer;
   skills?: SkillRegistry;
+  /** M13: session profile (facts + current open thread + a coarser summary), TTL-bound. Unset =
+   * feature off entirely, fully backward compatible — nothing is read or written. When set, read
+   * at the very start of `handle()` alongside `memory.load()`, and written after a successful send. */
+  sessionProfileStore?: SessionProfileStore;
+  /** How long a session profile survives inactivity before a fresh session starts with nothing
+   * carried over. Default 30 minutes. */
+  sessionProfileTtlMs?: number;
   /** RAG hook — default: no-op (no extra context). Real implementation (§9 Scenario B): `knowledge.ts`'s `createKnowledgeRag()` (M8). */
   retrieveRag?: (input: { contactId: string; query: string }) => Promise<string[]>;
   /** Tool-invocation hook — default: no-op (no findings). Real implementation (§9 Scenario C): `invoke-tools.ts`'s `createToolInvoker()` (M8). */
@@ -134,6 +145,42 @@ async function safeAppend(memory: Memory, turn: Turn): Promise<void> {
   } catch {
     // best-effort: a persistence hiccup must not cost the user their reply
   }
+}
+
+/** M13: `undefined` on any failure (missing store, backend outage, expired) — a session-profile
+ * hiccup degrades to "no profile this turn," never blocks the reply, same posture as `safeLoad`. */
+async function safeLoadSessionProfile(store: SessionProfileStore | undefined, contactId: string, now: number): Promise<SessionProfile | undefined> {
+  if (!store) return undefined;
+  try {
+    return await store.get(contactId, now);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Only ever called from behind an `if (deps.sessionProfileStore)` guard at the call site — takes
+ * a required `store`, not `| undefined`, so there's no redundant/untested defensive branch here. */
+async function safeSetSessionProfile(store: SessionProfileStore, profile: SessionProfile): Promise<void> {
+  try {
+    await store.set(profile);
+  } catch {
+    // best-effort: a persistence hiccup must not cost the user their reply
+  }
+}
+
+/** Renders a `SessionProfile` into the small text block `assemble.ts`'s `sessionProfile` input
+ * expects — kept here (not in assemble.ts, which stays decoupled from the profile's shape) since
+ * this is the one caller that actually has a `SessionProfile` to render. `undefined` when there's
+ * nothing worth including (no facts, no currentState, no summary) — an all-empty profile renders
+ * to nothing rather than an empty placeholder section. */
+function renderSessionProfile(profile: SessionProfile | undefined): string | undefined {
+  if (!profile) return undefined;
+  const lines: string[] = [];
+  const factEntries = Object.entries(profile.facts);
+  if (factEntries.length > 0) lines.push(`Known facts about this contact: ${factEntries.map(([k, v]) => `${k}: ${v}`).join("; ")}`);
+  if (profile.currentState) lines.push(`Current state of this thread: ${profile.currentState}`);
+  if (profile.summary) lines.push(`Session summary so far: ${profile.summary}`);
+  return lines.length > 0 ? lines.join("\n") : undefined;
 }
 
 /** Runs an optional hook (RAG/tools/escalate), swallowing a throw so one integration's outage
@@ -225,6 +272,9 @@ function trace(tracer: Tracer, system: TracedSystem, event: string, data?: unkno
 async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<DeliveryResult> {
   trace(deps.tracer, "memory", "load", { contactId: message.contactId });
   const history = await safeLoad(deps.memory, message.contactId);
+  // M13: read alongside memory.load() — deps.clock.now() drives the TTL check inside get(), so an
+  // expired profile comes back as undefined here, not stale state from a prior session.
+  const sessionProfile = await safeLoadSessionProfile(deps.sessionProfileStore, message.contactId, deps.clock.now());
 
   // The idempotency marker is the REPLY turn, not the inbound one: the inbound turn is persisted
   // unconditionally below, long before the message is actually answered, so checking for it would
@@ -258,6 +308,9 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
   const parsedConfirm = deps.confirmFlow ? parseConfirmSelection(message.selectionId) : undefined;
 
   let reply: SmartMessage;
+  // M13: only set on the compose path (refusal/confirm replies don't route through the model, so
+  // there's nothing to extract) — merged over the existing profile, not replacing it, when written below.
+  let extracted: { facts?: Record<string, string>; currentState?: string; summary?: string } = {};
   if (bounded?.refuse) {
     reply = { text: REFUSAL_TEXT };
   } else if (parsedConfirm) {
@@ -343,6 +396,7 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
       model: deps.model,
       input: {
         system: `${SCOPE_GUARDRAIL}\n\n${FORMAT_REASONING}\n\n${GROUNDING_HONESTY}`,
+        sessionProfile: renderSessionProfile(sessionProfile),
         skillFragments,
         toolSchemas,
         summary: windowed.summary,
@@ -357,6 +411,9 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     // this compose step is exactly one such call (retries/shrinks happen inside composeWithBudget).
     trace(deps.tracer, "llm", "compose", { usage: composed.usage, dropped: composed.dropped, shrunkForContextLength: composed.shrunkForContextLength, formatRationale: composed.formatRationale });
     reply = composed.reply;
+    // M13: this same compose call drafted the extraction, for free — carried through to the write
+    // below rather than a second read of `composed` (which is out of scope past this block).
+    extracted = { facts: composed.sessionFacts, currentState: composed.sessionCurrentState, summary: composed.sessionSummary };
   }
 
   const channelSystem = KNOWN_TRACED_CHANNELS.has(deps.channel.name) ? (deps.channel.name as TracedSystem) : undefined;
@@ -380,6 +437,23 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
   // ever matters (e.g. the numbered options' exact wording becomes something the model must recall).
   if (result.status === "sent" || result.status === "fellBack") {
     await safeAppend(deps.memory, { id: replyTurnId, contactId: message.contactId, role: "agent", text: summarizeReply(reply), timestamp: deps.clock.now() });
+
+    // M13: written at the same point the reply gets persisted — facts MERGE (a fact once learned
+    // isn't lost just because this turn didn't re-state it), currentState/summary REPLACE wholesale
+    // when this turn produced a new one (else carried over as-is — "allowed to lag", not forced to
+    // null every turn). expiresAt is always stamped fresh here, which is also how the TTL renews.
+    if (deps.sessionProfileStore) {
+      const now = deps.clock.now();
+      const nextCurrentState = extracted.currentState ?? sessionProfile?.currentState;
+      const nextSummary = extracted.summary ?? sessionProfile?.summary;
+      await safeSetSessionProfile(deps.sessionProfileStore, {
+        contactId: message.contactId,
+        facts: { ...(sessionProfile?.facts ?? {}), ...(extracted.facts ?? {}) },
+        ...(nextCurrentState !== undefined ? { currentState: nextCurrentState } : {}),
+        ...(nextSummary !== undefined ? { summary: nextSummary } : {}),
+        expiresAt: now + (deps.sessionProfileTtlMs ?? DEFAULT_SESSION_PROFILE_TTL_MS),
+      });
+    }
   }
 
   return result;

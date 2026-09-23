@@ -3,6 +3,12 @@ import type { ContextBudget } from "./context-budget.js";
 
 export interface AssembleInput {
   system: string;
+  /** M13: a pre-rendered text block built from a `SessionProfile` (facts + currentState +
+   * summary) — a plain string, like `summary`, so this module stays decoupled from any one
+   * caller's profile shape. Placed right after `system`: it shapes how everything else in the
+   * prompt should be read (a short reply like "medium" is only interpretable with `currentState`
+   * present), so it comes before skill/tool/RAG content, not buried after it. */
+  sessionProfile?: string;
   skillFragments?: string[];
   /** Rendered tool schema blocks (one per tool), already stringified by the caller. */
   toolSchemas?: string[];
@@ -14,12 +20,13 @@ export interface AssembleInput {
   userMessage: string;
 }
 
-type OptionalSection = "skillFragments" | "toolSchemas" | "summary" | "recalledSnippets" | "recentTurns";
+type OptionalSection = "sessionProfile" | "skillFragments" | "toolSchemas" | "summary" | "recalledSnippets" | "recentTurns";
 
 /** Each optional section's share of the total prompt budget, so one section can't dominate
  * regardless of how large the model's window is. Remaining budget goes to system + user message
  * (mandatory, never capped/dropped — §10). */
 const DEFAULT_SECTION_FRACTIONS: Record<OptionalSection, number> = {
+  sessionProfile: 0.1,
   skillFragments: 0.1,
   toolSchemas: 0.2,
   summary: 0.05,
@@ -35,7 +42,7 @@ export const TOOL_SCHEMAS_BUDGET_FRACTION = DEFAULT_SECTION_FRACTIONS.toolSchema
 /** Fixed assembly order (stable prefix — prompt-cache friendly) is ALSO the order sections are
  * dropped in reverse when even individually-capped sections don't fit the total budget: lowest
  * priority (recalledSnippets) drops first, recentTurns last (before the mandatory sections). */
-const DROP_PRIORITY: OptionalSection[] = ["recalledSnippets", "toolSchemas", "summary", "skillFragments", "recentTurns"];
+const DROP_PRIORITY: OptionalSection[] = ["recalledSnippets", "toolSchemas", "summary", "skillFragments", "sessionProfile", "recentTurns"];
 
 export interface AssembleResult {
   prompt: string;
@@ -85,8 +92,8 @@ function renderTurn(t: Turn): string {
 
 /**
  * Deterministic prompt assembler (§10 "prompt/token overflow -> tool retrieval + curation"):
- * fixed order system -> skill fragments -> tool schemas -> summary -> recalled snippets -> recent
- * turns -> user message. Each optional section gets its own token-budget share; if the total still
+ * fixed order system -> session profile (M13) -> skill fragments -> tool schemas -> summary ->
+ * recalled snippets -> recent turns -> user message. Each optional section gets its own token-budget share; if the total still
  * doesn't fit after per-section capping, whole sections are dropped lowest-priority-first — system
  * and the user message are never capped or dropped.
  */
@@ -94,6 +101,9 @@ export function assemblePrompt(input: AssembleInput, budget: ContextBudget): Ass
   const sections = new Map<OptionalSection, string>();
   const cap = (name: OptionalSection): number => Math.floor(budget.promptBudget * DEFAULT_SECTION_FRACTIONS[name]);
 
+  if (input.sessionProfile) {
+    sections.set("sessionProfile", truncateToTokens(input.sessionProfile, cap("sessionProfile"), budget));
+  }
   if (input.skillFragments && input.skillFragments.length > 0) {
     sections.set("skillFragments", capArrayFromEnd(input.skillFragments, (s) => s, cap("skillFragments"), budget, "\n\n"));
   }
@@ -124,6 +134,7 @@ export function assemblePrompt(input: AssembleInput, budget: ContextBudget): Ass
   const render = (): string =>
     [
       input.system,
+      sections.get("sessionProfile"),
       sections.get("skillFragments"),
       sections.get("toolSchemas"),
       sections.get("summary"),

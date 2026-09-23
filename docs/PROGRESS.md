@@ -181,3 +181,11 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
   M	packages/harness/src/agent.m5.test.ts
   M	packages/harness/src/compose-with-budget.m6.test.ts
   M	packages/whatsapp/src/send/render.m4.test.ts
+
+- 2026-09-23: gate M8 --allow-test-change: M13: session profile (facts + current state, TTL-bound) added; cumulative diff vs m7-done also includes already-justified M8-M12 changes from prior gate runs, each separately logged in PROGRESS.md/SPEC.md
+  M	packages/e2e/src/spine-a.m5.test.ts
+  M	packages/harness/src/agent-context-management.m6.test.ts
+  M	packages/harness/src/agent-oversized-text.m6.test.ts
+  M	packages/harness/src/agent.m5.test.ts
+  M	packages/harness/src/compose-with-budget.m6.test.ts
+  M	packages/whatsapp/src/send/render.m4.test.ts
