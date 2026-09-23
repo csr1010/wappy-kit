@@ -6,7 +6,7 @@ import { cleanupAllTmpProjects, mockModel, mockWhatsAppCloud } from "@wappy/test
 import { createInMemoryTracer, systemClock } from "@wappy/core";
 import type { Memory, Turn } from "@wappy/core";
 import { createWhatsAppChannel } from "@wappy/whatsapp";
-import { createAgent, createLlmRouter, createOrdersSkill, createSkillRegistry, createToolInvoker } from "@wappy/harness";
+import { createAgent, createLlmRouter, createToolInvoker } from "@wappy/harness";
 import { createShopifyToolProvider } from "@wappy/tools-openapi";
 
 afterEach(() => cleanupAllTmpProjects());
@@ -37,14 +37,16 @@ function jsonResponse(body: unknown): Response {
 
 /**
  * Spine C (§9 Scenario C): "where's my order 8842?" — the real tool path. Real @wappy/whatsapp +
- * real @wappy/harness (createAgent, the orders reference skill, the REAL `createToolInvoker`) + the
- * REAL Shopify GraphQL connector (`@wappy/tools-openapi`'s `createShopifyToolProvider`, no live
- * network — a recorded fixture response via a scripted `fetchImpl`, per T8.7's own "mock
- * Shopify/OpenAPI server" and the milestone's "recorded fixture responses (no live network)"
- * requirement) + a scripted mockModel. Proves: `rag` is never touched, and `getOrder` is called
- * exactly once with the order id actually extracted from the message.
+ * real @wappy/harness (createAgent, the REAL `createToolInvoker`, ZERO skills registered — M12
+ * removed the reference skills; this is the milestone's own proof that tool-invocation works fine
+ * without a skill wrapper) + the REAL Shopify GraphQL connector (`@wappy/tools-openapi`'s
+ * `createShopifyToolProvider`, no live network — a recorded fixture response via a scripted
+ * `fetchImpl`, per T8.7's own "mock Shopify/OpenAPI server" and the milestone's "recorded fixture
+ * responses (no live network)" requirement) + a scripted mockModel. Proves: `rag` and `skill` are
+ * never touched, and `getOrder` is called exactly once with the order id actually extracted from
+ * the message.
  */
-test('Spine C — "where\'s my order 8842?" touches exactly {whatsapp, memory, router, skill, tools, llm}, getOrder called exactly once with id 8842, rag never touched', async () => {
+test('Spine C — "where\'s my order 8842?" touches exactly {whatsapp, memory, router, tools, llm} with zero skills registered (M12), getOrder called exactly once with id 8842, rag/skill never touched', async () => {
   const whatsapp = await mockWhatsAppCloud();
 
   let shopifyCalls = 0;
@@ -88,19 +90,19 @@ test('Spine C — "where\'s my order 8842?" touches exactly {whatsapp, memory, r
   const tools = shopify.listTools();
 
   const model = mockModel([
-    { structured: { intent: "order-status", skill: "orders", needsRAG: false, needsTool: true, escalate: false, confidence: 0.9 } }, // router's decision
+    { structured: { intent: "order-status", needsRAG: false, needsTool: true, escalate: false, confidence: 0.9 } }, // router's decision — no skill (M12: none registered)
     { structured: { toolName: "getOrder", args: { id: "8842" } } }, // invokeTools' tool decision
     { structured: { formatRationale: "test rationale", message: { text: "Your order #8842 is in transit — tracking 1Z999AA1, expected soon!" } } }, // grounded compose reply
   ]);
   const tracer = createInMemoryTracer();
   const memory = inMemoryMemory();
-  const skills = createSkillRegistry();
-  skills.register(createOrdersSkill());
+  // M12: zero skills registered — `deps.skills` omitted entirely (T12.8's own verification: the
+  // agent must work with no skills param at all, not just an empty registry).
   const invokeTools = createToolInvoker({ model, tools });
 
   const channel = createWhatsAppChannel({ phoneNumberId: "106540352242922", accessToken: "test-token", graphApiBaseUrl: whatsapp.url, clock: systemClock });
   const router = createLlmRouter({ model });
-  const agent = createAgent({ channel, memory, router, model, clock: systemClock, tracer, skills, tools, invokeTools });
+  const agent = createAgent({ channel, memory, router, model, clock: systemClock, tracer, tools, invokeTools });
 
   tracer.record("whatsapp", "receive");
   const messages = await channel.receive(INBOUND_ORDER_STATUS);
@@ -113,9 +115,10 @@ test('Spine C — "where\'s my order 8842?" touches exactly {whatsapp, memory, r
   expect(whatsapp.sent).toHaveLength(1);
   expect(model.calls).toHaveLength(3); // router + tool-decision + compose
 
-  expect(tracer.touched()).toEqual(new Set(["whatsapp", "memory", "router", "skill", "tools", "llm"]));
+  expect(tracer.touched()).toEqual(new Set(["whatsapp", "memory", "router", "tools", "llm"]));
   expect(tracer.events().filter((e) => e.system === "llm")).toHaveLength(1);
   expect(tracer.events().filter((e) => e.system === "rag")).toHaveLength(0);
+  expect(tracer.events().filter((e) => e.system === "skill")).toHaveLength(0);
 
   // The real Shopify GraphQL call happened exactly once, searching by the order NUMBER extracted
   // from the message (not misrouted to a direct id lookup by Shopify's own opaque internal id).

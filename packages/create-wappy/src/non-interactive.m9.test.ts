@@ -13,32 +13,28 @@ function errors(flags: Parameters<typeof resolveNonInteractiveAnswers>[0]) {
   return r.errors;
 }
 
+// M12 removed the interview's "skills" step (`@wappy/harness` ships no reference skills anymore) —
+// rewritten accordingly (`--allow-test-change`, SPEC.md decisions log).
 describe("resolveNonInteractiveAnswers — same answers as the interactive interview", () => {
-  test("--model openai --api none resolves a complete answer set with no skills step", () => {
+  test("--model openai --api none resolves a complete answer set", () => {
     expect(ok({ model: "openai", api: "none" })).toEqual({ model: { provider: "openai" }, tools: { kind: "none" } });
   });
 
-  test("--api shopify needs skills: --skills picks them", () => {
-    expect(ok({ model: "anthropic", api: "shopify", skills: "store-info,orders" })).toEqual({
+  test("--api shopify resolves a complete answer set too — nothing further to ask", () => {
+    expect(ok({ model: "anthropic", api: "shopify" })).toEqual({
       model: { provider: "anthropic" },
       tools: { kind: "shopify" },
-      skills: { skills: ["store-info", "orders"] },
     });
-  });
-
-  test('--skills none (or empty) means no skills', () => {
-    expect(ok({ model: "gemini", api: "shopify", skills: "none" }).skills).toEqual({ skills: [] });
-    expect(ok({ model: "ollama", api: "shopify", skills: "  " }).skills).toEqual({ skills: [] });
   });
 });
 
 describe("--yes fills omitted steps with the defaults", () => {
-  test("--yes alone resolves to the defaults (no store, so no skills)", () => {
+  test("--yes alone resolves to the defaults (no store)", () => {
     expect(ok({ yes: true })).toEqual({ model: DEFAULT_ANSWERS.model, tools: DEFAULT_ANSWERS.tools });
   });
 
-  test("--yes with --api shopify defaults skills to none", () => {
-    expect(ok({ yes: true, api: "shopify" })).toEqual({ model: DEFAULT_ANSWERS.model, tools: { kind: "shopify" }, skills: { skills: [] } });
+  test("--yes with --api shopify still resolves cleanly", () => {
+    expect(ok({ yes: true, api: "shopify" })).toEqual({ model: DEFAULT_ANSWERS.model, tools: { kind: "shopify" } });
   });
 
   test("explicit flags win over --yes defaults", () => {
@@ -54,25 +50,11 @@ describe("errors", () => {
     ]);
   });
 
-  test("with a store and no --skills or --yes, skills is reported missing too", () => {
-    expect(errors({ model: "openai", api: "shopify" })).toEqual(['Missing required flag for step "skills" (pass it explicitly, or use --yes to accept the default).']);
-  });
-
   test("unrecognized --model / --api values are parse errors", () => {
     // (a step left unanswered by a parse error also cascades an "out of order" error onto the next
     // step, so assert on the parse error itself.)
     expect(errors({ model: "cohere", api: "none" })[0]).toBe('--model must be one of openai|anthropic|gemini|ollama, got "cohere".');
     expect(errors({ model: "openai", api: "https://x/openapi.json" })).toEqual(['--api must be one of none|shopify, got "https://x/openapi.json".']);
-  });
-
-  test("an unknown skill lists the valid ones", () => {
-    expect(errors({ model: "openai", api: "shopify", skills: "orders,refunds" })).toEqual(['--skills has unknown skill(s): refunds. Valid: store-info, orders, products, or "none".']);
-  });
-
-  test("--skills without a store is rejected (skills only apply to the Shopify path)", () => {
-    expect(errors({ model: "openai", api: "none", skills: "orders" })).toEqual(["--skills only applies with --api shopify (skills are chosen once a store is connected)."]);
-    // ...but "none" is harmless
-    expect(ok({ model: "openai", api: "none", skills: "none" }).tools).toEqual({ kind: "none" });
   });
 
   test("all problems are collected together, not just the first", () => {

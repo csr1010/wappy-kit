@@ -7,7 +7,7 @@ import { cleanupAllTmpProjects, mockModel, mockWhatsAppCloud } from "@wappy/test
 import { createInMemoryTracer, systemClock } from "@wappy/core";
 import type { Memory, Turn } from "@wappy/core";
 import { createWhatsAppChannel } from "@wappy/whatsapp";
-import { createAgent, createKnowledge, createKnowledgeRag, createLlmRouter, createSkillRegistry, STORE_INFO_SKILL } from "@wappy/harness";
+import { createAgent, createKnowledge, createKnowledgeRag, createLlmRouter } from "@wappy/harness";
 import { fetchShopifyPolicies, shopifyPolicyIngestDocuments } from "@wappy/tools-openapi";
 
 afterEach(() => cleanupAllTmpProjects());
@@ -83,13 +83,12 @@ test("Shopify policy auto-ingest — a refundPolicy fetched from Shopify grounds
   const retrieveRag = createKnowledgeRag({ knowledge });
 
   const model = mockModel([
-    { structured: { intent: "refund-policy", skill: "store-info", needsRAG: true, needsTool: false, escalate: false, confidence: 0.9 } }, // router's decision
+    { structured: { intent: "refund-policy", needsRAG: true, needsTool: false, escalate: false, confidence: 0.9 } }, // router's decision — no skill (M12: none registered)
     { structured: { formatRationale: "test rationale", message: { text: "You can return items within 45 days of delivery as long as you have your receipt." } } }, // grounded compose reply
   ]);
   const tracer = createInMemoryTracer();
   const memory = inMemoryMemory();
-  const skills = createSkillRegistry();
-  skills.register(STORE_INFO_SKILL);
+  // M12: zero skills registered — RAG fires purely on the router's `needsRAG` boolean.
 
   const channel = createWhatsAppChannel({
     phoneNumberId: "106540352242922",
@@ -98,7 +97,7 @@ test("Shopify policy auto-ingest — a refundPolicy fetched from Shopify grounds
     clock: systemClock,
   });
   const router = createLlmRouter({ model });
-  const agent = createAgent({ channel, memory, router, model, clock: systemClock, tracer, skills, retrieveRag });
+  const agent = createAgent({ channel, memory, router, model, clock: systemClock, tracer, retrieveRag });
 
   const messages = await channel.receive(INBOUND_REFUND_QUESTION);
   expect(messages).toHaveLength(1);

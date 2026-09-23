@@ -12,8 +12,9 @@ import { DEFAULT_ANSWERS, renderProject, type RenderProjectOptions } from "creat
  * packages; every unit test only does string-matching (`toContain(...)`) on the rendered source.
  *
  * This test closes that class of bug generically: for every combination `renderProject` can emit,
- * every `import { a, b, ... } from "@wappy/X"` in the generated `index.ts`/`tools/*.ts`/`skills/*.ts`
- * names only symbols `@wappy/X`'s own BUILT dist actually exports. Needs a prior `pnpm build`.
+ * every `import { a, b, ... } from "@wappy/X"` in the generated `index.ts`/`tools/*.ts` names only
+ * symbols `@wappy/X`'s own BUILT dist actually exports. Needs a prior `pnpm build`. (M12 removed the
+ * `skills/*.ts` files this used to also scan — `@wappy/harness` ships no reference skills anymore.)
  */
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -40,11 +41,8 @@ function importedNames(content: string): { pkg: string; names: string[] }[] {
 
 const combos: { label: string; answers: RenderProjectOptions["answers"] }[] = [
   { label: "no store", answers: { model: DEFAULT_ANSWERS.model, tools: { kind: "none" } } },
-  { label: "shopify, no skills", answers: { model: DEFAULT_ANSWERS.model, tools: { kind: "shopify" }, skills: { skills: [] } } },
-  { label: "shopify, store-info", answers: { model: { provider: "anthropic" }, tools: { kind: "shopify" }, skills: { skills: ["store-info"] } } },
-  { label: "shopify, orders", answers: { model: { provider: "gemini" }, tools: { kind: "shopify" }, skills: { skills: ["orders"] } } },
-  { label: "shopify, products", answers: { model: { provider: "openai" }, tools: { kind: "shopify" }, skills: { skills: ["products"] } } },
-  { label: "shopify, all three skills", answers: { model: { provider: "ollama" }, tools: { kind: "shopify" }, skills: { skills: ["store-info", "orders", "products"] } } },
+  { label: "shopify", answers: { model: { provider: "anthropic" }, tools: { kind: "shopify" } } },
+  { label: "shopify, ollama", answers: { model: { provider: "ollama" }, tools: { kind: "shopify" } } },
 ];
 
 describe.each(combos)("generated project imports are real, for combo: $label", ({ answers }) => {

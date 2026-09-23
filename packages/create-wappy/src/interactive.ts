@@ -6,7 +6,6 @@ import {
   type CompleteInterviewAnswers,
   type InterviewAnswers,
   type ModelProvider,
-  type ReferenceSkillName,
 } from "./interview.js";
 
 /**
@@ -30,9 +29,8 @@ async function selectOne<T extends string>(message: string, choices: { value: st
   return choice as T;
 }
 
-/** Runs the interactive interview (model, tools, and — only for Shopify — skills) and returns a
- * complete, valid `InterviewAnswers`; re-prompts a step on an invalid answer instead of ever exiting
- * mid-interview with a partial state. */
+/** Runs the interactive interview (model, tools) and returns a complete, valid `InterviewAnswers`;
+ * re-prompts a step on an invalid answer instead of ever exiting mid-interview with a partial state. */
 export async function runInteractiveInterview(): Promise<CompleteInterviewAnswers> {
   clack.intro("create-wappy — let's set up your WhatsApp agent");
   let answers: InterviewAnswers = {};
@@ -48,16 +46,6 @@ export async function runInteractiveInterview(): Promise<CompleteInterviewAnswer
       case "tools":
         value = { kind: await selectOne<"none" | "shopify">(q.prompt, q.choices!) };
         break;
-      case "skills": {
-        const picked = await clack.multiselect({
-          message: q.prompt,
-          options: q.choices!.map((c) => ({ value: c.value, label: c.label })),
-          required: false,
-        });
-        if (clack.isCancel(picked)) onCancel();
-        value = { skills: picked as ReferenceSkillName[] };
-        break;
-      }
     }
 
     const result = applyAnswer(answers, q.step, value);

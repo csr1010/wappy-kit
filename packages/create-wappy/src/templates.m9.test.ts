@@ -7,19 +7,21 @@ const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
   const model = overrides.model ?? DEFAULT_ANSWERS.model;
   const tools = overrides.tools ?? DEFAULT_ANSWERS.tools;
-  // skills only exist on the Shopify path (the interview never asks otherwise)
-  return tools.kind === "shopify" ? { model, tools, skills: overrides.skills ?? DEFAULT_ANSWERS.skills } : { model, tools };
+  return { model, tools };
 }
 
 function fileMap(files: { path: string; content: string }[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));
 }
 
-describe("renderProject — golden path (openai + shopify + store-info/orders)", () => {
+// M12 removed the interview's "skills" step and `@wappy/harness`'s reference skills entirely — the
+// generic format-reasoning/grounding-honesty prompting (SPEC §6.1/§6.3) applies regardless of what
+// tools are wired, so there's nothing left for a per-skill file/registration to render. This file
+// was rewritten accordingly (`--allow-test-change`, SPEC.md decisions log).
+describe("renderProject — golden path (openai + shopify)", () => {
   const opts: RenderProjectOptions = {
     answers: complete({
       model: { provider: "openai" },
-      skills: { skills: ["store-info", "orders"] },
       tools: { kind: "shopify" },
     }),
     versions: VERSIONS,
@@ -27,11 +29,11 @@ describe("renderProject — golden path (openai + shopify + store-info/orders)",
   };
   const files = fileMap(renderProject(opts));
 
-  test("renders exactly the §4.1-listed output files, plus per-tool/per-skill files", () => {
-    expect([...files.keys()].sort()).toEqual(["README.md", ".env.sample", ".gitignore", "index.ts", "package.json", "skills/orders.ts", "skills/store-info.ts", "tools/shopify.ts"].sort());
+  test("renders exactly the §4.1-listed output files, plus per-tool files — no skills/*.ts", () => {
+    expect([...files.keys()].sort()).toEqual(["README.md", ".env.sample", ".gitignore", "index.ts", "package.json", "tools/shopify.ts"].sort());
   });
 
-  test("index.ts imports the OpenAI adapter and wires model/memory/router/tools/skills/rag/channel", () => {
+  test("index.ts imports the OpenAI adapter and wires model/memory/router/tools/channel — no skills/rag wiring", () => {
     const indexTs = files.get("index.ts")!;
     expect(indexTs).toContain('import { openai } from "@ai-sdk/openai";');
     expect(indexTs).toContain('openai(process.env.OPENAI_MODEL ?? "gpt-4o")');
@@ -39,10 +41,9 @@ describe("renderProject — golden path (openai + shopify + store-info/orders)",
     expect(indexTs).toContain("createLlmRouter({ model })");
     expect(indexTs).toContain("const toolProvider = createShopifyToolProvider(");
     expect(indexTs).toContain("const invokeTools = createToolInvoker({ model, tools });");
-    expect(indexTs).toContain("const knowledge = createKnowledge(");
-    expect(indexTs).toContain("const retrieveRag = createKnowledgeRag(");
-    expect(indexTs).toContain("skills.register(STORE_INFO_SKILL);");
-    expect(indexTs).toContain("skills.register(createOrdersSkill());");
+    expect(indexTs).not.toContain("createSkillRegistry");
+    expect(indexTs).not.toContain("createKnowledge");
+    expect(indexTs).not.toContain("createKnowledgeRag");
     expect(indexTs).toContain("createWhatsAppChannel({");
     expect(indexTs).toContain("export const agent = createAgent({");
   });
@@ -51,11 +52,6 @@ describe("renderProject — golden path (openai + shopify + store-info/orders)",
     const toolsFile = files.get("tools/shopify.ts")!;
     expect(toolsFile).toContain('import { createShopifyToolProvider } from "@wappy/tools-openapi";');
     expect(toolsFile).toContain("storeDomain: process.env.SHOPIFY_STORE_DOMAIN!");
-  });
-
-  test("skills/*.ts import the static reference skills verbatim (no draft supplied)", () => {
-    expect(files.get("skills/store-info.ts")).toContain('export { STORE_INFO_SKILL as storeInfoSkill } from "@wappy/harness";');
-    expect(files.get("skills/orders.ts")).toContain("createOrdersSkill()");
   });
 
   test(".env.sample lists every key needed to run, blank — never a real secret value", () => {
@@ -76,6 +72,7 @@ describe("renderProject — golden path (openai + shopify + store-info/orders)",
     expect(env).toContain("Develop apps");
     expect(env).toContain("\n# MEMORY_DB_URL=\n"); // optional: default applies unless uncommented
     expect(env).not.toContain("\nMEMORY_DB_URL=");
+    expect(env).not.toContain("KNOWLEDGE_DB_URL"); // M12: no RAG wiring left to need it
   });
 
   test(".gitignore excludes .env and .wappy/", () => {
@@ -84,7 +81,7 @@ describe("renderProject — golden path (openai + shopify + store-info/orders)",
     expect(gi).toContain(".wappy/");
   });
 
-  test("package.json is valid JSON, pins @wappy/* part versions, and includes the Shopify tools-openapi + provider deps", () => {
+  test("package.json is valid JSON, pins @wappy/* part versions, and includes the Shopify tools-openapi dep but no @libsql/client (M12: only the RAG-less skill needed it)", () => {
     const pkg = JSON.parse(files.get("package.json")!);
     expect(pkg.name).toBe("luna-and-co-bot");
     expect(pkg.type).toBe("module");
@@ -93,10 +90,10 @@ describe("renderProject — golden path (openai + shopify + store-info/orders)",
     expect(pkg.dependencies["@wappy/tools-openapi"]).toBe("0.1.0");
     expect(pkg.dependencies["create-wappy"]).toBe("0.1.0"); // provides the `wappy` bin `npm run dev` needs
     expect(pkg.dependencies["@ai-sdk/openai"]).toBeDefined();
-    expect(pkg.dependencies["@libsql/client"]).toBeDefined(); // store-info needs Knowledge's LibSQL client
+    expect(pkg.dependencies["@libsql/client"]).toBeUndefined();
   });
 
-  test("README documents every env var and the generated combo", () => {
+  test("README documents every env var and the generated combo, no Skills line", () => {
     const readme = files.get("README.md")!;
     expect(readme).toContain("OPENAI_API_KEY");
     expect(readme).toContain("SHOPIFY_STORE_DOMAIN");
@@ -105,35 +102,7 @@ describe("renderProject — golden path (openai + shopify + store-info/orders)",
     expect(readme).toContain("Memory:** local SQLite");
     expect(readme).toMatch(/Model:\*\* openai/);
     expect(readme).toContain("wappy dev");
-  });
-});
-
-describe("renderProject — store-specific skill drafts are embedded, not the static import", () => {
-  test("a generateStoreSkill()-style draft is inlined as an object literal overriding promptFragment", () => {
-    const opts: RenderProjectOptions = {
-      answers: complete({ skills: { skills: ["store-info"] }, tools: { kind: "shopify" } }),
-      versions: VERSIONS,
-      storeSkillDrafts: { "store-info": { promptFragment: "You can help with candles, 45-day returns, and 2-3 day shipping." } },
-    };
-    const files = fileMap(renderProject(opts));
-    const skillFile = files.get("skills/store-info.ts")!;
-    expect(skillFile).toContain("...STORE_INFO_SKILL");
-    expect(skillFile).toContain(JSON.stringify("You can help with candles, 45-day returns, and 2-3 day shipping."));
-    expect(files.get("index.ts")).toContain("...STORE_INFO_SKILL");
-  });
-
-  test("a draft for the orders skill is inlined over createOrdersSkill(), with an overridden description too", () => {
-    const files = fileMap(
-      renderProject({
-        answers: complete({ skills: { skills: ["orders"] }, tools: { kind: "shopify" } }),
-        versions: VERSIONS,
-        storeSkillDrafts: { orders: { promptFragment: "Look up Luna & Co. orders.", description: "Luna & Co. order lookups." } },
-      }),
-    );
-    const skillFile = files.get("skills/orders.ts")!;
-    expect(skillFile).toContain("...createOrdersSkill()");
-    expect(skillFile).toContain(JSON.stringify("Look up Luna & Co. orders."));
-    expect(skillFile).toContain(JSON.stringify("Luna & Co. order lookups."));
+    expect(readme).not.toContain("Skills:**");
   });
 });
 
@@ -147,49 +116,6 @@ describe("renderProject — model provider branches", () => {
     expect(files.get("index.ts")).toContain(`from "${pkg}"`);
     expect(files.get("index.ts")).toContain(ctorPrefix);
     expect(files.get(".env.sample")).toContain(`${envVar}=`);
-  });
-});
-
-describe("renderProject — .env.sample covers every env var the generated code reads", () => {
-  test("the store-info skill adds its optional KNOWLEDGE_DB_URL (commented out); without it the key is absent", () => {
-    const withSkill = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" }, skills: { skills: ["store-info"] } }), versions: VERSIONS }));
-    expect(withSkill.get("index.ts")).toContain("KNOWLEDGE_DB_URL");
-    expect(withSkill.get(".env.sample")).toContain("\n# KNOWLEDGE_DB_URL=\n");
-    const without = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" }, skills: { skills: ["orders"] } }), versions: VERSIONS }));
-    expect(without.get(".env.sample")).not.toContain("KNOWLEDGE_DB_URL");
-  });
-});
-
-describe("renderProject — products skill (catalog browsing + stock)", () => {
-  test("wires createProductsSkill, its own skills/products.ts file, and doesn't touch order tools", () => {
-    const files = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" }, skills: { skills: ["products"] } }), versions: VERSIONS }));
-    expect(files.get("index.ts")).toContain("createProductsSkill");
-    expect(files.get("index.ts")).toContain("skills.register(createProductsSkill());");
-    expect(files.get("skills/products.ts")).toContain("import { createProductsSkill } from \"@wappy/harness\";");
-    expect(files.get("skills/products.ts")).toContain("export const productsSkill = createProductsSkill();");
-    expect(files.has("skills/orders.ts")).toBe(false);
-  });
-
-  test("all three skills together register independently, each with its own file", () => {
-    const files = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" }, skills: { skills: ["store-info", "orders", "products"] } }), versions: VERSIONS }));
-    for (const path of ["skills/store-info.ts", "skills/orders.ts", "skills/products.ts"]) expect(files.has(path)).toBe(true);
-    const indexTs = files.get("index.ts")!;
-    expect(indexTs).toContain("skills.register(STORE_INFO_SKILL);");
-    expect(indexTs).toContain("skills.register(createOrdersSkill());");
-    expect(indexTs).toContain("skills.register(createProductsSkill());");
-  });
-
-  test("a store-specific draft for products is inlined the same way as orders/store-info", () => {
-    const files = fileMap(
-      renderProject({
-        answers: complete({ tools: { kind: "shopify" }, skills: { skills: ["products"] } }),
-        versions: VERSIONS,
-        storeSkillDrafts: { products: { promptFragment: "We sell candles and wax melts." } },
-      }),
-    );
-    const skillFile = files.get("skills/products.ts")!;
-    expect(skillFile).toContain("...createProductsSkill()");
-    expect(skillFile).toContain(JSON.stringify("We sell candles and wax melts."));
   });
 });
 
@@ -219,16 +145,15 @@ describe("renderProject — tools variants", () => {
   });
 });
 
-describe("renderProject — skills", () => {
+describe("renderProject — no skills, ever (M12)", () => {
   test("no store connected: no skills/*.ts files and no skill registry wiring in index.ts", () => {
     const files = fileMap(renderProject({ answers: complete(), versions: VERSIONS }));
     expect([...files.keys()].some((p) => p.startsWith("skills/"))).toBe(false);
     expect(files.get("index.ts")).not.toContain("createSkillRegistry");
-    expect(files.get("README.md")).toContain("Skills:** none");
   });
 
-  test("Shopify connected but no skills picked: tools are wired, skills are not", () => {
-    const files = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" }, skills: { skills: [] } }), versions: VERSIONS }));
+  test("Shopify connected: tools are wired, skills still never appear", () => {
+    const files = fileMap(renderProject({ answers: complete({ tools: { kind: "shopify" } }), versions: VERSIONS }));
     expect(files.has("tools/shopify.ts")).toBe(true);
     expect([...files.keys()].some((p) => p.startsWith("skills/"))).toBe(false);
     expect(files.get("index.ts")).not.toContain("createSkillRegistry");
