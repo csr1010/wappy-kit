@@ -97,6 +97,8 @@ export async function runCli(deps: CliDeps): Promise<CliResult> {
     const skipped = result.results.filter((r) => r.skipped).length;
     deps.print(`\nDone — ${written} file(s) written${skipped > 0 ? `, ${skipped} already up to date` : ""} in ${projectRoot}.`);
     deps.print("See README.md for next steps.");
+    deps.print("Before your agent can actually receive messages, you need a WhatsApp Cloud API app and a");
+    deps.print("webhook pointed at it — the full walkthrough is in WHATSAPP_SETUP.md.");
     return { exitCode: 0 };
   } catch (e) {
     if (e instanceof StateLoadError) {

@@ -76,7 +76,7 @@ export async function runDev(opts: RunDevOptions): Promise<RunDevResult> {
   const verifyToken = env.WHATSAPP_VERIFY_TOKEN;
   const appSecret = env.WHATSAPP_APP_SECRET;
   if (!verifyToken || !appSecret) {
-    opts.print("Missing WHATSAPP_VERIFY_TOKEN and/or WHATSAPP_APP_SECRET in .env — fill in .env.sample's WhatsApp section first (see README.md).");
+    opts.print("Missing WHATSAPP_VERIFY_TOKEN and/or WHATSAPP_APP_SECRET in .env — fill in .env.sample's WhatsApp section first (see WHATSAPP_SETUP.md).");
     return { exitCode: 1 };
   }
 

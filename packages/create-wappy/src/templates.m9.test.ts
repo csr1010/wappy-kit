@@ -26,7 +26,7 @@ describe("renderProject — golden path (openai)", () => {
   const files = fileMap(renderProject(opts));
 
   test("renders exactly the §4.1-listed output files — no tools/*.ts, no skills/*.ts", () => {
-    expect([...files.keys()].sort()).toEqual(["README.md", ".env.sample", ".gitignore", "index.ts", "package.json"].sort());
+    expect([...files.keys()].sort()).toEqual(["README.md", "WHATSAPP_SETUP.md", ".env.sample", ".gitignore", "index.ts", "package.json"].sort());
   });
 
   test("index.ts imports the OpenAI adapter and wires model/memory/sessionProfileStore/router/channel — no tools/skills/rag wiring", () => {

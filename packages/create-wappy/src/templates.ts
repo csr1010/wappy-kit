@@ -227,6 +227,78 @@ function renderPackageJson(opts: RenderProjectOptions): string {
   return `${JSON.stringify(pkg, null, 2)}\n`;
 }
 
+/** A dedicated, standalone walkthrough for the one step that isn't a `.env` fill-in: getting a real
+ * WhatsApp Cloud API app talking to a webhook that's running on the person's own machine. Kept out
+ * of README.md on purpose — the README is meant to be skimmed, this is meant to be followed step by
+ * step, and the two don't read well interleaved. `runCli` (cli.ts) points here right after
+ * generation finishes, and `wappy dev`'s own missing-token message does too. */
+function renderWhatsAppSetup(): string {
+  const lines: string[] = [];
+  lines.push("# Connecting WhatsApp");
+  lines.push("");
+  lines.push("This is the one part of setup that isn't just filling in `.env`. It has two halves: getting");
+  lines.push("real WhatsApp Cloud API credentials, and giving Meta a URL it can reach even though your agent");
+  lines.push("is running on your own machine right now, not a public server.");
+  lines.push("");
+  lines.push("## 1. Create the Meta app and get your credentials");
+  lines.push("");
+  lines.push("1. Go to https://developers.facebook.com/apps and create an app (type: Business).");
+  lines.push("2. Add the **WhatsApp** product to it.");
+  lines.push("3. Under WhatsApp → API Setup, you'll see a test phone number already provided. Copy its");
+  lines.push("   **Phone number ID** and the **temporary access token** shown there into `.env` as");
+  lines.push("   `WHATSAPP_PHONE_NUMBER_ID` and `WHATSAPP_ACCESS_TOKEN`. (That token expires in 24 hours —");
+  lines.push("   fine for trying this out; for anything longer-lived, create a System User token instead,");
+  lines.push("   under Business Settings → System Users.)");
+  lines.push("4. Under App settings → Basic, copy the **App secret** into `.env` as `WHATSAPP_APP_SECRET`.");
+  lines.push("   This is what lets the webhook server verify a request actually came from Meta.");
+  lines.push("5. Make up any string yourself (a password you invent, not something Meta gives you) and put");
+  lines.push("   it in `.env` as `WHATSAPP_VERIFY_TOKEN`. You'll enter this exact same string into Meta's");
+  lines.push("   webhook config in step 3 below — it's just a shared secret the two sides agree on.");
+  lines.push("");
+  lines.push("## 2. Get a public URL for your local machine");
+  lines.push("");
+  lines.push("Meta needs to send webhook requests to a real, public URL. Your machine doesn't have one by");
+  lines.push("default, so `npm run dev` (which runs `wappy dev`) opens a tunnel for you automatically and");
+  lines.push("prints a public URL that forwards to your local server. You don't need to install or");
+  lines.push("configure anything extra for this — it's already wired in.");
+  lines.push("");
+  lines.push("```sh");
+  lines.push("npm run dev");
+  lines.push("# ...");
+  lines.push("# Webhook server listening on http://localhost:3000/webhook");
+  lines.push("# Public webhook URL: https://some-random-name.loca.lt/webhook");
+  lines.push("```");
+  lines.push("");
+  lines.push("Keep that command running while you're testing. If you'd rather use your own tunnel (ngrok,");
+  lines.push("Cloudflare Tunnel, etc.) instead of the built-in one, run `npm run dev -- --no-tunnel` and point");
+  lines.push("your own tunnel at `http://localhost:3000/webhook` — either way, what Meta needs in the next");
+  lines.push("step is whatever public URL ends in `/webhook`.");
+  lines.push("");
+  lines.push("## 3. Point Meta's webhook at that URL");
+  lines.push("");
+  lines.push("1. In the Meta app, go to WhatsApp → Configuration.");
+  lines.push("2. Under Webhook, click Edit and paste in the public URL from step 2 (the one ending in");
+  lines.push("   `/webhook`), plus the same `WHATSAPP_VERIFY_TOKEN` string you put in `.env`.");
+  lines.push("3. Click Verify and save — Meta calls your webhook once to confirm it's really up, and your");
+  lines.push("   server (already running from step 2) answers that check automatically.");
+  lines.push("4. Under \"Webhook fields,\" subscribe to **messages**. Without this, Meta never actually");
+  lines.push("   forwards incoming messages to your webhook, even once verification succeeds.");
+  lines.push("");
+  lines.push("## 4. Test it");
+  lines.push("");
+  lines.push("Send a WhatsApp message to the test number shown on the API Setup page. It should reach your");
+  lines.push("running `npm run dev` process and get a real reply back.");
+  lines.push("");
+  lines.push("If nothing happens: check the terminal running `npm run dev` for errors first, then re-check");
+  lines.push("that the webhook shows as verified and subscribed to `messages` in Meta's UI. `wappy doctor`");
+  lines.push("(once available) checks your `.env` and connectivity for you.");
+  lines.push("");
+  lines.push("A new tunnel URL from the built-in tunnel changes every time you restart `npm run dev` — if");
+  lines.push("you stop and restart it, you'll need to paste the new URL back into Meta's webhook config.");
+  lines.push("");
+  return lines.join("\n");
+}
+
 function renderReadme(opts: RenderProjectOptions): string {
   const { answers } = opts;
   const vars = collectEnvVars(opts);
@@ -247,10 +319,8 @@ function renderReadme(opts: RenderProjectOptions): string {
   lines.push("");
   lines.push("## 2. Connect WhatsApp");
   lines.push("");
-  lines.push("1. Create a Meta developer app at https://developers.facebook.com/apps and add the WhatsApp product.");
-  lines.push("2. Copy the phone number ID, access token and app secret into `.env` (see the list above).");
-  lines.push("3. Choose any string as `WHATSAPP_VERIFY_TOKEN` — you enter the same value on both sides.");
-  lines.push("4. Run `wappy dev` — it prints a public webhook URL. Paste that URL + your verify token into the app's webhook config.");
+  lines.push("See [`WHATSAPP_SETUP.md`](./WHATSAPP_SETUP.md) for the full walkthrough: creating the Meta app,");
+  lines.push("getting a public webhook URL from your own machine, and wiring it into Meta's webhook config.");
   lines.push("");
   lines.push("## 3. What was generated");
   lines.push("");
@@ -259,7 +329,9 @@ function renderReadme(opts: RenderProjectOptions): string {
   lines.push("");
   lines.push("No tools/connectors are wired by default — see `index.ts`'s comment above `createAgent` for how to add one.");
   lines.push("");
-  lines.push("Run `wappy status` any time to see what's done vs. pending, and `wappy doctor` to validate your env + connectivity.");
+  lines.push("Once WHATSAPP_SETUP.md's steps are done, `npm run dev` (this project's `wappy dev`) starts the");
+  lines.push("webhook server. Run `wappy status` any time to see what's done vs. pending, and `wappy doctor` to");
+  lines.push("validate your env + connectivity.");
   lines.push("");
   return lines.join("\n");
 }
@@ -280,5 +352,6 @@ export function renderProject(opts: RenderProjectOptions): GeneratedFile[] {
     { path: ".gitignore", content: renderGitignore() },
     { path: "package.json", content: renderPackageJson(opts) },
     { path: "README.md", content: renderReadme(opts) },
+    { path: "WHATSAPP_SETUP.md", content: renderWhatsAppSetup() },
   ];
 }
