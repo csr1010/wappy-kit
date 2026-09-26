@@ -4,13 +4,15 @@
 
 [![CI](https://github.com/csr1010/wappy-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/csr1010/wappy-kit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![npm](https://img.shields.io/npm/v/create-wappy?label=create-wappy)](https://www.npmjs.com/package/create-wappy)
+[![npm](https://img.shields.io/npm/v/%40wappy%2Fcreate-agent?label=%40wappy%2Fcreate-agent)](https://www.npmjs.com/package/@wappy/create-agent)
 [![Local-first](https://img.shields.io/badge/local--first-%E2%9C%94-brightgreen)](#why-this-exists)
+
+> Not affiliated with, endorsed by, or sponsored by WhatsApp or Meta. "WhatsApp" refers to the WhatsApp Cloud API this project integrates with, nothing more.
 
 2 billion people already talk to businesses on WhatsApp. The tooling for it is still stuck in 2015: rigid flow builders wearing an AI costume, that can't touch your actual API and can't remember what you told them five minutes ago. Wappy Kit is the operating system layer underneath a real WhatsApp agent, not another flowchart.
 
 ```bash
-npm create wappy
+npm create @wappy/agent
 ```
 
 Answer one question. Get a real agent: your model, real memory, real WhatsApp delivery semantics, already wired. No vendor lock-in. No forced cloud.
@@ -32,19 +34,19 @@ We tested this by hand against a real WhatsApp number, chasing down actual Meta 
 
 ## What's actually in the box
 
-Every `create-wappy` install pulls in exactly these. No connector, no domain-specific code rides along by default.
+Every `npm create @wappy/agent` install pulls in exactly these. No connector, no domain-specific code rides along by default.
 
 | Package | What it is |
 |---|---|
 | `@wappy/core` | Contracts, the plugin registry, the install-state ledger. The hub everything else depends on. |
 | `@wappy/harness` | The agent runtime: model loop, router, memory, session profile, local RAG, tool invocation, confirm-before-write. |
 | `@wappy/whatsapp` | The WhatsApp channel: rich message rendering, delivery retries, the fallback ladder, a real webhook server, typing indicators. |
-| `create-wappy` | The CLI. One question → a runnable project. This is the only package whose install you pay for, and it only depends on the three above. |
+| `@wappy/create-agent` | The CLI (`npm create @wappy/agent`). One question → a runnable project. This is the only package whose install you pay for, and it only depends on the three above. |
 
 **One command install, one webhook server, one real agent:**
 
 ```bash
-npm create wappy
+npm create @wappy/agent
 cp .env.sample .env    # fill in your model key + WhatsApp creds
 npm install
 npm run dev             # boots the server, opens a tunnel, prints the URL for Meta's webhook config
@@ -74,7 +76,7 @@ None of these ship in this repo, on purpose. Wappy Kit owns the WhatsApp protoco
 ## Requirements
 
 - **Node.js 20+**
-- **A WhatsApp Cloud API app.** Free, via [Meta's developer portal](https://developers.facebook.com/apps). You'll need a phone number, an access token, and an app secret. `create-wappy`'s generated README walks you through every field.
+- **A WhatsApp Cloud API app.** Free, via [Meta's developer portal](https://developers.facebook.com/apps). You'll need a phone number, an access token, and an app secret. The generated project's own README walks you through every field.
 - **A model API key.** OpenAI, Anthropic, or Gemini. Or skip the key entirely and run fully offline against local Ollama.
 
 No credit card. No signup for Wappy Kit itself. No forced cloud service in the critical path. The only network calls a generated project makes are to the providers you chose.

@@ -1,5 +1,5 @@
 {
-  "name": "create-wappy",
+  "name": "@wappy/create-agent",
   "version": "0.0.0",
   "type": "module",
   "main": "dist/index.js",
@@ -8,7 +8,7 @@
     "dist"
   ],
   "bin": {
-    "create-wappy": "dist/bin.js",
+    "create-agent": "dist/bin.js",
     "wappy": "dist/wappy-bin.js"
   },
   "scripts": {

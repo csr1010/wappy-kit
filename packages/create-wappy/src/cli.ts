@@ -6,24 +6,25 @@ import { ArgvError, parseArgv, STEP_FLAG_KEYS, type ParsedArgv } from "./argv.js
 import type { PartVersions } from "./templates.js";
 
 /**
- * `create-wappy`'s orchestration (T9.5's `create-wappy` command), kept independent of both
- * `@clack/prompts` and `process.*` so it's fully unit-testable without a TTY (per the milestone
- * brief's own "most of this milestone is testable without a TTY") — `bin.ts` wires the real
- * dependencies; tests inject fakes for `runInteractive`/`print`.
+ * `@wappy/create-agent`'s orchestration (T9.5's `create-agent` command, invoked as
+ * `npm create @wappy/agent`), kept independent of both `@clack/prompts` and `process.*` so it's
+ * fully unit-testable without a TTY (per the milestone brief's own "most of this milestone is
+ * testable without a TTY") — `bin.ts` wires the real dependencies; tests inject fakes for
+ * `runInteractive`/`print`.
  *
  * Mode decision: any interview-step flag present (`STEP_FLAG_KEYS`) means non-interactive mode —
  * resolved via T9.2's `resolveNonInteractiveAnswers`, and a validation failure exits loud, NEVER
  * silently falls through to prompting (mixing "some flags, then ask interactively for the rest"
  * would make an already-wrong flag's error easy to miss in a scripted/CI invocation). Zero
- * interview-step flags means a plain `create-wappy` invocation — full interactive mode.
+ * interview-step flags means a plain `npm create @wappy/agent` invocation — full interactive mode.
  */
 
-const HELP_TEXT = `create-wappy — scaffold a WhatsApp agent
+const HELP_TEXT = `create-agent — scaffold a WhatsApp agent (npm create @wappy/agent)
 
 Usage:
-  create-wappy                      interactive interview
-  create-wappy --yes                interactive interview, but every omitted step takes its default
-  create-wappy [flags]              non-interactive, e.g.:
+  npm create @wappy/agent                      interactive interview
+  npm create @wappy/agent -- --yes             interactive interview, but every omitted step takes its default
+  npm create @wappy/agent -- [flags]           non-interactive, e.g.:
     --model openai
 
 Flags:

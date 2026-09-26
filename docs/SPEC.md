@@ -50,9 +50,11 @@ Monorepo (pnpm + Turborepo). The three parts are plugins that depend ONLY on cor
 @wappy/core          Contracts + runtime wiring + plugin registry + install-state ledger
 @wappy/harness       PART 1 — the agent runtime: Agent/Router/Memory (Vercel AI SDK loop; memory adapters)
 @wappy/whatsapp      PART 2 — the WhatsApp channel: rich message types + reliability engine
-@wappy/tools-openapi PART 3 — the API→Tools engine: OpenAPI/Swagger + Shopify connector
-create-wappy         CLI scaffolder: interview -> install core + chosen parts -> generate a runnable project
+@wappy/create-agent  CLI scaffolder (`npm create @wappy/agent`): interview -> install core + chosen parts -> generate a runnable project
 ```
+
+(As of v2.12/M14: `@wappy/tools-openapi` and every domain connector no longer ship from this repo —
+see the Decisions Log. This repo's own publishable surface is exactly the four parts above.)
 
 Interop rule: the parts "all understand each other" because they all implement/consume the SAME core interfaces and share the SAME state ledger. Contract stability (strict semver on @wappy/core) is the #1 discipline.
 
@@ -80,28 +82,36 @@ These interfaces are the whole ballgame. Draft precisely before building the thr
 - **Tracer** — `record(system, event)` / `touched()` / `events()`; systems = `whatsapp|memory|router|skill|rag|tools|llm`; powers the §9 canonical-trace assertions (ratified M1, see Decisions Log).
 - **Skill** — prompt fragment + tools + optional memory schema for one capability (§17 glossary); ratified as a core interface M1 (see Decisions Log).
 
-## 4. CLI: create-wappy — interview + commands
+## 4. CLI: `@wappy/create-agent` (`npm create @wappy/agent`) — interview + commands
+
+**As of v2.14/M14, this section describes the CURRENT state, not the original v0.1 sketch.** The
+package was renamed from `create-wappy` to `@wappy/create-agent` (invoked as
+`npm create @wappy/agent`) for install-command clarity, and the interview itself was reduced to a
+single step once tools/skills/connectors moved out of this repo entirely (see the Decisions Log —
+M9/M12/M14 entries — for the full history of what used to be here: a tools step offering Shopify, a
+skills step offering three reference skills, and store-specific skill generation. All removed.).
 
 ### 4.1 Install interview (order matters)
 
-**The interview asks only what changes the generated code, and never asks for a credential** (v2.3). Every secret goes in `.env`, which the user fills in from the generated `.env.sample`.
+**The interview asks only what changes the generated code, and never asks for a credential.** Every secret goes in `.env`, which the user fills in from the generated `.env.sample`.
 
 1. Model? OpenAI / Anthropic / Gemini / local Ollama → writes provider config + the matching env key into `.env.sample`.
-2. Tools? None / **Shopify** (the one connector v0.1 ships; the generic OpenAPI engine, §8, exists but is not offered in the interview yet). Choosing Shopify wires the connector; the store domain and access token are env keys, not interview answers.
-3. Skills? **Asked only if Shopify was chosen.** Skills are grounded in what the connected API offers; with no API there is nothing domain-neutral to offer yet (§1.1, §13), so the step is skipped. v0.1 ships three Shopify-flavored reference skills (store-info via RAG; orders and products via tools); NO downloading external skills yet.
-   - **Store-specific skill generation (v2.2):** if step 3 picked a reference skill AND step 2 wired a connector that can supply real store facts (v0.1: Shopify's policy fields, via `fetchShopifyPolicies`), the generator (§4.1 output, T9.3) runs ONE setup-time-only LLM call (`@wappy/harness`'s `generateStoreSkill`) to redraft that skill's `promptFragment` from the actual store's facts, still only referencing the already-fixed, already-reviewed tool set — never inventing a new capability. On failure (empty context, model error, empty response) the generator falls back to the static reference skill verbatim; this step never blocks or fails the install. Explicitly NOT in v0.1 scope: LLM-synthesized RAG content beyond the literal fetched policy text, and LLM-generated NEW tools from a connector's full schema — both considered and deferred (see Decisions Log).
+
+That's the whole interview. Tools/connectors are not offered here at all (M14): a generated
+project's `createAgent(...)` ships with zero tools wired in, with a code comment pointing at
+`@wappy/core`'s `Tool`/`ToolProvider` interfaces for anyone who wants to hand-wire their own.
 
 Fixed in v0.1, therefore **not asked** (an option that can't be generated must not be in the menu):
 - **Agent framework:** Vercel AI SDK, always. Mastra/LangGraph adapter stubs ("wrap, don't dictate") are deferred to v0.2 (§14).
-- **Memory:** local LibSQL/SQLite file. Mem0 / Cognee / Postgres adapters are deferred (M10 / §14).
+- **Memory:** local LibSQL/SQLite file, plus a session profile (M13) and optional local RAG (M14), all in the same file, both on by default with nothing to configure.
 - **Router:** LLM. The Jev backend is deferred (M10).
 - **WhatsApp credentials:** never entered during install. The four keys (`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`) are always listed, blank, in `.env.sample` with a note on where to find each.
 
-Output: a runnable project — `index.ts` (wires model+memory+router+tools+skills+WhatsApp), `tools/*.ts`, `skills/*.ts`, **`.env.sample`** (every key needed to run, grouped, with where-to-find-it notes; optional keys commented out), `.env`-ignoring `.gitignore`, `.wappy/state.json`, and a README that walks them through `cp .env.sample .env`, getting Meta creds, and filling each key.
+Output: a runnable project — `index.ts` (wires model+memory+session profile+router+WhatsApp), **`.env.sample`** (every key needed to run, grouped, with where-to-find-it notes; optional keys commented out), `.env`-ignoring `.gitignore`, `.wappy/state.json`, and a README that walks them through `cp .env.sample .env`, getting Meta creds, and filling each key.
 
 ### 4.2 CLI commands
 
-- `create-wappy` — run/resume the interview (reads state, continues from first incomplete step).
+- `npm create @wappy/agent` — run/resume the interview (reads state, continues from first incomplete step).
 - `wappy status` — show installed parts, done/pending/blocked steps, filled vs. missing env.
 - `wappy reset [--plugin <name>]` — clean & redo a scope (clears state + generated files for that scope).
 - `wappy doctor` — validate env + connectivity (model key, WhatsApp creds, API reachability), detect manual drift.
@@ -270,6 +280,11 @@ This is a boundary, not a feature. Wappy Kit is the foundation only. It ships no
 4. Reference skills to ship in v0.1: store-info (RAG), orders (tools), and products (tools) — resolved v2.3/v2.4: shipped as Shopify-path examples only, offered after the API step (§4.1), not in the generic interview.
 
 ## 16. Decisions log
+- 2026-09-26 (v2.14): **`create-wappy` renamed to `@wappy/create-agent`, invoked as `npm create @wappy/agent`.** The old name (`npm create wappy`) read as nonsensical to the user ("create a wappy" — a wappy of what?). npm's real convention for a scoped initializer is `npm create @scope/name` → resolves and runs `@scope/create-name` — confirmed this actually works end-to-end via a real local registry (Verdaccio) publish + install before committing to it, not assumed. Concretely: `package.json`'s `name` → `@wappy/create-agent`, its `bin` key `create-wappy` → `create-agent` (the `wappy` bin, for `wappy dev` after install, is untouched); every generated project's own `package.json` now declares `@wappy/create-agent` as its dependency (providing the `wappy` bin), not `create-wappy`; `versions.ts`'s `require.resolve` target updated to match. The `packages/create-wappy/` folder path in this monorepo is UNCHANGED (purely internal organization, doesn't need to match the public npm package name) — only the npm-facing name/bin changed. §4's CLI section (this file) rewritten to match current reality rather than the original v0.1 sketch, which had drifted out of sync with M9/M12/M14's own decisions-log entries already recorded further down this same log.
+  - **README rewrite**: sharper tagline ("WhatsApp Agent Operating System"), an explicit "not affiliated with/endorsed by WhatsApp or Meta" line near the top (the user asked directly: professional positioning without implying Meta affiliation — an explicit disclaimer is the established pattern other WhatsApp-API OSS projects use, e.g. whatsapp-web.js, venom-bot, and reads as MORE professional, not less, since it shows the maintainers understand the trademark boundary). Package table's `create-wappy` row updated to `@wappy/create-agent`.
+  - **New `SECURITY.md`**: a real responsible-disclosure policy, since this project genuinely handles WhatsApp access tokens and model provider API keys. Not cosmetic — scoped to this repo's actual packages, notes what's already mitigated (SSRF guard, webhook signature verification, confirm-before-write replay safety) so a report can focus on what isn't.
+  - Full rename verified end-to-end the same way M14's sandbox test was verified: full workspace rebuild, full test suite green (create-agent 105/105, e2e 40/40, `generated-imports.m9.test.ts`'s real import from `@wappy/create-agent` resolving against the actual built package), `turbo`'s own "Packages in scope" output showing `@wappy/create-agent`, lint clean, gate 8 green.
+  - **Deferred, not this round**: the full project/brand rename (repo name, `@wappy` npm scope itself, "Wappy Kit" as a name) — the user explicitly chose to keep "Wappy" as a working title for now and revisit the bigger rename later, separately from this narrower CLI-command fix.
 - 2026-09-25 (v2.13, M14): **Local, fully-offline embeddings shipped for `Knowledge`'s RAG, backed by LibSQL's own native vector search — not sqlite-vec, not Chroma.** Investigated both alternatives the user raised directly: sqlite-vec needs loading a separate SQLite extension, and `@libsql/client`'s own docs steer away from that in favor of LibSQL's *built-in* vector type (verified directly against a real `:memory:` client before writing any code — `F32_BLOB(N)` column, `vector32()`/`vector_distance_cos()` functions, `libsql_vector_idx()` for an ANN index all confirmed working); Chroma requires a separate server/service to run, which cuts against this repo's own "nothing extra to run, local-first" pitch. Since `@wappy/harness` already standardizes every store (Memory, session profile, Knowledge) on the same LibSQL file, native vector support was the only option that added zero new services and zero new native-extension-loading complexity.
   - `packages/harness/src/local-embedder.ts`: `createLocalEmbedder()` — a fully local, offline embedding function via `@huggingface/transformers` (the current, actively-maintained package; `@xenova/transformers` is its predecessor name), running `Xenova/all-MiniLM-L6-v2` (384-dim) by default. Honest caveat logged in the code itself: the model's weights are fetched from the Hugging Face Hub on first use and cached after that (same one-time-download-then-offline shape as pulling an Ollama model) — "local-first" describes every inference call after that, not a claim that zero bytes ever cross the network, ever. `dimensions` is inferred from a real warm-up embedding call, never hardcoded per model name, so swapping the model id is safe. Verified against the REAL package (not just mocked tests): dimensions came back 384 as expected, and real cosine similarity correctly scored `"the cat sat on the mat"` vs `"a feline rested on the rug"` at 0.56 and vs `"quarterly tax filing deadline"` at 0.05.
   - `packages/harness/src/knowledge.ts`: `createKnowledge`'s existing (already-shipped, already-tested) `embed` hook gains a sibling `embedDimensions` option. When both are set, embeddings are stored in a real `F32_BLOB(N)` column (a separate `knowledge_vectors` table, not an added column on `knowledge_chunks` — `F32_BLOB`'s width is fixed at `CREATE TABLE` time and this module has no schema-migration story) with a `libsql_vector_idx` ANN index, and `recall()` ranks via `vector_distance_cos()` in SQL instead of loading every row into JS and computing cosine similarity by hand. Backward compatible: `embed` alone, without `embedDimensions`, keeps the exact pre-existing JS brute-force cosine path (already covered by `knowledge.m8.test.ts`, untouched). Verified end-to-end against the real embedder + a real LibSQL client (not mocked): a semantically-phrased query ("can I bring an item back after a month?") correctly ranked a return-policy chunk (score 0.41) far above an unrelated store-hours chunk (score 0.07) — genuine semantic recall, not lexical overlap.

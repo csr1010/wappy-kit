@@ -297,3 +297,31 @@ Rewrite the **Current handoff** block at the end of every session. Keep it under
   D	packages/tools-openapi/src/schema.m7.test.ts
   D	packages/tools-openapi/src/ssrf.m7.test.ts
   M	packages/whatsapp/src/send/render.m4.test.ts
+
+- 2026-09-26: gate M8 --allow-test-change: M14 follow-up: create-wappy renamed to @wappy/create-agent (npm create @wappy/agent) - installer clarity fix, package.json name/bin, versions.ts resolve target, and every reference across create-wappy/e2e tests updated to match. README rewrite + SECURITY.md added.
+  D	fixtures/openapi/circular-ref.json
+  D	fixtures/openapi/malformed.json
+  D	fixtures/openapi/missing-operationid.json
+  D	fixtures/openapi/oneof-payload.json
+  D	fixtures/openapi/petstore-2.0.json
+  D	fixtures/openapi/petstore-3.0.json
+  D	fixtures/openapi/petstore-3.1.json
+  M	packages/create-wappy/src/index.m0.test.ts
+  D	packages/e2e/src/openapi-selector.m7.test.ts
+  M	packages/e2e/src/spine-a.m5.test.ts
+  M	packages/harness/src/agent-context-management.m6.test.ts
+  M	packages/harness/src/agent-oversized-text.m6.test.ts
+  M	packages/harness/src/agent.m5.test.ts
+  M	packages/harness/src/compose-with-budget.m6.test.ts
+  D	packages/tools-openapi/src/auth.m7.test.ts
+  D	packages/tools-openapi/src/curate.m7.test.ts
+  D	packages/tools-openapi/src/executor.m7.test.ts
+  D	packages/tools-openapi/src/fixtures.m7.test.ts
+  D	packages/tools-openapi/src/index.m0.test.ts
+  D	packages/tools-openapi/src/load.m7.test.ts
+  D	packages/tools-openapi/src/operations.m7.test.ts
+  D	packages/tools-openapi/src/policy.m7.test.ts
+  D	packages/tools-openapi/src/provider.m7.test.ts
+  D	packages/tools-openapi/src/schema.m7.test.ts
+  D	packages/tools-openapi/src/ssrf.m7.test.ts
+  M	packages/whatsapp/src/send/render.m4.test.ts

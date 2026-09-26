@@ -2,9 +2,9 @@ import { describe, expect, test } from "vitest";
 import { readPartVersions } from "./versions.js";
 
 // tools-openapi's own version resolution (with its optional-dependency fallback) was removed along
-// with the "tools" step: create-wappy no longer wires any tools/connector package, so there's
-// nothing left to version-resolve for it — rewritten accordingly (`--allow-test-change`, SPEC.md
-// decisions log).
+// with the "tools" step: @wappy/create-agent no longer wires any tools/connector package, so
+// there's nothing left to version-resolve for it — rewritten accordingly (`--allow-test-change`,
+// SPEC.md decisions log).
 describe("readPartVersions", () => {
   test("reads each @wappy/* part's real installed version via require.resolve, not a hardcoded value", () => {
     const versions = readPartVersions(import.meta.url);

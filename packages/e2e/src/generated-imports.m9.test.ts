@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { DEFAULT_ANSWERS, renderProject, type RenderProjectOptions } from "create-wappy";
+import { DEFAULT_ANSWERS, renderProject, type RenderProjectOptions } from "@wappy/create-agent";
 
 /**
  * Found by hand-testing the real installed CLI against a real registry (Verdaccio) instead of the

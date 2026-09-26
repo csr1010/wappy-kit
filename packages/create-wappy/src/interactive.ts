@@ -31,7 +31,7 @@ async function selectOne<T extends string>(message: string, choices: { value: st
  * (the removed "tools" one) could genuinely produce an invalid combination.
  */
 export async function runInteractiveInterview(): Promise<CompleteInterviewAnswers> {
-  clack.intro("create-wappy — let's set up your WhatsApp agent");
+  clack.intro("Wappy agent setup — let's set up your WhatsApp agent");
   let answers: InterviewAnswers = {};
 
   while (!isComplete(answers)) {

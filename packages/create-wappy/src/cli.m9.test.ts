@@ -130,7 +130,7 @@ describe("runCli — --help", () => {
     const result = await runCli({ argv: ["--help"], cwd: tmpDir(), versions: VERSIONS, runInteractive: async () => { interactiveCalled = true; return golden(); }, print: (l) => printed.push(l) });
     expect(result.exitCode).toBe(0);
     expect(interactiveCalled).toBe(false);
-    expect(printed.join("\n")).toContain("create-wappy");
+    expect(printed.join("\n")).toContain("create-agent");
   });
 });
 

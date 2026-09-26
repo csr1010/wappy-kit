@@ -246,6 +246,9 @@ importers:
       '@wappy/core':
         specifier: workspace:*
         version: link:../core
+      '@wappy/create-agent':
+        specifier: workspace:*
+        version: link:../create-wappy
       '@wappy/harness':
         specifier: workspace:*
         version: link:../harness
@@ -255,9 +258,6 @@ importers:
       '@wappy/whatsapp':
         specifier: workspace:*
         version: link:../whatsapp
-      create-wappy:
-        specifier: workspace:*
-        version: link:../create-wappy
     devDependencies:
       '@types/node':
         specifier: ^26.6.2

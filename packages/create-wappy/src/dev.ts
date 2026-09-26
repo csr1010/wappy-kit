@@ -10,7 +10,7 @@ import { createWebhookServer } from "@wappy/whatsapp";
  * T9.7's `wappy dev`: boots the real webhook server (`@wappy/whatsapp`'s `createWebhookServer`,
  * M9) against a GENERATED project's own `index.ts`, and optionally opens a tunnel so Meta can
  * reach it. Run from inside that project's directory (`npm run dev`, which resolves the `wappy`
- * bin from the project's own `create-wappy` dependency — see templates.ts's renderPackageJson).
+ * bin from the project's own `@wappy/create-agent` dependency — see templates.ts's renderPackageJson).
  *
  * Deliberately dynamic-imports `<cwd>/index.ts` directly rather than requiring a build step. Loads
  * `<cwd>/.env` itself (via `dotenv`), explicitly and first — NOT by relying on the generated
@@ -52,8 +52,8 @@ async function defaultImportProject(indexUrl: string): Promise<GeneratedProjectE
 }
 
 async function defaultOpenTunnel(port: number): Promise<{ url: string; close: () => Promise<void> }> {
-  // Lazy `require`, not a static import: create-wappy's own startup cost shouldn't include
-  // localtunnel's dependency tree for the (more common) `create-wappy`-only, never-`dev`
+  // Lazy `require`, not a static import: @wappy/create-agent's own startup cost shouldn't include
+  // localtunnel's dependency tree for the (more common) scaffold-only, never-`dev`
   // invocation. `require` (not dynamic `import()`) sidesteps localtunnel's `export =` CJS shape
   // not lining up with TypeScript's `.default` typing for a dynamically-imported CJS module.
   const localtunnel = createRequire(import.meta.url)("localtunnel") as typeof import("localtunnel");

@@ -79,7 +79,7 @@ describe("renderProject — golden path (openai)", () => {
     expect(pkg.type).toBe("module");
     expect(pkg.dependencies["@wappy/core"]).toBe("0.1.0");
     expect(pkg.dependencies["@wappy/harness"]).toBe("0.1.0");
-    expect(pkg.dependencies["create-wappy"]).toBe("0.1.0"); // provides the `wappy` bin `npm run dev` needs
+    expect(pkg.dependencies["@wappy/create-agent"]).toBe("0.1.0"); // provides the `wappy` bin `npm run dev` needs
     expect(pkg.dependencies["@ai-sdk/openai"]).toBeDefined();
     expect(pkg.dependencies["@wappy/tools-openapi"]).toBeUndefined();
     expect(pkg.dependencies["@libsql/client"]).toBeUndefined();

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { runDev } from "./dev.js";
 
 /**
- * The `wappy` bin (distinct from `create-wappy`'s own bin) — what a generated project's
+ * The `wappy` bin (distinct from the `create-agent` bin, `npm create @wappy/agent`) — what a generated project's
  * `"dev": "wappy dev"` script resolves to. §4.2 lists `status`/`reset`/`doctor`/`dev`; only `dev`
  * (T9.7) exists so far — the others print a clear "not yet" rather than silently doing nothing.
  */

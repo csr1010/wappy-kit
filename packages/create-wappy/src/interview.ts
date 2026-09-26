@@ -1,5 +1,5 @@
 /**
- * The `create-wappy` install interview (M9 T9.1, SPEC.md §4.1) as a **pure state machine**: no I/O,
+ * The `@wappy/create-agent` install interview (M9 T9.1, SPEC.md §4.1) as a **pure state machine**: no I/O,
  * no prompts library, no filesystem — just `InterviewAnswers -> next question | done`, so the whole
  * flow (including invalid-combo rejection and back/skip) is testable without a TTY. A thin
  * `@clack/prompts` layer renders `questionFor()`'s data and feeds the human's choice into
@@ -13,7 +13,7 @@
  * (Shopify and anything else) are out of scope for this open-source repo — they live in a separate
  * connectors repo/npm scope now, built on Composio rather than hand-mapped APIs, and are wired into
  * an agent by hand (`AgentDeps.tools`/`invokeTools`), not through this interview. wappy-kit's own
- * publishable surface is purely the agent OS: core, harness, whatsapp, create-wappy — nothing
+ * publishable surface is purely the agent OS: core, harness, whatsapp, create-agent — nothing
  * tool/connector-specific. A "skills" step (M8/M9, removed in M12) preceded this one; see M12's own
  * history for that removal.
  *

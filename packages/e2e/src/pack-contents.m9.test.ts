@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 // Guards the published shape, not the workspace. Workspace tests can't catch a tarball that
 // omits dist/ files (npm falls back to .gitignore, which ignores dist, when `files` is unset),
-// which crashed the installed `create-wappy` bin on startup. Needs a prior `pnpm build`
+// which crashed the installed create-agent bin on startup. Needs a prior `pnpm build`
 // (the gate builds before running tests).
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const publishable = ["core", "harness", "whatsapp", "create-wappy"];

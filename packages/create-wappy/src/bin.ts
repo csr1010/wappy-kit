@@ -19,7 +19,7 @@ export async function main(): Promise<number> {
   return exitCode;
 }
 
-// npm/pnpm launch bins through a symlink (node_modules/.bin/create-wappy), so argv[1] is the link
+// npm/pnpm launch bins through a symlink (node_modules/.bin/create-agent), so argv[1] is the link
 // path, not this file — compare real paths or the installed CLI silently does nothing.
 export function isDirectRun(entry: string | undefined, moduleUrl: string): boolean {
   if (!entry) return false;

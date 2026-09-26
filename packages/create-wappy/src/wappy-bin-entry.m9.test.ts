@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDirectRun } from "./wappy-bin.js";
 
-// Mirrors bin-entry.m9.test.ts (create-wappy's own bin) — wappy-bin.ts's guard is the same
+// Mirrors bin-entry.m9.test.ts (create-agent's own bin) — wappy-bin.ts's guard is the same
 // realpath-compare logic, needed for the same reason (npm/pnpm launch bins via a symlink).
 const dirs: string[] = [];
 afterEach(() => {

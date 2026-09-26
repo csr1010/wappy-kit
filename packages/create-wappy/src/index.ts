@@ -1,4 +1,4 @@
-export const packageName = "create-wappy";
+export const packageName = "@wappy/create-agent";
 export * from "./interview.js";
 export * from "./templates.js";
 export * from "./generate.js";

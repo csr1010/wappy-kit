@@ -25,7 +25,7 @@ describe("isDirectRun — entry-point guard for the npm bin", () => {
 
   test("true when argv[1] is a symlink to the file (how npm/pnpm launch bins)", () => {
     const s = scratch();
-    const link = join(s.d, "create-wappy");
+    const link = join(s.d, "create-agent");
     symlinkSync(s.real, link);
     expect(isDirectRun(link, s.url)).toBe(true);
   });

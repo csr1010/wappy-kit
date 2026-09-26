@@ -15,7 +15,7 @@
     "@wappy/core": "workspace:*",
     "@wappy/harness": "workspace:*",
     "@wappy/testkit": "workspace:*",
-    "create-wappy": "workspace:*",
+    "@wappy/create-agent": "workspace:*",
     "@wappy/whatsapp": "workspace:*"
   },
   "devDependencies": {
