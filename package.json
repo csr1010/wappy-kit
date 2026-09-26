@@ -1,6 +1,14 @@
 {
   "name": "wappy-kit",
   "private": true,
+  "description": "Open-source WhatsApp Agent Operating System. Bring your own AI model, your own number, your own data. Local-first, no forced cloud, no vendor lock-in.",
+  "homepage": "https://github.com/csr1010/wappy-kit#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/csr1010/wappy-kit.git"
+  },
+  "bugs": "https://github.com/csr1010/wappy-kit/issues",
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.5.1",
   "scripts": {

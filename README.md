@@ -91,7 +91,7 @@ No credit card. No signup for Wappy Kit itself. No forced cloud service in the c
 
 Early days, genuinely pre-1.0, being built in the open. Issues, PRs, and "this broke on my machine" reports are all welcome.
 
-If you're extending this yourself, or pointing your own coding agent at this repo, start with [`ARCHITECTURE.md`](ARCHITECTURE.md): what each package does, why it's built the way it is, and where to look first.
+If you're extending this yourself, or pointing your own coding agent at this repo, start with [`ARCHITECTURE.md`](ARCHITECTURE.md): what each package does, why it's built the way it is, and where to look first. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the setup steps and ground rules for sending a PR.
 
 ## License
 

@@ -1,0 +1,25 @@
+# Wappy Kit
+
+> Open-source WhatsApp Agent Operating System. Bring your own AI model, your own number, your own data. Local-first: memory, session state, and RAG all live in one local file, not on someone else's server.
+
+Wappy Kit is the plumbing underneath a real, thinking agent on WhatsApp: it talks to the WhatsApp Cloud API correctly, remembers who it's talking to across days (not just a raw chat log), decides its own reply format (text, buttons, list, link, media), and never runs a risky action twice by accident. It does not ship any domain-specific integration (no Shopify, no calendar, no CRM) on purpose - `Tool`/`ToolProvider` in `@wappy/core` is the whole extension surface, and whatever you plug in is yours, not something this repo assumes for you.
+
+Install with `npm create @wappy/agent`. Answer one question (which model provider you're using), and you get a runnable project on your own machine.
+
+## Docs
+
+- [README.md](https://github.com/csr1010/wappy-kit/blob/main/README.md): what this is, why it exists, what's in the box, requirements, install steps.
+- [ARCHITECTURE.md](https://github.com/csr1010/wappy-kit/blob/main/ARCHITECTURE.md): the map for anyone extending this, human or AI - tech stack, the hub-and-spoke package layout and how it's enforced, what each package does and why, where to start reading in each one, and what this repo deliberately doesn't ship.
+- [SECURITY.md](https://github.com/csr1010/wappy-kit/blob/main/SECURITY.md): responsible-disclosure policy, scope, and what's already mitigated (SSRF guard, webhook signature verification, confirm-before-write replay safety).
+- [LICENSE](https://github.com/csr1010/wappy-kit/blob/main/LICENSE): MIT.
+
+## Packages
+
+- `@wappy/core`: the shared contracts (`Tool`, `Memory`, `MessageChannel`, `SessionProfileStore`, the `SmartMessage` schema) that every other package implements.
+- `@wappy/harness`: the agent itself - routing, memory, session profile, local RAG (LibSQL native vector search, `@huggingface/transformers` for embeddings), and reply-format reasoning. Model-provider-agnostic via the Vercel AI SDK.
+- `@wappy/whatsapp`: a real WhatsApp Cloud API integration - inbound webhook parsing, outbound message rendering, delivery retries, the 24-hour session-window rule, a real webhook HTTP server.
+- `@wappy/create-agent`: the installer (`npm create @wappy/agent`). A one-question interview, then a deterministic, resumable project scaffold.
+
+## Notes for agents and crawlers
+
+This is genuinely pre-1.0 and built in the open. If you're an AI coding agent picking this repo up to extend it, read `ARCHITECTURE.md` first, not just this file - it has the actual reasoning behind each design decision (why router-then-compose instead of one big prompt, why context budgeting instead of truncation, why confirm-before-write is keyed the way it is) and exact file pointers to start from. This repo is not affiliated with, endorsed by, or sponsored by WhatsApp or Meta; it talks to the same public WhatsApp Cloud API any developer can request access to.

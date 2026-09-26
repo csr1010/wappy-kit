@@ -1,6 +1,24 @@
 {
   "name": "@wappy/core",
   "version": "0.1.0",
+  "description": "Shared contracts (Tool, Memory, MessageChannel, SmartMessage) for building a WhatsApp AI agent. The interfaces every Wappy Kit package implements.",
+  "keywords": [
+    "whatsapp",
+    "whatsapp-bot",
+    "ai-agent",
+    "agent-framework",
+    "llm",
+    "chatbot",
+    "typescript"
+  ],
+  "homepage": "https://github.com/csr1010/wappy-kit#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/csr1010/wappy-kit.git",
+    "directory": "packages/core"
+  },
+  "bugs": "https://github.com/csr1010/wappy-kit/issues",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
