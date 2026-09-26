@@ -7,41 +7,47 @@
 [![npm](https://img.shields.io/npm/v/%40wappy%2Fcreate-agent?label=%40wappy%2Fcreate-agent)](https://www.npmjs.com/package/@wappy/create-agent)
 [![Local-first](https://img.shields.io/badge/local--first-%E2%9C%94-brightgreen)](#why-this-exists)
 
-> Not affiliated with, endorsed by, or sponsored by WhatsApp or Meta. "WhatsApp" refers to the WhatsApp Cloud API this project integrates with, nothing more.
+Say you wanted to build something real on WhatsApp. Not a chatbot demo, an actual product: something that talks to your customers, checks your real data, remembers what someone said yesterday.
 
-2 billion people already talk to businesses on WhatsApp. The tooling for it is still stuck in 2015: rigid flow builders wearing an AI costume, that can't touch your actual API and can't remember what you told them five minutes ago. Wappy Kit is the operating system layer underneath a real WhatsApp agent, not another flowchart.
+You go looking for tools. Every one of them wants you to drag boxes on a canvas and pick from a menu of canned replies. None of them let you plug in your own database. None of them remember the conversation past a few messages. And most of them want a monthly fee before you've even shipped anything.
+
+So most people just give up and stick with a spreadsheet and a phone.
+
+That's the gap Wappy Kit closes. It's the plumbing underneath a real WhatsApp agent: the part that talks to WhatsApp correctly, remembers who it's talking to, and knows how to reply in a way that fits, so you can spend your time on what your agent actually does, not on getting the basics right from scratch.
 
 ```bash
 npm create @wappy/agent
 ```
 
-Answer one question. Get a real agent: your model, real memory, real WhatsApp delivery semantics, already wired. No vendor lock-in. No forced cloud.
+Answer one question. You get a real agent, running on your machine, using whichever AI model you pick, already able to remember and reply properly. Nobody's server sits in the middle. Nobody can shut it off.
 
 ---
 
 ## Why this exists
 
-Twilio, Gupshup, Landbot: drag-and-drop flow builders, not agents, and none of them can call your API as a tool or remember a conversation the way an actual assistant does. If you already run a store, a booking system, a CRM, anything with an API, there's no open, code-first way to put a real agent in front of it on WhatsApp. So we built the OS layer for it.
+The tools already out there (Twilio, Gupshup, Landbot, and the rest) are built for flowcharts, not agents. They can't call your own API. They forget the conversation the moment it gets past step three. And you're renting all of it.
 
-- 🔒 **Local-first, genuinely.** Conversation memory, session state, and semantic search all live in a SQLite file on your machine by default, including a fully offline embedding model for RAG, not a hosted vector database you're billed for per query. Nothing phones home unless you tell it to.
-- 🧠 **It remembers where you left off, not just what was said.** Every reply is grounded in a live session profile: facts learned about the contact, plus the actual open thread right now, so a one-word reply like "medium" is still interpretable three messages later, without re-reading the whole conversation into every prompt.
-- ⚡ **A router, not a canvas.** Most messages are cheap. "hi" should never touch your vector store or your production API. Wappy Kit's router picks the cheapest correct path for every message, and a context budget keeps every prompt bounded, degrading gracefully instead of overflowing.
-- 🎛️ **The model decides how to reply, not a template.** Text, quick-reply buttons, a scrollable list, a tappable link, media. A small, fixed set of format-reasoning questions runs on every single reply (including "hi"), so the shape of the answer actually fits what's being said, argued from content, never hand-coded per use case.
-- 🛑 **Built for real consequences.** A tool that can actually change something waits for explicit confirmation before it runs, with replay-safe idempotency: a duplicate webhook delivery, or someone tapping "confirm" twice, never executes an action twice.
-- 🧩 **Bring your own everything.** Your number, your model (OpenAI, Anthropic, Gemini, or fully offline Ollama), your tools. `@wappy/core`'s `Tool`/`ToolProvider` interfaces are all a tool needs to satisfy, built over your own API, an OpenAPI spec, MCP, Composio, whatever fits. The harness doesn't care where a tool came from, and doesn't ship any itself.
+If you already run a store, a booking system, a support desk, anything with real data behind it, there was no simple way to put a real, thinking agent in front of it on WhatsApp, one that's actually yours. So this exists to fix that.
 
-We tested this by hand against a real WhatsApp number, chasing down actual Meta API rejections as we went, not just green checkmarks in CI. What ships works.
+- 🔒 **It runs on your own machine.** Memory, the conversation so far, even the AI that reads your documents, all of it lives in a plain file on your computer. Nothing gets sent anywhere unless you decide to.
+- 🧠 **It actually remembers.** Not just the raw chat log, but what's actually going on right now, so if someone replies with just "medium," the agent still knows what they're answering.
+- ⚡ **It's not wasteful.** A simple "hi" doesn't need to search a database or call an expensive AI model. The agent figures out the cheapest way to answer correctly, every single time.
+- 🎛️ **It picks the right reply format itself.** Sometimes that's plain text. Sometimes it's buttons, or a list, or a link. The agent decides based on what it's actually saying, not a template someone hardcoded.
+- 🛑 **It doesn't do anything risky by accident.** If a reply is about to actually do something (charge a card, cancel a booking), it waits for a real confirmation first, and it won't ever do that thing twice by mistake.
+- 🧩 **You bring everything else.** Your number, your AI model of choice, and any of your own tools or APIs you want it to use. This project never locks you into a single vendor for any of that.
+
+We tested this by hand against a real WhatsApp number, not just automated checks. If it's in here, it actually works.
 
 ## What's actually in the box
 
-Every `npm create @wappy/agent` install pulls in exactly these. No connector, no domain-specific code rides along by default.
+Every install pulls in exactly these. Nothing extra, nothing tied to any specific business or use case.
 
 | Package | What it is |
 |---|---|
-| `@wappy/core` | Contracts, the plugin registry, the install-state ledger. The hub everything else depends on. |
-| `@wappy/harness` | The agent runtime: model loop, router, memory, session profile, local RAG, tool invocation, confirm-before-write. |
-| `@wappy/whatsapp` | The WhatsApp channel: rich message rendering, delivery retries, the fallback ladder, a real webhook server, typing indicators. |
-| `@wappy/create-agent` | The CLI (`npm create @wappy/agent`). One question → a runnable project. This is the only package whose install you pay for, and it only depends on the three above. |
+| `@wappy/core` | The shared contracts everything else is built on. |
+| `@wappy/harness` | The agent itself: how it thinks, remembers, and decides what to do. |
+| `@wappy/whatsapp` | Everything about actually talking to WhatsApp correctly: message formatting, retries, a real webhook server. |
+| `@wappy/create-agent` | The installer (`npm create @wappy/agent`). One question, then a working project. |
 
 **One command install, one webhook server, one real agent:**
 
@@ -52,7 +58,7 @@ npm install
 npm run dev             # boots the server, opens a tunnel, prints the URL for Meta's webhook config
 ```
 
-Text your number. Get a real reply, generated by your model, grounded in memory that's actually yours.
+Text your number. Get a real reply, from your own model, grounded in memory that's actually yours.
 
 ## What you can build on it
 
@@ -60,18 +66,18 @@ Text your number. Get a real reply, generated by your model, grounded in memory 
 ? Which model provider will you use? Anthropic
 ```
 
-One question. Then a runnable project: a real WhatsApp agent, memory and session context already wired, ready for you to hand it tools:
+One question. Then a real, working project, memory and context already handled, ready for you to give it tools:
 
 - 🏋️ **A fitness coach** that reads your Fitbit data, nudges you to work out, and finds a gym nearby.
-- 🛍️ **A commerce agent** that searches your catalog, checks stock, and looks up real order status over WhatsApp.
-- 🎫 **A support agent** that sits in front of your own ticketing API and actually resolves things, instead of collecting an email address and vanishing.
-- 🍽️ **A booking agent** for a restaurant, a clinic, a studio. Anything with a reservations API.
-- 🏠 **A leasing agent** that answers "is this still available" from your real listings API, not a spreadsheet someone forgot to update.
-- 🧠 **A personal assistant** wired to your calendar, your notes, your own internal tools.
-- 📚 **A doc-grounded expert.** Ingest your own policies, manuals, or FAQs and get answers cited from what you actually gave it, run entirely on your machine, embeddings included.
-- 🏢 **An internal ops bot.** IT helpdesk, HR FAQs, whatever your company already runs on an API, now reachable from the app your team already has open all day.
+- 🛍️ **A commerce agent** that searches your catalog, checks stock, and looks up real order status.
+- 🎫 **A support agent** that actually resolves things in your ticketing system, instead of collecting an email and vanishing.
+- 🍽️ **A booking agent** for a restaurant, a clinic, a studio. Anything with a reservations system.
+- 🏠 **A leasing agent** that answers "is this still available" from your real listings, not a spreadsheet nobody updated.
+- 🧠 **A personal assistant** wired to your calendar, your notes, your own tools.
+- 📚 **A doc-grounded expert.** Feed it your own policies or manuals and get answers grounded in what you actually gave it, running entirely on your machine.
+- 🏢 **An internal ops bot.** IT helpdesk, HR questions, whatever your company already runs, now reachable from the app your team already has open all day.
 
-None of these ship in this repo, on purpose. Wappy Kit owns the WhatsApp protocol and the agent loop. Nothing else. Your domain logic, and any tools/connectors it needs, is yours. Build it as its own app on top, using the same interfaces the harness expects (`Tool`, `ToolProvider`, `Memory`, `MessageChannel`). No fork required.
+None of that ships in this repo, on purpose. This project handles WhatsApp and the agent's thinking. Your product idea, and whatever it needs to connect to, is yours to build on top, using the same building blocks the core already uses. No forking required.
 
 ## Requirements
 
@@ -81,9 +87,11 @@ None of these ship in this repo, on purpose. Wappy Kit owns the WhatsApp protoco
 
 No credit card. No signup for Wappy Kit itself. No forced cloud service in the critical path. The only network calls a generated project makes are to the providers you chose.
 
-## Contributing
+## For contributors (and your coding agent)
 
-Early days. Genuinely pre-1.0, being built in the open right now. Issues, PRs, and "this broke on my machine" reports are all welcome. See [`docs/MILESTONES.md`](docs/MILESTONES.md) for what's shipped, what's in flight, and what's next.
+Early days, genuinely pre-1.0, being built in the open. Issues, PRs, and "this broke on my machine" reports are all welcome.
+
+If you're extending this yourself, or pointing your own coding agent at this repo, start with [`ARCHITECTURE.md`](ARCHITECTURE.md): what each package does, why it's built the way it is, and where to look first.
 
 ## License
 
@@ -92,3 +100,5 @@ MIT. See [`LICENSE`](./LICENSE).
 ---
 
 *Built for developers who want a real agent on WhatsApp, not another flowchart.*
+
+*Not affiliated with, endorsed by, or sponsored by WhatsApp or Meta. This project talks to the public WhatsApp Cloud API, the same one any developer can request access to.*

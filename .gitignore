@@ -7,3 +7,10 @@ dist
 coverage
 .vitest
 .claude/
+
+# Internal planning/engineering-process docs — kept locally for session continuity and the
+# pnpm gate/ctx tooling, not published. See ARCHITECTURE.md for what IS public-facing.
+docs/SPEC.md
+docs/PROGRESS.md
+docs/MILESTONES.md
+docs/milestones/
