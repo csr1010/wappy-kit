@@ -1,4 +1,4 @@
-# Wappy Kit
+# Wappy Agent SDK
 
 ### The open-source WhatsApp Agent Operating System. Bring your own model, your own number, your own data.
 
@@ -16,8 +16,28 @@ npm install
 npm run dev             # boots the server, opens a tunnel, prints the URL for Meta's webhook config
 ```
 
-One question (which model provider you're using), and you get a real agent running on your own
-machine. Nobody's server sits in the middle. Nobody can shut it off.
+Here's the whole install, start to finish:
+
+```
+$ npm create @wappy/agent
+
+┌  Wappy agent setup — let's set up your WhatsApp agent
+│
+◆  Which model provider will you use?
+│  ● Anthropic
+│  ○ OpenAI
+│  ○ Gemini
+│  ○ Local Ollama
+└
+◇  Interview complete — generating your project...
+
+Done — 6 file(s) written in ./my-agent.
+See README.md for next steps. Full WhatsApp connection walkthrough in WHATSAPP_SETUP.md.
+```
+
+That single prompt is the entire interview. Everything else, memory, context, reply formatting,
+is already wired and running on your own machine the moment it finishes. Nobody's server sits in
+the middle. Nobody can shut it off.
 
 ## What it does
 
@@ -49,22 +69,23 @@ Every install pulls in exactly these four. Nothing extra, nothing tied to a busi
 
 ## Why this exists
 
-Every WhatsApp tool out there wants you dragging boxes on a canvas, picking from a dropdown of
-replies. None of them plug into your own data. None of them remember past three messages. All of
-them charge before you've shipped anything. So people give up and go back to a spreadsheet and a
-phone.
+The real problem was never the drag-and-drop canvas. It's that there was no easy way to actually
+plug your own data and logic into WhatsApp without it turning into a full custom build. So you
+either settle for a canned chatbot, or you build everything yourself from scratch, and most people
+give up and go back to a spreadsheet and a phone.
 
-Wappy Kit is the missing plumbing: talk to WhatsApp correctly, remember who you're talking to,
-reply in whatever shape fits, so you spend your time on what your agent actually does, not on
-rebuilding the basics.
+Wappy Agent SDK is the easy way in without giving up control: talk to WhatsApp correctly, remember who
+you're talking to, reply in whatever shape fits, so you spend your time on what your agent
+actually does, not on rebuilding the basics.
 
 ## What you can build on it
 
-```
-? Which model provider will you use? Anthropic
-```
-
-One question, then memory and context already handled, ready for you to give it tools:
+This isn't built around one use case. It's a real agent with memory, context, and a decision loop
+already working, WhatsApp is just the surface. Whatever business already runs on some system with
+real data behind it (a CRM, a booking calendar, a ticketing tool, an inventory sheet, an internal
+API) can have that system answering customers on WhatsApp directly, the moment you wire its tools
+in. That's not a small list of "supported integrations," it's anything you can call from code,
+which is close to everything:
 
 - 🏋️ **A fitness coach** that reads your Fitbit data and finds you a gym nearby.
 - 🛍️ **A commerce agent** that checks stock and looks up real order status.
@@ -88,18 +109,13 @@ required.
 - **A WhatsApp Cloud API app.** Free, via [Meta's developer portal](https://developers.facebook.com/apps). You'll need a phone number, an access token, and an app secret. The generated project's own README walks you through every field.
 - **A model API key.** OpenAI, Anthropic, or Gemini. Or skip it entirely and run fully offline against local Ollama.
 
-No credit card. No signup for Wappy Kit itself. No forced cloud service in the critical path. The
+No credit card. No signup for Wappy Agent SDK itself. No forced cloud service in the critical path. The
 only network calls a generated project makes are to the providers you chose.
 
 ## For contributors (and your coding agent)
 
-Early days, genuinely pre-1.0, being built in the open. Issues, PRs, and "this broke on my machine"
-reports are all welcome.
-
-If you're extending this yourself, or pointing your own coding agent at this repo, start with
-[`ARCHITECTURE.md`](ARCHITECTURE.md): what each package does, why it's built the way it is, and
-where to look first. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the setup steps and ground rules for
-sending a PR.
+Early days, genuinely pre-1.0. Open to any kind of feedback. See [`ARCHITECTURE.md`](ARCHITECTURE.md)
+and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
