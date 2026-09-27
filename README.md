@@ -1,6 +1,6 @@
-# Wappy Agent SDK
+# Wappy
 
-### The open-source WhatsApp Agent Operating System. Bring your own model, your own number, your own data.
+### The open-source AI agent SDK for WhatsApp. Bring your own model, your own number, your own data.
 
 [![CI](https://github.com/csr1010/wappy-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/csr1010/wappy-kit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
@@ -88,7 +88,7 @@ plug your own data and logic into WhatsApp without it turning into a full custom
 either settle for a canned chatbot, or you build everything yourself from scratch, and most people
 give up and go back to a spreadsheet and a phone.
 
-Wappy Agent SDK is the easy way in without giving up control: talk to WhatsApp correctly, remember who
+Wappy is the easy way in without giving up control: talk to WhatsApp correctly, remember who
 you're talking to, reply in whatever shape fits, so you spend your time on what your agent
 actually does, not on rebuilding the basics.
 
@@ -123,7 +123,7 @@ required.
 - **A WhatsApp Cloud API app.** Free, via [Meta's developer portal](https://developers.facebook.com/apps). You'll need a phone number, an access token, and an app secret. The generated project's own README walks you through every field.
 - **A model API key.** OpenAI, Anthropic, or Gemini. Or skip it entirely and run fully offline against local Ollama.
 
-No credit card. No signup for Wappy Agent SDK itself. No forced cloud service in the critical path. The
+No credit card. No signup for Wappy itself. No forced cloud service in the critical path. The
 only network calls a generated project makes are to the providers you chose.
 
 ## For contributors (and your coding agent)

@@ -1,8 +1,8 @@
-# Wappy Kit
+# Wappy
 
-> Open-source WhatsApp Agent Operating System. Bring your own AI model, your own number, your own data. Local-first: memory, session state, and RAG all live in one local file, not on someone else's server.
+> The open-source AI agent SDK for WhatsApp. Bring your own model, your own number, your own data. Local-first: memory, session state, and RAG all live in one local file, not on someone else's server.
 
-Wappy Kit is the plumbing underneath a real, thinking agent on WhatsApp: it talks to the WhatsApp Cloud API correctly, remembers who it's talking to across days (not just a raw chat log), decides its own reply format (text, buttons, list, link, media), and never runs a risky action twice by accident. It does not ship any domain-specific integration (no Shopify, no calendar, no CRM) on purpose - `Tool`/`ToolProvider` in `@wappy/core` is the whole extension surface, and whatever you plug in is yours, not something this repo assumes for you.
+Wappy is the plumbing underneath a real, thinking agent on WhatsApp: it talks to the WhatsApp Cloud API correctly, remembers who it's talking to across days (not just a raw chat log), decides its own reply format (text, buttons, list, link, media), and never runs a risky action twice by accident. It does not ship any domain-specific integration (no Shopify, no calendar, no CRM) on purpose - `Tool`/`ToolProvider` in `@wappy/core` is the whole extension surface, and whatever you plug in is yours, not something this repo assumes for you.
 
 Install with `npm create @wappy/agent`. Answer one question (which model provider you're using), and you get a runnable project on your own machine.
 

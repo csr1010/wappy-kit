@@ -1,4 +1,4 @@
-# Contributing to Wappy Kit
+# Contributing to Wappy
 
 Thanks for looking at this. It's early and genuinely pre-1.0, so the shape of things can still
 move, but real contributions are welcome: bug reports, "this broke on my machine," small fixes,

@@ -1,6 +1,6 @@
 # Security Policy
 
-Wappy Kit handles real credentials: WhatsApp Cloud API access tokens, model provider API keys, and
+Wappy handles real credentials: WhatsApp Cloud API access tokens, model provider API keys, and
 webhook signing secrets. Please report security issues responsibly rather than opening a public
 issue.
 

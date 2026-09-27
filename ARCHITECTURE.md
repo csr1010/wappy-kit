@@ -1,6 +1,6 @@
 # Architecture
 
-This is the map for anyone extending Wappy Kit, human or AI. It's meant to answer three questions
+This is the map for anyone extending Wappy, human or AI. It's meant to answer three questions
 fast: what does each package do, why is it built that way, and where should I actually go read the
 code. If you're a coding agent working in this repo, start here before touching anything.
 
