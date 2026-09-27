@@ -1,5 +1,5 @@
 {
-  "name": "@wappy/whatsapp",
+  "name": "@wappy_ai/whatsapp",
   "version": "0.1.0",
   "description": "A real WhatsApp Cloud API integration: webhook parsing, message rendering, delivery retries, and the 24-hour session-window rule, done correctly.",
   "keywords": [
@@ -30,11 +30,11 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@wappy/core": "workspace:*"
+    "@wappy_ai/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
-    "@wappy/testkit": "workspace:*",
+    "@wappy_ai/testkit": "workspace:*",
     "typescript": "^6.0.3",
     "vitest": "^5.0.1"
   }

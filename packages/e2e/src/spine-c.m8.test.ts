@@ -2,11 +2,11 @@ import { afterEach, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cleanupAllTmpProjects, mockModel, mockWhatsAppCloud } from "@wappy/testkit";
-import { createInMemoryTracer, systemClock } from "@wappy/core";
-import type { Memory, Tool, Turn } from "@wappy/core";
-import { createWhatsAppChannel } from "@wappy/whatsapp";
-import { createAgent, createLlmRouter, createToolInvoker } from "@wappy/harness";
+import { cleanupAllTmpProjects, mockModel, mockWhatsAppCloud } from "@wappy_ai/testkit";
+import { createInMemoryTracer, systemClock } from "@wappy_ai/core";
+import type { Memory, Tool, Turn } from "@wappy_ai/core";
+import { createWhatsAppChannel } from "@wappy_ai/whatsapp";
+import { createAgent, createLlmRouter, createToolInvoker } from "@wappy_ai/harness";
 
 afterEach(() => cleanupAllTmpProjects());
 
@@ -31,12 +31,12 @@ function inMemoryMemory(): Memory {
 }
 
 /**
- * Spine C (§9 Scenario C): "where's my order 8842?" — the real tool path. Real @wappy/whatsapp +
- * real @wappy/harness (createAgent, the REAL `createToolInvoker`, ZERO skills registered — M12
+ * Spine C (§9 Scenario C): "where's my order 8842?" — the real tool path. Real @wappy_ai/whatsapp +
+ * real @wappy_ai/harness (createAgent, the REAL `createToolInvoker`, ZERO skills registered — M12
  * removed the reference skills; this is the milestone's own proof that tool-invocation works fine
  * without a skill wrapper). This repo ships no domain connector anymore (Shopify and everything
  * else moved to a separate connectors repo, see docs/SPEC.md's decisions log) — the `Tool` here is
- * a plain, hand-written one directly satisfying `@wappy/core`'s `Tool` interface, which is exactly
+ * a plain, hand-written one directly satisfying `@wappy_ai/core`'s `Tool` interface, which is exactly
  * what proves the point: the harness's real invocation pipeline (BM25 selection, the tool-decision
  * model call, `tool.execute()`, result formatting) works against ANY conformant `Tool`, not just a
  * connector-shaped one. Proves: `rag` and `skill` are never touched, and `getOrder` is called

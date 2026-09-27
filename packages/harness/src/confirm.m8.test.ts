@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { createClient } from "@libsql/client";
-import type { Clock } from "@wappy/core";
+import type { Clock } from "@wappy_ai/core";
 import { cancelSelectionId, confirmSelectionId, createConfirmFlow, parseConfirmSelection } from "./confirm.js";
 
 function fakeClock(startAt = 1_000_000): Clock & { advance(ms: number): void } {

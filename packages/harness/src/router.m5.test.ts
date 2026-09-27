@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { runRouterConformance } from "@wappy/testkit";
-import type { InboundMessage, Model, ModelRequest, ModelResult, RouterInput } from "@wappy/core";
+import { runRouterConformance } from "@wappy_ai/testkit";
+import type { InboundMessage, Model, ModelRequest, ModelResult, RouterInput } from "@wappy_ai/core";
 import { createLlmRouter } from "./router.js";
 
 const baseMessage: InboundMessage = { id: "m1", contactId: "c1", channel: "whatsapp", text: "hi", timestamp: 0 };

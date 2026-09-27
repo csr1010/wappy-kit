@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, symlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cleanupAllTmpProjects, tmpProject } from "@wappy/testkit";
+import { cleanupAllTmpProjects, tmpProject } from "@wappy_ai/testkit";
 
 afterEach(() => cleanupAllTmpProjects());
 

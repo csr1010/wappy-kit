@@ -1,4 +1,4 @@
-import type { Clock, DeliveryResult, SmartMessage } from "@wappy/core";
+import type { Clock, DeliveryResult, SmartMessage } from "@wappy_ai/core";
 import { applyConstraints } from "./constraints.js";
 import { renderNumberedFallback, type FallbackOptionsStore } from "./fallback.js";
 import { renderSmartMessage, type CloudApiOutboundPayload } from "./render.js";

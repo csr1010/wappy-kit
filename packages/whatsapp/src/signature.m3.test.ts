@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { signWebhook } from "@wappy/testkit";
+import { signWebhook } from "@wappy_ai/testkit";
 import { verifySignature } from "./signature.js";
 
 const secret = "app-secret-123";

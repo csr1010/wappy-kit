@@ -1,4 +1,4 @@
-import type { InboundMessage, JsonSchema, Model, RouterDecision, Tool } from "@wappy/core";
+import type { InboundMessage, JsonSchema, Model, RouterDecision, Tool } from "@wappy_ai/core";
 import { selectTools } from "./tool-selector.js";
 import { boundToolResult, type BoundToolResultOptions } from "./bound-tool-result.js";
 import type { TokenEstimator } from "./context-budget.js";

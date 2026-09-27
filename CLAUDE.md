@@ -12,7 +12,7 @@ Open-source WhatsApp Agent OS (pnpm + turbo monorepo). Spec: `docs/SPEC.md`. Pla
 - Tests are named `*.m<N>.test.ts` (N = milestone that introduced it). Untagged tests fail the gate.
 - Fix the code, not old tests. Editing/deleting old tests or fixtures requires a spec change + `--allow-test-change "<reason>"`.
 - Fixtures are append-only. Never edit `contracts/core.api.json` by hand (`pnpm contract:update`).
-- Hub-and-spoke: core imports no plugin; plugins import only `@wappy/core`; only the CLI/e2e wire parts together.
+- Hub-and-spoke: core imports no plugin; plugins import only `@wappy_ai/core`; only the CLI/e2e wire parts together.
 - Keep context small: don't open `pnpm-lock.yaml`, `node_modules`, `dist`, or `fixtures/openapi/huge-*`; files < ~300 lines.
 - Spec changes: edit `docs/SPEC.md` in place, bump version, add a Decisions Log line.
 - Outward-facing/irreversible actions (making the repo public, npm publish) need explicit user approval in that session.

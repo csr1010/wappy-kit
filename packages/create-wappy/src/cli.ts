@@ -6,8 +6,8 @@ import { ArgvError, parseArgv, STEP_FLAG_KEYS, type ParsedArgv } from "./argv.js
 import type { PartVersions } from "./templates.js";
 
 /**
- * `@wappy/create-agent`'s orchestration (T9.5's `create-agent` command, invoked as
- * `npm create @wappy/agent`), kept independent of both `@clack/prompts` and `process.*` so it's
+ * `@wappy_ai/create-agent`'s orchestration (T9.5's `create-agent` command, invoked as
+ * `npm create @wappy_ai/agent`), kept independent of both `@clack/prompts` and `process.*` so it's
  * fully unit-testable without a TTY (per the milestone brief's own "most of this milestone is
  * testable without a TTY") — `bin.ts` wires the real dependencies; tests inject fakes for
  * `runInteractive`/`print`.
@@ -16,15 +16,15 @@ import type { PartVersions } from "./templates.js";
  * resolved via T9.2's `resolveNonInteractiveAnswers`, and a validation failure exits loud, NEVER
  * silently falls through to prompting (mixing "some flags, then ask interactively for the rest"
  * would make an already-wrong flag's error easy to miss in a scripted/CI invocation). Zero
- * interview-step flags means a plain `npm create @wappy/agent` invocation — full interactive mode.
+ * interview-step flags means a plain `npm create @wappy_ai/agent` invocation — full interactive mode.
  */
 
-const HELP_TEXT = `create-agent — scaffold a WhatsApp agent (npm create @wappy/agent)
+const HELP_TEXT = `create-agent — scaffold a WhatsApp agent (npm create @wappy_ai/agent)
 
 Usage:
-  npm create @wappy/agent                      interactive interview
-  npm create @wappy/agent -- --yes             interactive interview, but every omitted step takes its default
-  npm create @wappy/agent -- [flags]           non-interactive, e.g.:
+  npm create @wappy_ai/agent                      interactive interview
+  npm create @wappy_ai/agent -- --yes             interactive interview, but every omitted step takes its default
+  npm create @wappy_ai/agent -- [flags]           non-interactive, e.g.:
     --model openai
 
 Flags:

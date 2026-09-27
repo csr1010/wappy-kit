@@ -51,7 +51,7 @@ export interface Memory {
   recall(contactId: string, query: string): Promise<string[]>;
 }
 
-/** M13: one focused store for the session profile, same pattern as `@wappy/whatsapp`'s
+/** M13: one focused store for the session profile, same pattern as `@wappy_ai/whatsapp`'s
  * `SeenStore`/`SessionWindowTracker` — not an overload of `Memory` (turn history is a separate
  * concern from a structured, TTL-bound profile). */
 export interface SessionProfileStore {

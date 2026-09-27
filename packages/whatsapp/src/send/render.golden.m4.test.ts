@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import type { SmartMessage } from "@wappy/core";
+import type { SmartMessage } from "@wappy_ai/core";
 import { renderReaction, renderSmartMessage } from "./render.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");

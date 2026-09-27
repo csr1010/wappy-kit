@@ -1,4 +1,4 @@
-import type { SmartMessage } from "@wappy/core";
+import type { SmartMessage } from "@wappy_ai/core";
 import { OUTBOUND_MEDIA_LIMITS, type OutboundMediaError, type OutboundMediaKind } from "./outbound-media.js";
 
 export interface PreflightOptions {

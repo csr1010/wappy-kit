@@ -73,15 +73,15 @@ describe("renderProject — golden path (openai)", () => {
     expect(gi).toContain(".wappy/");
   });
 
-  test("package.json is valid JSON, pins @wappy/* part versions, no tools-openapi/libsql-client deps", () => {
+  test("package.json is valid JSON, pins @wappy_ai/* part versions, no tools-openapi/libsql-client deps", () => {
     const pkg = JSON.parse(files.get("package.json")!);
     expect(pkg.name).toBe("luna-and-co-bot");
     expect(pkg.type).toBe("module");
-    expect(pkg.dependencies["@wappy/core"]).toBe("0.1.0");
-    expect(pkg.dependencies["@wappy/harness"]).toBe("0.1.0");
-    expect(pkg.dependencies["@wappy/create-agent"]).toBe("0.1.0"); // provides the `wappy` bin `npm run dev` needs
+    expect(pkg.dependencies["@wappy_ai/core"]).toBe("0.1.0");
+    expect(pkg.dependencies["@wappy_ai/harness"]).toBe("0.1.0");
+    expect(pkg.dependencies["@wappy_ai/create-agent"]).toBe("0.1.0"); // provides the `wappy` bin `npm run dev` needs
     expect(pkg.dependencies["@ai-sdk/openai"]).toBeDefined();
-    expect(pkg.dependencies["@wappy/tools-openapi"]).toBeUndefined();
+    expect(pkg.dependencies["@wappy_ai/tools-openapi"]).toBeUndefined();
     expect(pkg.dependencies["@libsql/client"]).toBeUndefined();
   });
 
@@ -126,7 +126,7 @@ describe("renderProject — no tools, ever", () => {
     const files = fileMap(renderProject({ answers: complete(), versions: VERSIONS }));
     expect([...files.keys()].some((p) => p.startsWith("tools/"))).toBe(false);
     expect(files.get("index.ts")).not.toContain("invokeTools");
-    expect(JSON.parse(files.get("package.json")!).dependencies["@wappy/tools-openapi"]).toBeUndefined();
+    expect(JSON.parse(files.get("package.json")!).dependencies["@wappy_ai/tools-openapi"]).toBeUndefined();
   });
 
   test("no skills/*.ts either — no skill registry wiring in index.ts", () => {

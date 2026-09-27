@@ -1,5 +1,5 @@
 {
-  "name": "@wappy/e2e",
+  "name": "@wappy_ai/e2e",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,11 +12,11 @@
   },
   "dependencies": {
     "@libsql/client": "0.18.0",
-    "@wappy/core": "workspace:*",
-    "@wappy/harness": "workspace:*",
-    "@wappy/testkit": "workspace:*",
-    "@wappy/create-agent": "workspace:*",
-    "@wappy/whatsapp": "workspace:*"
+    "@wappy_ai/core": "workspace:*",
+    "@wappy_ai/harness": "workspace:*",
+    "@wappy_ai/testkit": "workspace:*",
+    "@wappy_ai/create-agent": "workspace:*",
+    "@wappy_ai/whatsapp": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

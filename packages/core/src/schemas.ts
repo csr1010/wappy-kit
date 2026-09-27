@@ -7,7 +7,7 @@ import { z } from "zod";
  * STRUCTURAL bounds only (button/row/section counts) because those can't be
  * fixed by truncation without changing meaning. TEXT LENGTH limits (button
  * title <=20, list row title <=24, row description <=72) are intentionally
- * NOT enforced here — @wappy/whatsapp (M4) truncates them at send time, so
+ * NOT enforced here — @wappy_ai/whatsapp (M4) truncates them at send time, so
  * an over-length string is valid input at this layer and a renderer concern
  * downstream. See docs/CONTRACTS.md.
  */

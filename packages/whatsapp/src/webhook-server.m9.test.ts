@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { AddressInfo } from "node:net";
-import type { Agent, DeliveryResult, InboundMessage, MessageChannel } from "@wappy/core";
-import { signWebhook } from "@wappy/testkit";
+import type { Agent, DeliveryResult, InboundMessage, MessageChannel } from "@wappy_ai/core";
+import { signWebhook } from "@wappy_ai/testkit";
 import { createWebhookServer } from "./webhook-server.js";
 
 const VERIFY_TOKEN = "verify-me";

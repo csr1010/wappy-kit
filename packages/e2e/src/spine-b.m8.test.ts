@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@libsql/client";
-import { cleanupAllTmpProjects, mockModel, mockWhatsAppCloud } from "@wappy/testkit";
-import { createInMemoryTracer, systemClock } from "@wappy/core";
-import type { Memory, Turn } from "@wappy/core";
-import { createWhatsAppChannel } from "@wappy/whatsapp";
-import { createAgent, createKnowledge, createKnowledgeRag, createLlmRouter } from "@wappy/harness";
+import { cleanupAllTmpProjects, mockModel, mockWhatsAppCloud } from "@wappy_ai/testkit";
+import { createInMemoryTracer, systemClock } from "@wappy_ai/core";
+import type { Memory, Turn } from "@wappy_ai/core";
+import { createWhatsAppChannel } from "@wappy_ai/whatsapp";
+import { createAgent, createKnowledge, createKnowledgeRag, createLlmRouter } from "@wappy_ai/harness";
 
 afterEach(() => cleanupAllTmpProjects());
 
@@ -33,7 +33,7 @@ function inMemoryMemory(): Memory {
 
 /**
  * Spine B (§9 Scenario B): "what are your store hours?" — the knowledge/RAG path. Real
- * @wappy/whatsapp + real @wappy/harness (createAgent, ZERO skills registered — M12 removed the
+ * @wappy_ai/whatsapp + real @wappy_ai/harness (createAgent, ZERO skills registered — M12 removed the
  * reference skills; this is the milestone's own proof that RAG works fine without a skill wrapper,
  * a REAL `Knowledge` store ingested with a distinctively-markered chunk) + a scripted mockModel +
  * mockWhatsAppCloud. Proves: `tools`/`skill` are never touched, the router/RAG pipeline actually

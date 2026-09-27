@@ -1,4 +1,4 @@
-import type { InboundMedia, InboundMessage } from "@wappy/core";
+import type { InboundMedia, InboundMessage } from "@wappy_ai/core";
 
 export type WhatsAppStatus = "sent" | "delivered" | "read" | "failed";
 

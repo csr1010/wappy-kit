@@ -1,4 +1,4 @@
-import type { Turn } from "@wappy/core";
+import type { Turn } from "@wappy_ai/core";
 import type { ContextBudget } from "./context-budget.js";
 
 export interface AssembleInput {

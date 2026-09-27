@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Memory } from "@wappy/core";
+import type { Memory } from "@wappy_ai/core";
 import { recallWithBudget } from "./recall-budget.js";
 
 function scriptedMemory(results: string[]): Memory {

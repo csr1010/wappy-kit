@@ -1,4 +1,4 @@
-import type { Tool } from "@wappy/core";
+import type { Tool } from "@wappy_ai/core";
 import { charsPerTokenEstimator, type TokenEstimator } from "./context-budget.js";
 import { bm25Scores, tokenize } from "./bm25.js";
 

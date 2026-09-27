@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Model } from "@wappy/core";
+import type { Model } from "@wappy_ai/core";
 import { composeWithBudget } from "./compose-with-budget.js";
 import { createContextBudget } from "./context-budget.js";
 

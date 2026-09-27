@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SmartMessageSchema, type Model, type SmartMessage } from "@wappy/core";
+import { SmartMessageSchema, type Model, type SmartMessage } from "@wappy_ai/core";
 import { assemblePrompt, type AssembleInput, type AssembleResult } from "./assemble.js";
 import type { ContextBudget } from "./context-budget.js";
 

@@ -19,7 +19,7 @@ a fix has shipped, or 90 days have passed, whichever comes first.
 
 In scope:
 
-- `@wappy/core`, `@wappy/harness`, `@wappy/whatsapp`, `@wappy/create-agent` (this repo).
+- `@wappy_ai/core`, `@wappy_ai/harness`, `@wappy_ai/whatsapp`, `@wappy_ai/create-agent` (this repo).
 - Anything that could leak a credential, bypass webhook signature verification, allow a
   confirm-before-write tool to execute without real confirmation, or allow a crafted inbound
   message to execute unintended code.

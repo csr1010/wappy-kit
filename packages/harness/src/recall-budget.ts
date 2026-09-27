@@ -1,4 +1,4 @@
-import type { Memory } from "@wappy/core";
+import type { Memory } from "@wappy_ai/core";
 
 export interface RecallBudgetOptions {
   memory: Memory;

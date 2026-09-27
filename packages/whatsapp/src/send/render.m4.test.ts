@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { SmartMessage } from "@wappy/core";
+import type { SmartMessage } from "@wappy_ai/core";
 import { renderReaction, renderSmartMessage } from "./render.js";
 
 const TO = "15550002222";

@@ -3,14 +3,14 @@ import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { config as loadDotenv } from "dotenv";
-import type { Agent, MessageChannel } from "@wappy/core";
-import { createWebhookServer } from "@wappy/whatsapp";
+import type { Agent, MessageChannel } from "@wappy_ai/core";
+import { createWebhookServer } from "@wappy_ai/whatsapp";
 
 /**
- * T9.7's `wappy dev`: boots the real webhook server (`@wappy/whatsapp`'s `createWebhookServer`,
+ * T9.7's `wappy dev`: boots the real webhook server (`@wappy_ai/whatsapp`'s `createWebhookServer`,
  * M9) against a GENERATED project's own `index.ts`, and optionally opens a tunnel so Meta can
  * reach it. Run from inside that project's directory (`npm run dev`, which resolves the `wappy`
- * bin from the project's own `@wappy/create-agent` dependency — see templates.ts's renderPackageJson).
+ * bin from the project's own `@wappy_ai/create-agent` dependency — see templates.ts's renderPackageJson).
  *
  * Deliberately dynamic-imports `<cwd>/index.ts` directly rather than requiring a build step. Loads
  * `<cwd>/.env` itself (via `dotenv`), explicitly and first — NOT by relying on the generated
@@ -31,7 +31,7 @@ export interface RunDevOptions {
   print: (line: string) => void;
   /** Injected for testing — real callers omit this and get the real dynamic import. */
   importProject?: (indexUrl: string) => Promise<GeneratedProjectExports>;
-  /** Injected for testing — real callers omit this and get @wappy/whatsapp's real server. */
+  /** Injected for testing — real callers omit this and get @wappy_ai/whatsapp's real server. */
   createServer?: typeof createWebhookServer;
   /** Injected for testing (avoids a real tunnel/network dependency in unit tests). Real callers
    * omit this and, unless `--no-tunnel` was passed, get a real localtunnel. */
@@ -52,7 +52,7 @@ async function defaultImportProject(indexUrl: string): Promise<GeneratedProjectE
 }
 
 async function defaultOpenTunnel(port: number): Promise<{ url: string; close: () => Promise<void> }> {
-  // Lazy `require`, not a static import: @wappy/create-agent's own startup cost shouldn't include
+  // Lazy `require`, not a static import: @wappy_ai/create-agent's own startup cost shouldn't include
   // localtunnel's dependency tree for the (more common) scaffold-only, never-`dev`
   // invocation. `require` (not dynamic `import()`) sidesteps localtunnel's `export =` CJS shape
   // not lining up with TypeScript's `.default` typing for a dynamically-imported CJS module.

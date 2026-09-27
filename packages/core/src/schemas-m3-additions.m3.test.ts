@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { InboundMediaSchema, InboundMessageSchema } from "./schemas.js";
 
 // New optional fields added during M3 (code review caught: interactive reply id and location
-// lat/long were being silently dropped by @wappy/whatsapp's parser). schemas.m1.test.ts is
+// lat/long were being silently dropped by @wappy_ai/whatsapp's parser). schemas.m1.test.ts is
 // protected by B2 once tagged, so these live in their own m3-tagged file.
 
 describe("InboundMessage.selectionId", () => {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Agent, DeliveryResult, MessageChannel } from "@wappy/core";
+import type { Agent, DeliveryResult, MessageChannel } from "@wappy_ai/core";
 import type { Server } from "node:http";
 import { EventEmitter } from "node:events";
 import { runDev } from "./dev.js";

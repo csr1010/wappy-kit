@@ -1,4 +1,4 @@
-import type { SmartMessage } from "@wappy/core";
+import type { SmartMessage } from "@wappy_ai/core";
 
 /**
  * Single source of truth for WhatsApp's string-length limits (§6.1). Structural limits (max 3

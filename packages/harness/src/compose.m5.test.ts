@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Model, ModelRequest, ModelResult } from "@wappy/core";
+import type { Model, ModelRequest, ModelResult } from "@wappy_ai/core";
 import { composeSmartMessage } from "./compose.js";
 
 function scriptedModel(fn: (req: ModelRequest, callIndex: number) => ModelResult): Model {

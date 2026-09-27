@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Turn } from "@wappy/core";
+import type { Turn } from "@wappy_ai/core";
 import { assemblePrompt } from "./assemble.js";
 import { createContextBudget } from "./context-budget.js";
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { runChannelConformance } from "@wappy/testkit";
+import { runChannelConformance } from "@wappy_ai/testkit";
 import { createWhatsAppChannel } from "./channel.js";
 import { createMemorySeenStore } from "./seen-store.js";
 import { createSessionWindowTracker } from "./session-window.js";

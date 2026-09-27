@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Memory, MessageChannel, Router, ToolProvider } from "@wappy/core";
+import type { Memory, MessageChannel, Router, ToolProvider } from "@wappy_ai/core";
 import { fakeChannel, fakeMemory, fakeRouter, fakeToolProvider } from "./fakes.js";
 import { runChannelConformance, runMemoryConformance, runRouterConformance, runToolProviderConformance } from "./conformance.js";
 

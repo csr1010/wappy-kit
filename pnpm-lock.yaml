@@ -209,13 +209,13 @@ importers:
       '@clack/prompts':
         specifier: ^1.8.1
         version: 1.8.1
-      '@wappy/core':
+      '@wappy_ai/core':
         specifier: workspace:*
         version: link:../core
-      '@wappy/harness':
+      '@wappy_ai/harness':
         specifier: workspace:*
         version: link:../harness
-      '@wappy/whatsapp':
+      '@wappy_ai/whatsapp':
         specifier: workspace:*
         version: link:../whatsapp
       dotenv:
@@ -243,19 +243,19 @@ importers:
       '@libsql/client':
         specifier: 0.18.0
         version: 0.18.0
-      '@wappy/core':
+      '@wappy_ai/core':
         specifier: workspace:*
         version: link:../core
-      '@wappy/create-agent':
+      '@wappy_ai/create-agent':
         specifier: workspace:*
         version: link:../create-wappy
-      '@wappy/harness':
+      '@wappy_ai/harness':
         specifier: workspace:*
         version: link:../harness
-      '@wappy/testkit':
+      '@wappy_ai/testkit':
         specifier: workspace:*
         version: link:../testkit
-      '@wappy/whatsapp':
+      '@wappy_ai/whatsapp':
         specifier: workspace:*
         version: link:../whatsapp
     devDependencies:
@@ -277,7 +277,7 @@ importers:
       '@libsql/client':
         specifier: 0.18.0
         version: 0.18.0
-      '@wappy/core':
+      '@wappy_ai/core':
         specifier: workspace:*
         version: link:../core
       ai:
@@ -290,7 +290,7 @@ importers:
       '@types/node':
         specifier: ^26.6.2
         version: 26.6.2
-      '@wappy/testkit':
+      '@wappy_ai/testkit':
         specifier: workspace:*
         version: link:../testkit
       typescript:
@@ -302,7 +302,7 @@ importers:
 
   packages/testkit:
     dependencies:
-      '@wappy/core':
+      '@wappy_ai/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -318,14 +318,14 @@ importers:
 
   packages/whatsapp:
     dependencies:
-      '@wappy/core':
+      '@wappy_ai/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^26.6.2
         version: 26.6.2
-      '@wappy/testkit':
+      '@wappy_ai/testkit':
         specifier: workspace:*
         version: link:../testkit
       typescript:

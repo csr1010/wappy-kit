@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { fakeChannel, fakeMemory, fakeRouter } from "@wappy/testkit";
-import { createInMemoryTracer } from "@wappy/core";
-import type { Clock, InboundMessage, Model, RouterDecision, SessionProfile, SessionProfileStore } from "@wappy/core";
+import { fakeChannel, fakeMemory, fakeRouter } from "@wappy_ai/testkit";
+import { createInMemoryTracer } from "@wappy_ai/core";
+import type { Clock, InboundMessage, Model, RouterDecision, SessionProfile, SessionProfileStore } from "@wappy_ai/core";
 import { createAgent } from "./agent.js";
 
 function msg(overrides: Partial<InboundMessage> = {}): InboundMessage {

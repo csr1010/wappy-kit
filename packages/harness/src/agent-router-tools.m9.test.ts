@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { fakeChannel, fakeMemory, fakeRouter } from "@wappy/testkit";
-import { systemClock } from "@wappy/core";
-import type { InboundMessage, Model, RouterDecision, Tool } from "@wappy/core";
+import { fakeChannel, fakeMemory, fakeRouter } from "@wappy_ai/testkit";
+import { systemClock } from "@wappy_ai/core";
+import type { InboundMessage, Model, RouterDecision, Tool } from "@wappy_ai/core";
 import { createAgent } from "./agent.js";
 
 // Regression: found by hand-testing a real Shopify-connected conversation. createAgent used to

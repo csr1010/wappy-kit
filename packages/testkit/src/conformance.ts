@@ -11,7 +11,7 @@ import {
   type SmartMessage,
   type ToolProvider,
   type Turn,
-} from "@wappy/core";
+} from "@wappy_ai/core";
 
 /**
  * B6 contract conformance suites: run the SAME checks against a fake, a real impl, and every

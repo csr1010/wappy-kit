@@ -1,4 +1,4 @@
-import type { SmartMessage } from "@wappy/core";
+import type { SmartMessage } from "@wappy_ai/core";
 
 export interface NumberedOption {
   number: number;

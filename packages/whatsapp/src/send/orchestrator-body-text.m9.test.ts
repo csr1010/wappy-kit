@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { systemClock } from "@wappy/core";
+import { systemClock } from "@wappy_ai/core";
 import { sendSmartMessage, type SendDeps } from "./orchestrator.js";
 import { createSessionWindowTracker } from "../session-window.js";
 

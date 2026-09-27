@@ -26,19 +26,19 @@ code. If you're a coding agent working in this repo, start here before touching 
 ## The core principle: hub-and-spoke
 
 ```
-              @wappy/core
+              @wappy_ai/core
              /     |      \
-  @wappy/harness  @wappy/whatsapp  @wappy/create-agent
+  @wappy_ai/harness  @wappy_ai/whatsapp  @wappy_ai/create-agent
 ```
 
-`@wappy/core` defines the interfaces everything else implements. The other packages depend on core
+`@wappy_ai/core` defines the interfaces everything else implements. The other packages depend on core
 and nothing else, never on each other. This is enforced, not just a convention: see
 `packages/e2e/src/arch.ts`, which scans every package's real imports and fails if a plugin ever
 imports another plugin directly. If you're adding a new package, it either depends only on
-`@wappy/core`, or it's orchestration code (like `create-agent` or the test suite) that's allowed to
+`@wappy_ai/core`, or it's orchestration code (like `create-agent` or the test suite) that's allowed to
 wire multiple parts together.
 
-## `@wappy/core`
+## `@wappy_ai/core`
 
 **What:** The shared contracts. `Tool`/`ToolProvider`, `Memory`, `MessageChannel`,
 `SessionProfileStore`, the `SmartMessage` schema, the plugin registry, and the install-state ledger
@@ -52,7 +52,7 @@ makes that swap actually safe instead of aspirational.
 **Start reading:** `packages/core/src/interfaces.ts` (the interfaces), `packages/core/src/schemas.ts`
 (the zod schemas, especially `SmartMessageSchema` and `SessionProfileSchema`).
 
-## `@wappy/harness`
+## `@wappy_ai/harness`
 
 **What:** The agent itself. `createAgent()` orchestrates one inbound message into one reply:
 load memory and session profile, route (decide what kind of message this is), retrieve/invoke
@@ -90,7 +90,7 @@ whatever it needs, compose a reply, send it, persist the turn.
 **Start reading:** `packages/harness/src/agent.ts` (the orchestration, read top to bottom),
 `packages/harness/src/compose-with-budget.ts`, `packages/harness/src/knowledge.ts`.
 
-## `@wappy/whatsapp`
+## `@wappy_ai/whatsapp`
 
 **What:** Everything about talking to the WhatsApp Cloud API correctly. Inbound webhook parsing,
 outbound message rendering (`SmartMessage` → WhatsApp's actual JSON shapes), delivery retries, a
@@ -108,15 +108,15 @@ happened, not by reading documentation. See `send/render.ts`, `send/constraints.
 `packages/whatsapp/src/send/orchestrator.ts` (the actual send pipeline: window check → render →
 constrain → retry → fallback).
 
-## `@wappy/create-agent`
+## `@wappy_ai/create-agent`
 
-**What:** The CLI (`npm create @wappy/agent`). A one-question interview (just the model provider,
+**What:** The CLI (`npm create @wappy_ai/agent`). A one-question interview (just the model provider,
 currently), then a pure, deterministic template renderer (`templates.ts`) writes a runnable project,
 and a ledger-driven generator (`generate.ts`) writes it to disk resumably (re-running after a
 Ctrl-C only redoes what didn't finish).
 
 **Why it's this narrow:** the interview used to ask about tools/connectors too. That's gone. A
-generated project ships with zero tools wired in and a comment pointing at `@wappy/core`'s
+generated project ships with zero tools wired in and a comment pointing at `@wappy_ai/core`'s
 `Tool`/`ToolProvider` interfaces, because domain-specific integrations (a store, a calendar,
 anything else) don't belong in this repo. See "What this repo deliberately doesn't ship," below.
 
@@ -126,7 +126,7 @@ anything else) don't belong in this repo. See "What this repo deliberately doesn
 ## What this repo deliberately doesn't ship
 
 No domain connectors. No Shopify, no calendar integration, nothing tied to one business or use
-case. `Tool`/`ToolProvider` in `@wappy/core` is the whole extension surface: build a tool over your
+case. `Tool`/`ToolProvider` in `@wappy_ai/core` is the whole extension surface: build a tool over your
 own API, an OpenAPI spec, MCP, Composio, whatever fits, in your own project, and hand it to
 `createAgent({ tools, invokeTools })`. This repo's own test suite proves the harness works correctly
 with zero tools and zero skills registered, specifically so this boundary stays real, not aspirational.
@@ -137,7 +137,7 @@ with zero tools and zero skills registered, specifically so this boundary stays 
   that older tests haven't been silently edited (`fix the code, not the test` is the rule; changing
   an old test requires an explicit reason), and a coverage ratchet that never lowers without a
   deliberate `--force`.
-- Every package's tests avoid real network calls and real model calls: `@wappy/testkit` provides
+- Every package's tests avoid real network calls and real model calls: `@wappy_ai/testkit` provides
   fakes/mocks (`mockModel`, `mockWhatsAppCloud`, `fakeMemory`, etc.) that satisfy the real interfaces.
 - Where a real-world behavior mattered (a WhatsApp API rejection rule, a LibSQL vector query's exact
   syntax, a local embedding model's actual output), it was verified against the real thing at least

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createClient } from "@libsql/client";
-import { runMemoryConformance } from "@wappy/testkit";
+import { runMemoryConformance } from "@wappy_ai/testkit";
 import { createLibsqlMemory } from "./memory.js";
 
 const dirs: string[] = [];

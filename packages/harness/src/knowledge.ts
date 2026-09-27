@@ -1,5 +1,5 @@
 import type { Client } from "@libsql/client";
-import type { Memory } from "@wappy/core";
+import type { Memory } from "@wappy_ai/core";
 import { bm25Scores, tokenize } from "./bm25.js";
 import { recallWithBudget } from "./recall-budget.js";
 

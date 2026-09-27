@@ -26,12 +26,12 @@ version).
 
 ## Ground rules
 
-- **Hub-and-spoke is enforced, not a suggestion.** `@wappy/core` has no dependents that import each
+- **Hub-and-spoke is enforced, not a suggestion.** `@wappy_ai/core` has no dependents that import each
   other; `packages/e2e/src/arch.ts` scans real imports and fails the build if that's ever violated.
 - **Fix the code, not the test.** Existing tests are treated as a spec. If a test looks wrong,
   that's worth raising, but changing or deleting one needs a real reason stated in the PR, not a
   silent edit.
-- **No real network calls in tests.** `@wappy/testkit` has fakes for the model, WhatsApp, memory,
+- **No real network calls in tests.** `@wappy_ai/testkit` has fakes for the model, WhatsApp, memory,
   etc. Use them.
 - **Small, focused PRs** are much easier to review than one that touches five things. If you're not
   sure whether an idea fits, open an issue first and we can talk it through before you write code.
@@ -40,7 +40,7 @@ version).
 
 Domain-specific integrations (a store, a calendar, a CRM, anything tied to one business or one use
 case) are intentionally out of scope for this repo - see "What this repo deliberately doesn't ship"
-in `ARCHITECTURE.md`. Those belong in your own project, built on `@wappy/core`'s
+in `ARCHITECTURE.md`. Those belong in your own project, built on `@wappy_ai/core`'s
 `Tool`/`ToolProvider` interfaces.
 
 ## Reporting security issues

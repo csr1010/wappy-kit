@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Contract snapshot (B3). Usage:
-//   node scripts/contract.mjs check     fail if @wappy/core's public API drifted from contracts/core.api.json
+//   node scripts/contract.mjs check     fail if @wappy_ai/core's public API drifted from contracts/core.api.json
 //   node scripts/contract.mjs update    (re)write the snapshot from current source (pnpm contract:update)
 // Extracts each named export of packages/core/src/index.ts (kind + printed type) via the
 // TS compiler API, straight from source — no build step required first.
@@ -30,7 +30,7 @@ function describeSymbol(checker, symbol) {
   };
 }
 
-/** Public API of @wappy/core as { exportName: { kind, type } }, sorted by name. */
+/** Public API of @wappy_ai/core as { exportName: { kind, type } }, sorted by name. */
 export function extractApi(entryFile = entry) {
   const program = ts.createProgram([entryFile], {
     target: ts.ScriptTarget.ES2022,

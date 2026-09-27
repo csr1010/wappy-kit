@@ -1,28 +1,28 @@
 import { describe, expect, test } from "vitest";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { DEFAULT_ANSWERS, renderProject, type RenderProjectOptions } from "@wappy/create-agent";
+import { DEFAULT_ANSWERS, renderProject, type RenderProjectOptions } from "@wappy_ai/create-agent";
 
 /**
  * Found by hand-testing the real installed CLI against a real registry (Verdaccio) instead of the
- * workspace: `renderProject()` generated `import { createInMemoryTracer } from "@wappy/harness"`,
- * but that function actually lives in `@wappy/core` — a generated project crashed on the very first
+ * workspace: `renderProject()` generated `import { createInMemoryTracer } from "@wappy_ai/harness"`,
+ * but that function actually lives in `@wappy_ai/core` — a generated project crashed on the very first
  * `import` with "does not provide an export named 'createInMemoryTracer'". No workspace test caught
  * it, because none of them load the generated code as a real module against the real built
  * packages; every unit test only does string-matching (`toContain(...)`) on the rendered source.
  *
  * This test closes that class of bug generically: for every combination `renderProject` can emit,
- * every `import { a, b, ... } from "@wappy/X"` in the generated `index.ts` names only symbols
- * `@wappy/X`'s own BUILT dist actually exports. Needs a prior `pnpm build`. (M12 removed the
+ * every `import { a, b, ... } from "@wappy_ai/X"` in the generated `index.ts` names only symbols
+ * `@wappy_ai/X`'s own BUILT dist actually exports. Needs a prior `pnpm build`. (M12 removed the
  * `skills/*.ts` files this used to also scan; the "tools" step/`tools/*.ts` files this used to also
- * scan were removed entirely afterward — `@wappy/tools-openapi` no longer ships from this repo.)
+ * scan were removed entirely afterward — `@wappy_ai/tools-openapi` no longer ships from this repo.)
  */
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0" };
-const PACKAGE_DIR: Record<string, string> = { "@wappy/core": "core", "@wappy/harness": "harness", "@wappy/whatsapp": "whatsapp" };
+const PACKAGE_DIR: Record<string, string> = { "@wappy_ai/core": "core", "@wappy_ai/harness": "harness", "@wappy_ai/whatsapp": "whatsapp" };
 
-const IMPORT_RE = /^import\s+(?:type\s+)?\{([^}]+)\}\s+from\s+"(@wappy\/[a-z-]+)";?$/gm;
+const IMPORT_RE = /^import\s+(?:type\s+)?\{([^}]+)\}\s+from\s+"(@wappy_ai\/[a-z-]+)";?$/gm;
 
 async function realExports(pkg: string): Promise<Set<string>> {
   const dir = PACKAGE_DIR[pkg];
@@ -49,7 +49,7 @@ const combos: { label: string; answers: RenderProjectOptions["answers"] }[] = [
 describe.each(combos)("generated project imports are real, for combo: $label", ({ answers }) => {
   const files = renderProject({ answers, versions: VERSIONS });
 
-  test("every named import from a @wappy/* package exists in that package's built exports", async () => {
+  test("every named import from a @wappy_ai/* package exists in that package's built exports", async () => {
     const cache = new Map<string, Set<string>>();
     for (const f of files) {
       for (const { pkg, names } of importedNames(f.content)) {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Tool } from "@wappy/core";
+import type { Tool } from "@wappy_ai/core";
 import { selectTools } from "./tool-selector.js";
 
 function fakeTool(name: string, description: string): Tool {

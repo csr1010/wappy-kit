@@ -4,13 +4,13 @@
 
 [![CI](https://github.com/csr1010/wappy-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/csr1010/wappy-kit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![npm](https://img.shields.io/npm/v/%40wappy%2Fcreate-agent?label=%40wappy%2Fcreate-agent)](https://www.npmjs.com/package/@wappy/create-agent)
+[![npm](https://img.shields.io/npm/v/%40wappy_ai%2Fcreate-agent?label=%40wappy_ai%2Fcreate-agent)](https://www.npmjs.com/package/@wappy_ai/create-agent)
 [![Local-first](https://img.shields.io/badge/local--first-%E2%9C%94-brightgreen)](#why-this-exists)
 
 ## Install
 
 ```bash
-npm create @wappy/agent
+npm create @wappy_ai/agent
 cp .env.sample .env    # fill in your model key + WhatsApp creds
 npm install
 npm run dev             # boots the server, opens a tunnel, prints the URL for Meta's webhook config
@@ -19,7 +19,7 @@ npm run dev             # boots the server, opens a tunnel, prints the URL for M
 Here's the whole install, start to finish:
 
 ```
-$ npm create @wappy/agent
+$ npm create @wappy_ai/agent
 
 ┌  Wappy agent setup — let's set up your WhatsApp agent
 │
@@ -74,10 +74,10 @@ Tested by hand against a real WhatsApp number, not just automated checks. If it'
 
 | Package | What it is |
 |---|---|
-| `@wappy/core` | The shared contracts everything else is built on. |
-| `@wappy/harness` | The agent itself: how it thinks, remembers, and decides what to do. |
-| `@wappy/whatsapp` | Talking to WhatsApp correctly: message formatting, retries, a real webhook server. |
-| `@wappy/create-agent` | The installer (`npm create @wappy/agent`). One question, then a working project. |
+| `@wappy_ai/core` | The shared contracts everything else is built on. |
+| `@wappy_ai/harness` | The agent itself: how it thinks, remembers, and decides what to do. |
+| `@wappy_ai/whatsapp` | Talking to WhatsApp correctly: message formatting, retries, a real webhook server. |
+| `@wappy_ai/create-agent` | The installer (`npm create @wappy_ai/agent`). One question, then a working project. |
 
 Every install pulls in exactly these four. Nothing extra, nothing tied to a business or use case.
 

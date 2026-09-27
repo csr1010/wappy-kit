@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { fakeChannel, fakeMemory, fakeRouter } from "@wappy/testkit";
-import { createInMemoryTracer, systemClock } from "@wappy/core";
-import type { InboundMessage, Model, RouterDecision, Tool, Turn } from "@wappy/core";
+import { fakeChannel, fakeMemory, fakeRouter } from "@wappy_ai/testkit";
+import { createInMemoryTracer, systemClock } from "@wappy_ai/core";
+import type { InboundMessage, Model, RouterDecision, Tool, Turn } from "@wappy_ai/core";
 import { createAgent } from "./agent.js";
 import { createSkillRegistry } from "./skills.js";
 import { createContextBudget } from "./context-budget.js";

@@ -3,8 +3,8 @@ import { createRequire } from "node:module";
 import type { PartVersions } from "./templates.js";
 
 /**
- * Reads each `@wappy/*` part's ACTUAL installed version from its own `package.json` (via
- * `require.resolve`, so this works identically whether `@wappy/create-agent` is running from this
+ * Reads each `@wappy_ai/*` part's ACTUAL installed version from its own `package.json` (via
+ * `require.resolve`, so this works identically whether `@wappy_ai/create-agent` is running from this
  * monorepo's `workspace:*` links or as a real installed npm package) rather than hardcoding
  * versions here, which would drift the moment any part ships a new release.
  */
@@ -16,9 +16,9 @@ export function readPartVersions(fromUrl: string = import.meta.url): PartVersion
     return parsed.version;
   };
   return {
-    core: read("@wappy/core"),
-    harness: read("@wappy/harness"),
-    whatsapp: read("@wappy/whatsapp"),
-    createWappy: read("@wappy/create-agent"),
+    core: read("@wappy_ai/core"),
+    harness: read("@wappy_ai/harness"),
+    whatsapp: read("@wappy_ai/whatsapp"),
+    createWappy: read("@wappy_ai/create-agent"),
   };
 }

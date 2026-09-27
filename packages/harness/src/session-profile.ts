@@ -1,5 +1,5 @@
 import { createClient, type Client } from "@libsql/client";
-import type { SessionProfile, SessionProfileStore } from "@wappy/core";
+import type { SessionProfile, SessionProfileStore } from "@wappy_ai/core";
 
 export type LibsqlSessionProfileStoreOptions =
   | {

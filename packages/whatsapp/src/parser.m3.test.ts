@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import { InboundMessageSchema } from "@wappy/core";
+import { InboundMessageSchema } from "@wappy_ai/core";
 import { parseWebhookPayload } from "./parser.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");

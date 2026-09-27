@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // A small, realistic mock of Shopify's Admin GraphQL API, matching the exact query shapes
-// @wappy/tools-openapi's shopify.ts sends (products/orders/inventory/customers/policies) — so the
+// @wappy_ai/tools-openapi's shopify.ts sends (products/orders/inventory/customers/policies) — so the
 // real ToolProvider code runs unmodified against it via `graphqlUrlOverride`. Not a general GraphQL
 // engine: it string-matches which of the 7 known queries came in and returns canned sample data for
 // "Luna & Co.", a fictional candle store. Auth: accepts any X-Shopify-Access-Token (this is a test

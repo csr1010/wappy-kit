@@ -16,7 +16,7 @@ export class StateVersionTooNewError extends Error {
     public readonly supportedVersion: number,
   ) {
     super(
-      `state file schemaVersion ${foundVersion} is newer than this @wappy/core build supports (${supportedVersion}); upgrade @wappy/core (and the CLI) before continuing`,
+      `state file schemaVersion ${foundVersion} is newer than this @wappy_ai/core build supports (${supportedVersion}); upgrade @wappy_ai/core (and the CLI) before continuing`,
     );
     this.name = "StateVersionTooNewError";
   }

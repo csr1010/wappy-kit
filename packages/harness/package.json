@@ -1,6 +1,6 @@
 {
-  "name": "@wappy/harness",
-  "version": "0.0.0",
+  "name": "@wappy_ai/harness",
+  "version": "0.1.0",
   "description": "The agent itself: routing, memory, session profile, local RAG, and reply-format reasoning for a WhatsApp AI agent. Bring your own model.",
   "keywords": [
     "whatsapp",
@@ -33,14 +33,14 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
-    "@wappy/testkit": "workspace:*",
+    "@wappy_ai/testkit": "workspace:*",
     "typescript": "^6.0.3",
     "vitest": "^5.0.1"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",
     "@libsql/client": "0.18.0",
-    "@wappy/core": "workspace:*",
+    "@wappy_ai/core": "workspace:*",
     "ai": "7.0.107",
     "zod": "^4.6.5"
   }

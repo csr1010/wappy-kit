@@ -2,11 +2,11 @@ import { afterEach, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cleanupAllTmpProjects, mockModel, mockWhatsAppCloud } from "@wappy/testkit";
-import { createInMemoryTracer, systemClock } from "@wappy/core";
-import type { Memory, Turn } from "@wappy/core";
-import { createWhatsAppChannel } from "@wappy/whatsapp";
-import { createAgent, createLlmRouter, createSkillRegistry } from "@wappy/harness";
+import { cleanupAllTmpProjects, mockModel, mockWhatsAppCloud } from "@wappy_ai/testkit";
+import { createInMemoryTracer, systemClock } from "@wappy_ai/core";
+import type { Memory, Turn } from "@wappy_ai/core";
+import { createWhatsAppChannel } from "@wappy_ai/whatsapp";
+import { createAgent, createLlmRouter, createSkillRegistry } from "@wappy_ai/harness";
 
 afterEach(() => cleanupAllTmpProjects());
 
@@ -31,8 +31,8 @@ function inMemoryMemory(): Memory {
 }
 
 /**
- * Spine A (§9 Scenario A): "hi" works end to end on the cheapest path. Real @wappy/whatsapp
- * (M3+M4) + real @wappy/harness (M5) + a scripted mockModel + mockWhatsAppCloud — only e2e wires
+ * Spine A (§9 Scenario A): "hi" works end to end on the cheapest path. Real @wappy_ai/whatsapp
+ * (M3+M4) + real @wappy_ai/harness (M5) + a scripted mockModel + mockWhatsAppCloud — only e2e wires
  * these together (hub-and-spoke). Proves the router and the compose step never touch RAG/tools for
  * a plain greeting, and that exactly one LLM (compose) trace event fires — the router's own model
  * call is traced separately, as "router", not "llm" (§7 System One vs System Two).

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
 import { APICallError } from "ai";
 import { createVercelModel } from "./model.js";
-import type { Tool } from "@wappy/core";
+import type { Tool } from "@wappy_ai/core";
 
 describe("createVercelModel — text", () => {
   test("a plain prompt with no tools/schema returns generated text", async () => {

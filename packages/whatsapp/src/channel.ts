@@ -1,4 +1,4 @@
-import { systemClock, type Clock, type DeliveryResult, type InboundMessage, type MessageChannel, type SmartMessage } from "@wappy/core";
+import { systemClock, type Clock, type DeliveryResult, type InboundMessage, type MessageChannel, type SmartMessage } from "@wappy_ai/core";
 import { parseWebhookPayload, type StatusEvent } from "./parser.js";
 import { createMemorySeenStore, type SeenStore } from "./seen-store.js";
 import { createSessionWindowTracker, type SessionWindowTracker } from "./session-window.js";

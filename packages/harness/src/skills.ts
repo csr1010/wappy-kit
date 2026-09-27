@@ -1,4 +1,4 @@
-import type { Skill } from "@wappy/core";
+import type { Skill } from "@wappy_ai/core";
 
 /** Registered Skills (prompt fragment + tools + optional memory schema, §17), keyed by name. */
 export interface SkillRegistry {

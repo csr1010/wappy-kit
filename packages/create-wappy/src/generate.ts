@@ -14,13 +14,13 @@ import {
   type State,
   type StepDef,
   type StepResult,
-} from "@wappy/core";
+} from "@wappy_ai/core";
 import type { CompleteInterviewAnswers } from "./interview.js";
 import { collectEnvVars, renderProject, type GeneratedFile, type PartVersions } from "./templates.js";
 
 /**
  * T9.3's "ledger-driven" half: takes `renderProject()`'s pure output and actually writes it to
- * disk, one `StepDef` per generated file, through `@wappy/core`'s M2 state-ledger primitives —
+ * disk, one `StepDef` per generated file, through `@wappy_ai/core`'s M2 state-ledger primitives —
  * `runSteps` (a step already `done` in `.wappy/state.json` is skipped, never re-run — §5's own
  * "every generator step is idempotent" rule, and the whole basis for "resume after Ctrl-C"),
  * `withLock` (so two concurrent runs in the same project directory can't race each other's writes),
@@ -75,7 +75,7 @@ function buildManifest(files: GeneratedFile[], envVarNames: string[]): SetupMani
 
 /** Renders (`renderProject`) and writes a project's files under `projectRoot`, resuming correctly
  * if a previous run was interrupted. Throws `StateLoadError` if `.wappy/state.json` is corrupt or
- * was written by a newer `@wappy/core` — callers (the CLI) should catch this and point the user at
+ * was written by a newer `@wappy_ai/core` — callers (the CLI) should catch this and point the user at
  * `wappy reset` rather than let generation proceed on untrustworthy state. */
 export async function generateProject(opts: GenerateProjectOptions): Promise<GenerateProjectResult> {
   const clock = opts.clock ?? systemClock;
@@ -91,7 +91,7 @@ export async function generateProject(opts: GenerateProjectOptions): Promise<Gen
       const loaded = loadState(statePath);
       if (!loaded.ok) {
         if ("corrupt" in loaded) throw new StateLoadError(`${statePath}: state is corrupt (${loaded.reason}) — run "wappy reset" to start over.`);
-        throw new StateLoadError(`${statePath}: state was written by a newer @wappy/core (schemaVersion ${loaded.foundVersion} > ${loaded.supportedVersion}) — run "wappy reset" to start over.`);
+        throw new StateLoadError(`${statePath}: state was written by a newer @wappy_ai/core (schemaVersion ${loaded.foundVersion} > ${loaded.supportedVersion}) — run "wappy reset" to start over.`);
       }
 
       const files = renderProject({ answers: opts.answers, versions: opts.versions, projectName: opts.projectName });

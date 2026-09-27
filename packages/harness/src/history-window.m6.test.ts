@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { fakeMemory } from "@wappy/testkit";
-import type { Model, Turn } from "@wappy/core";
+import { fakeMemory } from "@wappy_ai/testkit";
+import type { Model, Turn } from "@wappy_ai/core";
 import { windowHistory } from "./history-window.js";
 
 function turn(i: number, role: Turn["role"] = "user"): Turn {

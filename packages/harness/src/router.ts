@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { RouterDecisionSchema, type Model, type Router, type RouterDecision, type RouterInput } from "@wappy/core";
+import { RouterDecisionSchema, type Model, type Router, type RouterDecision, type RouterInput } from "@wappy_ai/core";
 
 const routerDecisionJsonSchema = z.toJSONSchema(RouterDecisionSchema);
 

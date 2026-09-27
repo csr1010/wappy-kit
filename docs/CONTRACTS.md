@@ -1,6 +1,6 @@
-# @wappy/core — contract signatures (M1 T1.1)
+# @wappy_ai/core — contract signatures (M1 T1.1)
 
-Prose reference for the frozen public API of `@wappy/core`. The source of truth is
+Prose reference for the frozen public API of `@wappy_ai/core`. The source of truth is
 `packages/core/src/*.ts`; `contracts/core.api.json` (B3) snapshots it and fails the
 gate on a breaking change. Later sessions should only need this file, not core source.
 
@@ -8,7 +8,7 @@ gate on a breaking change. Later sessions should only need this file, not core s
 
 - `InboundMessageSchema` -> `InboundMessage`: `{ id, contactId, channel, text?, media?, selectionId?, timestamp, raw? }`. `selectionId` (added M3) is the stable id of a picked button/list-row/quick-reply — routing must key off this, never off `text` (titles can be duplicated/localized/renamed). `InboundMedia` (added M3) also carries `latitude?`/`longitude?`, meaningful only when `kind === "location"`.
 - `SmartMessageSchema` -> `SmartMessage`: `{ text?, buttons?, list?, cta?, media?, quoteId?, flow? }`, at least one of text/buttons/list/cta/media required.
-  - **Layering rule (§6.1):** this schema enforces *structural* limits only — max 3 buttons, max 10 list rows total. It does **not** enforce string-length limits (button title <=20, list row title <=24, description <=72); those are truncated by `@wappy/whatsapp` at send time (M4). An over-length string is valid input here.
+  - **Layering rule (§6.1):** this schema enforces *structural* limits only — max 3 buttons, max 10 list rows total. It does **not** enforce string-length limits (button title <=20, list row title <=24, description <=72); those are truncated by `@wappy_ai/whatsapp` at send time (M4). An over-length string is valid input here.
   - `flow` is a reserved, unvalidated slot for WhatsApp Flows/forms (deferred; SPEC §6.1).
   - `smartMessageJsonSchema` — JSON Schema form (via `z.toJSONSchema`), passed to the model as `responseSchema` when it must emit a SmartMessage (§6.3).
 - `DeliveryResultSchema` -> `DeliveryResult`: `{ status: sent|failed|queued|fellBack, messageId?, reason? }`. `reason` is required when `status` is `failed` or `fellBack` (actionable, never a stack trace — §10).
@@ -53,6 +53,6 @@ gate on a breaking change. Later sessions should only need this file, not core s
 
 - **Tracer** — added to core (was missing from §3's list; needed for §9 traces and the M5 spine tests).
 - **Skill** — added to core (§13/§17 already treat it as a core interface; §3 had omitted it).
-- **Knowledge/RAG** — does **not** get a core interface. It lives in `@wappy/harness` (M8), consumed through `Memory.recall` + a skill's `promptFragment`; core stays domain/RAG-agnostic.
+- **Knowledge/RAG** — does **not** get a core interface. It lives in `@wappy_ai/harness` (M8), consumed through `Memory.recall` + a skill's `promptFragment`; core stays domain/RAG-agnostic.
 
 See SPEC.md §16 Decisions Log for the dated entry.

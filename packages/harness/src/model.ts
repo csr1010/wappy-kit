@@ -1,5 +1,5 @@
 import { generateObject, generateText, jsonSchema, NoObjectGeneratedError, stepCountIs, tool, type JSONSchema7, type LanguageModel, type ModelMessage } from "ai";
-import type { Model, ModelRequest, ModelResult, Turn } from "@wappy/core";
+import type { Model, ModelRequest, ModelResult, Turn } from "@wappy_ai/core";
 
 export interface VercelModelOptions {
   /** Any Vercel AI SDK LanguageModel — providers (OpenAI/Anthropic/Gemini/Ollama) are config passed in here, not code in this file (§2.1). */

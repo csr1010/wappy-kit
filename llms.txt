@@ -2,9 +2,9 @@
 
 > The open-source AI agent SDK for WhatsApp. Bring your own model, your own number, your own data. Local-first: memory, session state, and RAG all live in one local file, not on someone else's server.
 
-Wappy is the plumbing underneath a real, thinking agent on WhatsApp: it talks to the WhatsApp Cloud API correctly, remembers who it's talking to across days (not just a raw chat log), decides its own reply format (text, buttons, list, link, media), and never runs a risky action twice by accident. It does not ship any domain-specific integration (no Shopify, no calendar, no CRM) on purpose - `Tool`/`ToolProvider` in `@wappy/core` is the whole extension surface, and whatever you plug in is yours, not something this repo assumes for you.
+Wappy is the plumbing underneath a real, thinking agent on WhatsApp: it talks to the WhatsApp Cloud API correctly, remembers who it's talking to across days (not just a raw chat log), decides its own reply format (text, buttons, list, link, media), and never runs a risky action twice by accident. It does not ship any domain-specific integration (no Shopify, no calendar, no CRM) on purpose - `Tool`/`ToolProvider` in `@wappy_ai/core` is the whole extension surface, and whatever you plug in is yours, not something this repo assumes for you.
 
-Install with `npm create @wappy/agent`. Answer one question (which model provider you're using), and you get a runnable project on your own machine.
+Install with `npm create @wappy_ai/agent`. Answer one question (which model provider you're using), and you get a runnable project on your own machine.
 
 ## Docs
 
@@ -15,10 +15,10 @@ Install with `npm create @wappy/agent`. Answer one question (which model provide
 
 ## Packages
 
-- `@wappy/core`: the shared contracts (`Tool`, `Memory`, `MessageChannel`, `SessionProfileStore`, the `SmartMessage` schema) that every other package implements.
-- `@wappy/harness`: the agent itself - routing, memory, session profile, local RAG (LibSQL native vector search, `@huggingface/transformers` for embeddings), and reply-format reasoning. Model-provider-agnostic via the Vercel AI SDK.
-- `@wappy/whatsapp`: a real WhatsApp Cloud API integration - inbound webhook parsing, outbound message rendering, delivery retries, the 24-hour session-window rule, a real webhook HTTP server.
-- `@wappy/create-agent`: the installer (`npm create @wappy/agent`). A one-question interview, then a deterministic, resumable project scaffold.
+- `@wappy_ai/core`: the shared contracts (`Tool`, `Memory`, `MessageChannel`, `SessionProfileStore`, the `SmartMessage` schema) that every other package implements.
+- `@wappy_ai/harness`: the agent itself - routing, memory, session profile, local RAG (LibSQL native vector search, `@huggingface/transformers` for embeddings), and reply-format reasoning. Model-provider-agnostic via the Vercel AI SDK.
+- `@wappy_ai/whatsapp`: a real WhatsApp Cloud API integration - inbound webhook parsing, outbound message rendering, delivery retries, the 24-hour session-window rule, a real webhook HTTP server.
+- `@wappy_ai/create-agent`: the installer (`npm create @wappy_ai/agent`). A one-question interview, then a deterministic, resumable project scaffold.
 
 ## Notes for agents and crawlers
 

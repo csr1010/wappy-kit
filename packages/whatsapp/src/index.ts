@@ -1,4 +1,4 @@
-export const packageName = "@wappy/whatsapp";
+export const packageName = "@wappy_ai/whatsapp";
 
 export * from "./signature.js";
 export * from "./verify-handshake.js";

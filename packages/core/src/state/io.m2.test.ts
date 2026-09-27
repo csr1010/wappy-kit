@@ -6,7 +6,7 @@ import { createEmptyState } from "./schema.js";
 import { readRawState, writeStateAtomic } from "./io.js";
 import { StateCorruptError } from "./errors.js";
 
-// Core has zero @wappy/* dependencies by design (hub-and-spoke) — testkit itself depends on
+// Core has zero @wappy_ai/* dependencies by design (hub-and-spoke) — testkit itself depends on
 // core, so these tests use a plain mkdtemp helper rather than testkit's tmpProject().
 const dirs: string[] = [];
 function tmpDir(): string {

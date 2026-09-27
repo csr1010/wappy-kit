@@ -1,4 +1,4 @@
-import type { SmartMessage } from "@wappy/core";
+import type { SmartMessage } from "@wappy_ai/core";
 
 /** The JSON body posted to POST /{phone_number_id}/messages. */
 export type CloudApiOutboundPayload = Record<string, unknown>;

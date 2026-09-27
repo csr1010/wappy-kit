@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { cleanupAllTmpProjects } from "@wappy/testkit";
+import { cleanupAllTmpProjects } from "@wappy_ai/testkit";
 import { createSpine } from "./harness.js";
 
 afterEach(() => cleanupAllTmpProjects());

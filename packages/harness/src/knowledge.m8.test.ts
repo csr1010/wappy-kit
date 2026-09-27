@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { createClient } from "@libsql/client";
-import type { Memory } from "@wappy/core";
+import type { Memory } from "@wappy_ai/core";
 import { chunkText, createKnowledge, createKnowledgeRag } from "./knowledge.js";
 
 function memClient() {

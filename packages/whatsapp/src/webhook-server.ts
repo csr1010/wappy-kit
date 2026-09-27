@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { Agent, MessageChannel } from "@wappy/core";
+import type { Agent, MessageChannel } from "@wappy_ai/core";
 import { handleVerifyHandshake } from "./verify-handshake.js";
 import { verifySignature } from "./signature.js";
 import type { WhatsAppMessageChannel } from "./channel.js";
@@ -9,9 +9,9 @@ import type { WhatsAppMessageChannel } from "./channel.js";
  * Node's built-in `http`, not Express — the entire surface is one route (GET handshake, POST
  * webhook) plus raw-body reading for signature verification, which doesn't earn a framework
  * dependency (§1.2 "wrap, don't reinvent" is for genuine gaps; this isn't one). Lives in
- * `@wappy/whatsapp` because handling Meta's exact webhook protocol (handshake query params,
+ * `@wappy_ai/whatsapp` because handling Meta's exact webhook protocol (handshake query params,
  * `X-Hub-Signature-256`, raw-body requirement) is this channel's own concern — it only takes an
- * `Agent` (an @wappy/core interface, not @wappy/harness), so hub-and-spoke holds: this package
+ * `Agent` (an @wappy_ai/core interface, not @wappy_ai/harness), so hub-and-spoke holds: this package
  * still imports nothing from harness.
  *
  * Design: respond 200 as soon as the request is structurally valid (parsed + signature-verified),

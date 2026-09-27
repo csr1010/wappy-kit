@@ -17,7 +17,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 const importsIn = (text: string): string[] =>
-  [...text.matchAll(/(?:from\s+|import\s*\(?\s*|require\(\s*)["'](@wappy\/[\w-]+)/g)].map((m) => m[1]!);
+  [...text.matchAll(/(?:from\s+|import\s*\(?\s*|require\(\s*)["'](@wappy_ai\/[\w-]+)/g)].map((m) => m[1]!);
 
 /** Returns human-readable violations for `<root>/packages/*`; empty array = clean. */
 export function checkArchitecture(root: string): string[] {
@@ -28,17 +28,17 @@ export function checkArchitecture(root: string): string[] {
     const manifest = join(pkgsDir, dir, "package.json");
     if (!allowed || !existsSync(manifest)) continue;
     const pj = JSON.parse(readFileSync(manifest, "utf8"));
-    const bad = (target: string) => target.startsWith("@wappy/") && target !== `@wappy/${dir}` && !allowed.includes(target.slice(7));
+    const bad = (target: string) => target.startsWith("@wappy_ai/") && target !== `@wappy_ai/${dir}` && !allowed.includes(target.slice("@wappy_ai/".length));
 
     for (const field of ["dependencies", "peerDependencies", "optionalDependencies"]) {
       for (const dep of Object.keys(pj[field] ?? {})) if (bad(dep)) out.push(`${dir}: ${field} lists ${dep}`);
     }
     for (const dep of Object.keys(pj.devDependencies ?? {})) {
-      if (bad(dep) && dep !== "@wappy/testkit") out.push(`${dir}: devDependencies lists ${dep}`);
+      if (bad(dep) && dep !== "@wappy_ai/testkit") out.push(`${dir}: devDependencies lists ${dep}`);
     }
     for (const file of sourceFiles(join(pkgsDir, dir, "src"))) {
       for (const imp of importsIn(readFileSync(file, "utf8"))) {
-        if (bad(imp) && !(isTest(file) && imp === "@wappy/testkit")) out.push(`${dir}: ${file.slice(root.length + 1)} imports ${imp}`);
+        if (bad(imp) && !(isTest(file) && imp === "@wappy_ai/testkit")) out.push(`${dir}: ${file.slice(root.length + 1)} imports ${imp}`);
       }
     }
   }

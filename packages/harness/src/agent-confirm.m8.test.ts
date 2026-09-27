@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { createClient } from "@libsql/client";
-import { fakeChannel, fakeMemory, fakeRouter } from "@wappy/testkit";
-import { createInMemoryTracer } from "@wappy/core";
-import type { Clock, InboundMessage, Model, RouterDecision, Tool, ToolResult } from "@wappy/core";
+import { fakeChannel, fakeMemory, fakeRouter } from "@wappy_ai/testkit";
+import { createInMemoryTracer } from "@wappy_ai/core";
+import type { Clock, InboundMessage, Model, RouterDecision, Tool, ToolResult } from "@wappy_ai/core";
 import { createAgent } from "./agent.js";
 import { cancelSelectionId, confirmSelectionId, createConfirmFlow } from "./confirm.js";
 

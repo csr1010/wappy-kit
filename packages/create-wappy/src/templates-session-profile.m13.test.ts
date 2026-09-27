@@ -26,7 +26,7 @@ describe("renderProject — session profile is default-on, every combo", () => {
   ] as const)("%s: index.ts wires createLibsqlSessionProfileStore and passes it to createAgent", (_label, answers) => {
     const files = fileMap(renderProject({ answers, versions: VERSIONS }));
     const indexTs = files.get("index.ts")!;
-    expect(indexTs).toContain('import { createInMemoryTracer, systemClock } from "@wappy/core";');
+    expect(indexTs).toContain('import { createInMemoryTracer, systemClock } from "@wappy_ai/core";');
     expect(indexTs).toContain("createLibsqlSessionProfileStore");
     expect(indexTs).toContain('const sessionProfileStore = createLibsqlSessionProfileStore({ url: process.env.SESSION_PROFILE_DB_URL ?? "file:.wappy/session-profile.db" });');
     expect(indexTs).toContain("  sessionProfileStore,");
@@ -39,10 +39,10 @@ describe("renderProject — session profile is default-on, every combo", () => {
     expect(env).not.toContain("\nSESSION_PROFILE_DB_URL=");
   });
 
-  test("no new package.json dependency: createLibsqlSessionProfileStore is already part of @wappy/harness", () => {
+  test("no new package.json dependency: createLibsqlSessionProfileStore is already part of @wappy_ai/harness", () => {
     const files = fileMap(renderProject({ answers: complete(), versions: VERSIONS }));
     const pkg = JSON.parse(files.get("package.json")!);
-    expect(pkg.dependencies["@wappy/harness"]).toBe("0.1.0");
+    expect(pkg.dependencies["@wappy_ai/harness"]).toBe("0.1.0");
     expect(pkg.dependencies["@libsql/client"]).toBeUndefined();
   });
 });

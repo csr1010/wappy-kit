@@ -1,4 +1,4 @@
-export const packageName = "@wappy/harness";
+export const packageName = "@wappy_ai/harness";
 export * from "./memory.js";
 export * from "./session-profile.js";
 export * from "./agent.js";

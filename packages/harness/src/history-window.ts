@@ -1,4 +1,4 @@
-import type { Clock, Memory, Model, Tracer, Turn } from "@wappy/core";
+import type { Clock, Memory, Model, Tracer, Turn } from "@wappy_ai/core";
 
 const SUMMARY_KIND = "wappy.summary";
 

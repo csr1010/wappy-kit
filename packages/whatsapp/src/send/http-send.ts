@@ -1,4 +1,4 @@
-import type { Clock } from "@wappy/core";
+import type { Clock } from "@wappy_ai/core";
 import { computeBackoffMs, parseRetryAfterMs, type BackoffOptions } from "./backoff.js";
 import { mapMetaErrorCode } from "./error-map.js";
 import type { CloudApiOutboundPayload } from "./render.js";

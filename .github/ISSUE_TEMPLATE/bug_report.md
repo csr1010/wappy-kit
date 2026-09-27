@@ -21,7 +21,7 @@ What you thought should happen instead.
 
 **Which package**
 
-e.g. `@wappy/harness`, `@wappy/whatsapp`, `@wappy/create-agent`, `@wappy/core`
+e.g. `@wappy_ai/harness`, `@wappy_ai/whatsapp`, `@wappy_ai/create-agent`, `@wappy_ai/core`
 
 **Environment**
 

@@ -6,7 +6,7 @@ export type PluginKind = "channel" | "memory" | "router" | "toolProvider" | "ski
 export interface Plugin<T = unknown> {
   name: string;
   kind: PluginKind;
-  /** semver range of @wappy/core this plugin was built against. */
+  /** semver range of @wappy_ai/core this plugin was built against. */
   coreVersionRange: string;
   instance: T;
   setup?: SetupManifest;

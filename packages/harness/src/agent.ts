@@ -1,4 +1,4 @@
-import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, SessionProfile, SessionProfileStore, SmartMessage, TracedSystem, Tool, Tracer, Turn } from "@wappy/core";
+import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, SessionProfile, SessionProfileStore, SmartMessage, TracedSystem, Tool, Tracer, Turn } from "@wappy_ai/core";
 import { boundInboundText, DEFAULT_INBOUND_TEXT_LIMITS, type InboundTextLimits } from "./bound-inbound-text.js";
 import { composeWithBudget } from "./compose-with-budget.js";
 import { createContextBudget, type ContextBudget } from "./context-budget.js";

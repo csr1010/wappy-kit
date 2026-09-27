@@ -16,7 +16,7 @@ import {
   type ToolProvider,
   type ToolResult,
   type Turn,
-} from "@wappy/core";
+} from "@wappy_ai/core";
 
 /** Minimal MessageChannel: receive() treats `raw` as (an array of) partial InboundMessage data; `{ statusOnly: true }` -> []. */
 export interface FakeChannel extends MessageChannel {

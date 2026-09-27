@@ -1,4 +1,4 @@
-import { SmartMessageSchema, smartMessageJsonSchema, type Model, type SmartMessage, type Turn } from "@wappy/core";
+import { SmartMessageSchema, smartMessageJsonSchema, type Model, type SmartMessage, type Turn } from "@wappy_ai/core";
 
 export interface ComposeOptions {
   model: Model;

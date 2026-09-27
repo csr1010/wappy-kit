@@ -161,7 +161,7 @@
   },
   "packageName": {
     "kind": "VariableDeclaration",
-    "type": "\"@wappy/core\""
+    "type": "\"@wappy_ai/core\""
   },
   "Plugin": {
     "kind": "InterfaceDeclaration",

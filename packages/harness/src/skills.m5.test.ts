@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Skill } from "@wappy/core";
+import type { Skill } from "@wappy_ai/core";
 import { createSkillRegistry } from "./skills.js";
 
 const storeInfo: Skill = { name: "store-info", description: "answers store questions", promptFragment: "You know the store's hours and location.", tools: ["getStoreHours"] };

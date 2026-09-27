@@ -1,4 +1,4 @@
-export const packageName = "@wappy/core";
+export const packageName = "@wappy_ai/core";
 /** Kept in sync with package.json "version" by hand; PluginRegistry checks against this. */
 export const CORE_VERSION = "0.1.0";
 

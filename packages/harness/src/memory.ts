@@ -1,5 +1,5 @@
 import { createClient, type Client } from "@libsql/client";
-import type { Memory, Turn } from "@wappy/core";
+import type { Memory, Turn } from "@wappy_ai/core";
 
 export type LibsqlMemoryOptions =
   | {

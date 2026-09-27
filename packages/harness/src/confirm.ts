@@ -1,5 +1,5 @@
 import type { Client } from "@libsql/client";
-import type { Clock } from "@wappy/core";
+import type { Clock } from "@wappy_ai/core";
 
 /** `InboundMessage.selectionId` action prefixes a confirm/cancel button reply carries (§9 T8.5) —
  * agent.ts's confirm-flow branch keys off this, never off free text (matching core's own "routing

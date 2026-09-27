@@ -7,7 +7,7 @@ const budget = createContextBudget("gpt-4o-mini", { overrides: { contextWindow: 
 /**
  * M13: a new, optional `sessionProfile` section — a pre-rendered text block the caller (agent.ts)
  * builds from a `SessionProfile`. Kept as a plain string here (like `summary`) rather than
- * importing `@wappy/core`'s `SessionProfile` type, so this module stays decoupled from any one
+ * importing `@wappy_ai/core`'s `SessionProfile` type, so this module stays decoupled from any one
  * caller's shape — same pattern `summary` already follows.
  */
 describe("assemblePrompt — sessionProfile section (M13)", () => {

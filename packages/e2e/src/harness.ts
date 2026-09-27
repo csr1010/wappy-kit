@@ -1,4 +1,4 @@
-import { mockModel, mockWhatsAppCloud, tmpProject, type ModelStep } from "@wappy/testkit";
+import { mockModel, mockWhatsAppCloud, tmpProject, type ModelStep } from "@wappy_ai/testkit";
 
 /**
  * Spine harness: temp project + mock WhatsApp Cloud + mock model.

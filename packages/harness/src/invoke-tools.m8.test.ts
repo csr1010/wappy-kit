@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createClient } from "@libsql/client";
-import { systemClock } from "@wappy/core";
-import type { InboundMessage, Model, RouterDecision, Tool, ToolResult } from "@wappy/core";
+import { systemClock } from "@wappy_ai/core";
+import type { InboundMessage, Model, RouterDecision, Tool, ToolResult } from "@wappy_ai/core";
 import { createToolInvoker } from "./invoke-tools.js";
 import { createConfirmFlow } from "./confirm.js";
 
