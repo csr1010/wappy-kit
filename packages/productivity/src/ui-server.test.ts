@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { createTaskUiServer } from "./ui-server.js";
+import { createTaskUiServer, type OAuthConnectPlugin } from "./ui-server.js";
 import { createTaskStore, type TaskStore } from "./store.js";
 
 /** Phase 4 (plan: "Local web UI — the ASCII-mocked task list"). Boots a real server on an ephemeral
@@ -93,5 +93,76 @@ describe("createTaskUiServer", () => {
   test("an unknown route is a real 404, not a crash", async () => {
     const res = await fetch(base + "/nope");
     expect(res.status).toBe(404);
+  });
+});
+
+describe("createTaskUiServer — oauthConnect plugin (generic, no Google-specific code here)", () => {
+  let pluginServer: Server;
+  let pluginBase: string;
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => pluginServer.close(() => resolve()));
+  });
+
+  function fakePlugin(overrides: Partial<OAuthConnectPlugin> = {}): OAuthConnectPlugin & { handledUrls: URL[] } {
+    const handledUrls: URL[] = [];
+    return {
+      label: "TestVendor",
+      isAvailable: () => true,
+      isConnected: () => false,
+      authUrl: () => "https://example.com/consent",
+      callbackPath: "/testvendor/callback",
+      handledUrls,
+      async handleCallback(url) {
+        handledUrls.push(url);
+        return true;
+      },
+      ...overrides,
+    };
+  }
+
+  async function boot(plugin: OAuthConnectPlugin) {
+    const testStore = createTaskStore({ url: ":memory:" });
+    pluginServer = createTaskUiServer({ store: testStore, clock: fakeClock(1_000_000), oauthConnect: plugin });
+    await new Promise<void>((resolve) => pluginServer.listen(0, "127.0.0.1", resolve));
+    pluginBase = `http://127.0.0.1:${(pluginServer.address() as AddressInfo).port}`;
+  }
+
+  test("GET /api/oauth-status reflects the plugin's available/connected/label/authUrl", async () => {
+    await boot(fakePlugin());
+    const status = await (await fetch(pluginBase + "/api/oauth-status")).json();
+    expect(status).toEqual({ available: true, connected: false, label: "TestVendor", authUrl: "https://example.com/consent" });
+  });
+
+  test("GET /api/oauth-status with no plugin configured reports unavailable", async () => {
+    const testStore = createTaskStore({ url: ":memory:" });
+    pluginServer = createTaskUiServer({ store: testStore, clock: fakeClock(1_000_000) });
+    await new Promise<void>((resolve) => pluginServer.listen(0, "127.0.0.1", resolve));
+    pluginBase = `http://127.0.0.1:${(pluginServer.address() as AddressInfo).port}`;
+    const status = await (await fetch(pluginBase + "/api/oauth-status")).json();
+    expect(status.available).toBe(false);
+  });
+
+  test("a request to the plugin's callbackPath is routed to handleCallback, and redirects to / on success", async () => {
+    const plugin = fakePlugin();
+    await boot(plugin);
+    const res = await fetch(pluginBase + "/testvendor/callback?code=abc123", { redirect: "manual" });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/");
+    expect(plugin.handledUrls).toHaveLength(1);
+    expect(plugin.handledUrls[0]!.searchParams.get("code")).toBe("abc123");
+  });
+
+  test("handleCallback returning false falls through to a normal 404, not a crash", async () => {
+    await boot(fakePlugin({ handleCallback: async () => false }));
+    const res = await fetch(pluginBase + "/testvendor/callback?code=abc123");
+    expect(res.status).toBe(404);
+  });
+
+  test("a request to a path that ISN'T the plugin's callbackPath never reaches handleCallback", async () => {
+    const plugin = fakePlugin();
+    await boot(plugin);
+    await fetch(pluginBase + "/api/templates");
+    expect(plugin.handledUrls).toHaveLength(0);
   });
 });

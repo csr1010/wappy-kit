@@ -11,10 +11,36 @@ import type { NewTask, TaskStore } from "./store.js";
  * contact on one page, which is the right shape for this project's current single-operator scope.
  */
 
+/**
+ * A generic "connect a third-party account from this page" plug-in point — deliberately NOT named
+ * or shaped after Google specifically, so this package stays domain-agnostic (it doesn't know what
+ * Google or any vendor is, matching every other extension point here). A connector package (e.g.
+ * `@wappy_ai/connector-google`) builds a real implementation; a generated project's `index.ts`
+ * (orchestration code, allowed to wire multiple parts together) passes it in here — this file never
+ * imports anything connector-specific itself.
+ */
+export interface OAuthConnectPlugin {
+  /** Card label, e.g. "Google". */
+  label: string;
+  /** Whether the "Connect X" card should show at all (e.g. credentials are configured). */
+  isAvailable(): Promise<boolean> | boolean;
+  /** Whether already connected — shows "✓ X connected" instead of the connect card. */
+  isConnected(): Promise<boolean> | boolean;
+  /** The URL to send the browser to when "Connect" is tapped. */
+  authUrl(): string;
+  /** The path this plugin's own callback route is mounted at, e.g. "/google/callback". */
+  callbackPath: string;
+  /** Handles the callback request (parse the code, exchange it, store the result). Return `true` if
+   * this request was actually the plugin's callback (the server redirects back to "/"); `false` to
+   * fall through to a normal 404. */
+  handleCallback(url: URL): Promise<boolean>;
+}
+
 export interface CreateTaskUiServerOptions {
   store: TaskStore;
   clock: Clock;
   port?: number;
+  oauthConnect?: OAuthConnectPlugin;
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -49,7 +75,7 @@ function renderTitle(templateId: TemplateId, placeholders: Record<string, string
 }
 
 export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
-  const { store, clock } = opts;
+  const { store, clock, oauthConnect } = opts;
 
   return createServer((req, res) => {
     void (async () => {
@@ -64,6 +90,29 @@ export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
         if (req.method === "GET" && url.pathname === "/api/templates") {
           sendJson(res, 200, TASK_TEMPLATES);
           return;
+        }
+
+        if (req.method === "GET" && url.pathname === "/api/oauth-status") {
+          if (!oauthConnect) {
+            sendJson(res, 200, { available: false, connected: false, label: null, authUrl: null });
+            return;
+          }
+          sendJson(res, 200, {
+            available: await oauthConnect.isAvailable(),
+            connected: await oauthConnect.isConnected(),
+            label: oauthConnect.label,
+            authUrl: oauthConnect.authUrl(),
+          });
+          return;
+        }
+
+        if (oauthConnect && url.pathname === oauthConnect.callbackPath) {
+          const handled = await oauthConnect.handleCallback(url);
+          if (handled) {
+            res.writeHead(302, { location: "/" });
+            res.end();
+            return;
+          }
         }
 
         if (req.method === "GET" && url.pathname === "/api/tasks") {
@@ -163,6 +212,8 @@ const PAGE_HTML = `<!doctype html>
     <div class="card-title" style="margin-bottom:6px;">Your WhatsApp number</div>
     <input id="contactId" placeholder="+15551234567" />
   </div>
+
+  <div class="card" id="oauthCard" style="display:none;"></div>
 
   <div id="taskList"></div>
 
@@ -281,11 +332,36 @@ async function refresh() {
   renderTasks();
 }
 
+async function refreshOauth() {
+  const status = await api("/api/oauth-status");
+  const card = document.getElementById("oauthCard");
+  if (!status.available) {
+    card.style.display = "none";
+    return;
+  }
+  card.style.display = "block";
+  card.innerHTML = "";
+  if (status.connected) {
+    const done = document.createElement("div");
+    done.className = "card-title";
+    done.textContent = "✓ " + status.label + " connected";
+    card.appendChild(done);
+  } else {
+    const btn = document.createElement("button");
+    btn.className = "template-btn";
+    btn.style.width = "100%";
+    btn.textContent = "Connect " + status.label;
+    btn.onclick = () => { window.location.href = status.authUrl; };
+    card.appendChild(btn);
+  }
+}
+
 (async function init() {
   loadContactId();
   state.templates = await api("/api/templates");
   renderTemplates();
   await refresh();
+  await refreshOauth();
 })();
 </script>
 </body>

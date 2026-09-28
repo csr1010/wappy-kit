@@ -188,6 +188,31 @@ importers:
         specifier: ^5.0.1
         version: 5.0.1(@types/node@26.6.2)(@vitest/coverage-v8@5.0.1)(vite@8.3.0(@types/node@26.6.2))
 
+  packages/connector-google:
+    dependencies:
+      '@libsql/client':
+        specifier: 0.18.0
+        version: 0.18.0
+      '@wappy_ai/core':
+        specifier: workspace:*
+        version: link:../core
+      '@wappy_ai/harness':
+        specifier: workspace:*
+        version: link:../harness
+      '@wappy_ai/productivity':
+        specifier: workspace:*
+        version: link:../productivity
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.2
+        version: 26.6.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.1
+        version: 5.0.1(@types/node@26.6.2)(@vitest/coverage-v8@5.0.1)(vite@8.3.0(@types/node@26.6.2))
+
   packages/core:
     dependencies:
       zod:
