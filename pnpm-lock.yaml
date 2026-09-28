@@ -300,7 +300,7 @@ importers:
         specifier: ^5.0.1
         version: 5.0.1(@types/node@26.6.2)(@vitest/coverage-v8@5.0.1)(vite@8.3.0(@types/node@26.6.2))
 
-  packages/scheduler:
+  packages/productivity:
     dependencies:
       '@libsql/client':
         specifier: 0.18.0

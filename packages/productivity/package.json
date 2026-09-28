@@ -1,13 +1,13 @@
 {
-  "name": "@wappy_ai/scheduler",
+  "name": "@wappy_ai/productivity",
   "version": "0.1.0",
-  "description": "Proactive, scheduled agent tasks (reminders, wake-ups, and pluggable digests) for a WhatsApp AI agent, backed by a local SQLite file and a local task-management UI.",
+  "description": "A proactive productivity agent for WhatsApp - scheduled reminders, wake-ups, and pluggable digests, backed by a local SQLite file and a local task-management UI.",
   "keywords": [
     "whatsapp",
     "ai-agent",
+    "productivity",
     "scheduler",
     "cron",
-    "productivity",
     "typescript",
     "local-first"
   ],
@@ -15,7 +15,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/csr1010/wappy-kit.git",
-    "directory": "packages/scheduler"
+    "directory": "packages/productivity"
   },
   "bugs": "https://github.com/csr1010/wappy-kit/issues",
   "license": "MIT",

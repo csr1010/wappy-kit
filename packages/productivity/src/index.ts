@@ -1,4 +1,4 @@
-export const packageName = "@wappy_ai/scheduler";
+export const packageName = "@wappy_ai/productivity";
 export * from "./templates.js";
 export * from "./store.js";
 export * from "./runner.js";

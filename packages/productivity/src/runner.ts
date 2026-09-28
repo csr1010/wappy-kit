@@ -112,7 +112,7 @@ async function runWithRetry(action: Action, task: Task, ctx: ActionContext, retr
 }
 
 /**
- * The generic scheduler engine (Phase 2). Zero domain knowledge — it never knows what a "reminder"
+ * The generic task-running engine (Phase 2). Zero domain knowledge — it never knows what a "reminder"
  * or "Google" is, only that a due task has a `templateId` key into the injected `actions` map. A
  * future connector (e.g. `@wappy_ai/connector-google`) plugs into that map; it never changes this file.
  */
