@@ -1,0 +1,46 @@
+{
+  "name": "@wappy_ai/scheduler",
+  "version": "0.1.0",
+  "description": "Proactive, scheduled agent tasks (reminders, wake-ups, and pluggable digests) for a WhatsApp AI agent, backed by a local SQLite file and a local task-management UI.",
+  "keywords": [
+    "whatsapp",
+    "ai-agent",
+    "scheduler",
+    "cron",
+    "productivity",
+    "typescript",
+    "local-first"
+  ],
+  "homepage": "https://github.com/csr1010/wappy-kit#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/csr1010/wappy-kit.git",
+    "directory": "packages/scheduler"
+  },
+  "bugs": "https://github.com/csr1010/wappy-kit/issues",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@wappy_ai/testkit": "workspace:*",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "@libsql/client": "0.18.0",
+    "@wappy_ai/core": "workspace:*"
+  }
+}
