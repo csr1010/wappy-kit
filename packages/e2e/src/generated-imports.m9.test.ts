@@ -17,15 +17,22 @@ import { DEFAULT_ANSWERS, renderProject, type RenderProjectOptions } from "@wapp
  * `skills/*.ts` files this used to also scan; the "tools" step/`tools/*.ts` files this used to also
  * scan were removed entirely afterward — `@wappy_ai/tools-openapi` no longer ships from this repo.)
  *
- * A "productivity" interview step was added later (@wappy_ai/productivity): `VERSIONS`/`PACKAGE_DIR`
- * updated to include it, and the combo matrix now covers productivity true/false, not just model
- * providers — otherwise this test would silently stop checking the newest import surface it exists
- * to catch bugs in (`--allow-test-change`, SPEC.md decisions log).
+ * A "productivity" interview step was added later (@wappy_ai/productivity, then
+ * @wappy_ai/connector-google for the real Google wiring): `VERSIONS`/`PACKAGE_DIR` updated to
+ * include both, and the combo matrix now covers productivity true/false, not just model providers —
+ * otherwise this test would silently stop checking the newest import surface it exists to catch bugs
+ * in (`--allow-test-change`, SPEC.md decisions log).
  */
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", productivity: "0.1.0", createWappy: "0.1.0" };
-const PACKAGE_DIR: Record<string, string> = { "@wappy_ai/core": "core", "@wappy_ai/harness": "harness", "@wappy_ai/whatsapp": "whatsapp", "@wappy_ai/productivity": "productivity" };
+const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", productivity: "0.1.0", connectorGoogle: "0.1.0", createWappy: "0.1.0" };
+const PACKAGE_DIR: Record<string, string> = {
+  "@wappy_ai/core": "core",
+  "@wappy_ai/harness": "harness",
+  "@wappy_ai/whatsapp": "whatsapp",
+  "@wappy_ai/productivity": "productivity",
+  "@wappy_ai/connector-google": "connector-google",
+};
 
 const IMPORT_RE = /^import\s+(?:type\s+)?\{([^}]+)\}\s+from\s+"(@wappy_ai\/[a-z-]+)";?$/gm;
 

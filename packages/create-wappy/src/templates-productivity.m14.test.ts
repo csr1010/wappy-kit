@@ -8,7 +8,7 @@ import { renderProject, type PartVersions } from "./templates.js";
  * as it was before this step existed — no leftover productivity code either way.
  */
 
-const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.1", productivity: "0.1.0", createWappy: "0.1.0" };
+const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.1", productivity: "0.1.0", connectorGoogle: "0.1.0", createWappy: "0.1.0" };
 
 function withProductivity(enabled: boolean): CompleteInterviewAnswers {
   return { model: DEFAULT_ANSWERS.model, productivity: { enabled } };
@@ -44,6 +44,17 @@ describe("renderProject — productivity: false (default)", () => {
 
   test("README has no productivity-agent line", () => {
     expect(files.get("README.md")!).not.toContain("Productivity agent");
+  });
+
+  test("no GOOGLE_SETUP.md is generated at all", () => {
+    expect(files.has("GOOGLE_SETUP.md")).toBe(false);
+  });
+
+  test("index.ts has no Google/Knowledge wiring", () => {
+    const indexTs = files.get("index.ts")!;
+    expect(indexTs).not.toContain("@wappy_ai/connector-google");
+    expect(indexTs).not.toContain("createKnowledge");
+    expect(indexTs).not.toContain("googlePlugin");
   });
 });
 
@@ -97,5 +108,48 @@ describe("renderProject — productivity: true", () => {
     const readme = files.get("README.md")!;
     expect(readme).toContain("Productivity agent");
     expect(readme).toContain("task-management page");
+  });
+
+  test("index.ts wires a Knowledge store and passes retrieveRag into createAgent", () => {
+    expect(indexTs).toContain("createKnowledge(");
+    expect(indexTs).toContain("createKnowledgeRag({ knowledge })");
+    expect(indexTs).toMatch(/createAgent\(\{[\s\S]*retrieveRag: createKnowledgeRag/);
+  });
+
+  test("index.ts imports and wires @wappy_ai/connector-google, merging its actions over DEFAULT_ACTIONS", () => {
+    expect(indexTs).toContain('from "@wappy_ai/connector-google"');
+    expect(indexTs).toContain("createGoogleActions");
+    expect(indexTs).toContain("createGoogleOAuthPlugin");
+    expect(indexTs).toContain("createGoogleTokenStore");
+    expect(indexTs).toMatch(/actions:\s*\{\s*\.\.\.DEFAULT_ACTIONS,\s*\.\.\.googleActions\s*\}/);
+  });
+
+  test("index.ts wires the OAuth plugin into createTaskUiServer, not left unused", () => {
+    expect(indexTs).toContain("oauthConnect: googlePlugin");
+  });
+
+  test("package.json depends on @wappy_ai/connector-google and @libsql/client", () => {
+    const pkg = JSON.parse(files.get("package.json")!);
+    expect(pkg.dependencies["@wappy_ai/connector-google"]).toBe("0.1.0");
+    expect(pkg.dependencies["@libsql/client"]).toBe("0.18.0");
+  });
+
+  test(".env.sample lists GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as optional, under Google", () => {
+    const env = files.get(".env.sample")!;
+    expect(env).toContain("Google");
+    expect(env).toContain("\n# GOOGLE_CLIENT_ID=\n");
+    expect(env).toContain("\n# GOOGLE_CLIENT_SECRET=\n");
+  });
+
+  test("GOOGLE_SETUP.md is generated with the exact redirect URI and template guidance", () => {
+    const setup = files.get("GOOGLE_SETUP.md")!;
+    expect(setup).toBeTruthy();
+    expect(setup).toContain("http://localhost:3001/google/callback");
+    expect(setup).toContain("Testing");
+    expect(setup).toContain("Connect Google");
+  });
+
+  test("README links to GOOGLE_SETUP.md", () => {
+    expect(files.get("README.md")!).toContain("GOOGLE_SETUP.md");
   });
 });

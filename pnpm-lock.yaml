@@ -234,6 +234,9 @@ importers:
       '@clack/prompts':
         specifier: ^1.8.1
         version: 1.8.1
+      '@wappy_ai/connector-google':
+        specifier: workspace:*
+        version: link:../connector-google
       '@wappy_ai/core':
         specifier: workspace:*
         version: link:../core

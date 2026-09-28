@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.8.1",
+    "@wappy_ai/connector-google": "workspace:*",
     "@wappy_ai/core": "workspace:*",
     "@wappy_ai/harness": "workspace:*",
     "@wappy_ai/productivity": "workspace:*",

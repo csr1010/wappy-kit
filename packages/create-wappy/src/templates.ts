@@ -44,6 +44,8 @@ export interface PartVersions {
    * `renderPackageJson`. Always resolved regardless, same as every other part, so there's one code
    * path for reading real installed versions, not a productivity-specific branch in `versions.ts`. */
   productivity: string;
+  /** Same "only when productivity=yes" story as `productivity` above. */
+  connectorGoogle: string;
   /** `@wappy_ai/create-agent`'s own version — needed as a generated project's OWN dependency (not just
    * a scaffolding tool) so `npm run dev`/`status`/`doctor` can resolve the `wappy` bin it provides. */
   createWappy: string;
@@ -116,6 +118,7 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   const productivity = answers.productivity.enabled;
 
   const harnessImports = ["createAgent", "createVercelModel", "createLibsqlMemory", "createLibsqlSessionProfileStore", "createLlmRouter"];
+  if (productivity) harnessImports.push("createKnowledge", "createKnowledgeRag");
   const whatsappImports = ["createWhatsAppChannel"];
   if (productivity) whatsappImports.push("createTemplateRegistry");
 
@@ -125,7 +128,9 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push(`import { ${[...harnessImports].sort().join(", ")} } from "@wappy_ai/harness";`);
   lines.push(`import { ${[...whatsappImports].sort().join(", ")} } from "@wappy_ai/whatsapp";`);
   if (productivity) {
+    lines.push('import { createClient } from "@libsql/client";');
     lines.push('import { createTaskStore, createTaskRunner, createTaskUiServer, DEFAULT_ACTIONS, SCHEDULED_MESSAGE_TEMPLATE } from "@wappy_ai/productivity";');
+    lines.push('import { createGoogleActions, createGoogleOAuthPlugin, createGoogleTokenStore } from "@wappy_ai/connector-google";');
   }
   lines.push(model.importLine);
   lines.push("");
@@ -138,6 +143,12 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("");
 
   if (productivity) {
+    lines.push("// Real synced Google content (see below) is ingested here so a plain-text follow-up like");
+    lines.push('// "what\'s my next meeting" gets a grounded answer via this existing RAG pipeline instead of');
+    lines.push("// nothing to go on — knowledge has no per-contact scoping (a deliberate v0.1 scope limit:");
+    lines.push("// this project connects ONE Google account, not one per contact, so there's nothing to leak).");
+    lines.push('const knowledge = createKnowledge({ client: createClient({ url: process.env.KNOWLEDGE_DB_URL ?? "file:.wappy/knowledge.db" }) });');
+    lines.push("");
     lines.push("// A scheduled/proactive message (a reminder, a wake-up, a digest) needs a Meta-approved");
     lines.push("// Message Template to deliver outside a 24h session window the CONTACT opened — a real");
     lines.push("// WhatsApp rule, found by hand-testing this, not a choice. See WHATSAPP_SETUP.md's");
@@ -174,6 +185,7 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("  channel, memory, router, model, tracer,");
   lines.push("  clock: systemClock,");
   lines.push("  sessionProfileStore,");
+  if (productivity) lines.push("  retrieveRag: createKnowledgeRag({ knowledge }),");
   lines.push("});");
   lines.push("");
 
@@ -181,14 +193,27 @@ function renderIndexTs(opts: RenderProjectOptions): string {
     lines.push("// Productivity agent: a local task store, the scheduler engine (retries + honest failure");
     lines.push("// notices built in), and a local task-management page — `wappy dev` boots taskUiServer");
     lines.push("// and starts taskRunner alongside the webhook server. reminder/wake_me_up work for real");
-    lines.push("// today; the Google-backed templates reply honestly that they're not connected yet until");
-    lines.push("// a real Google connector is wired in here (see @wappy_ai/productivity's own docs).");
+    lines.push("// today, no Google needed. The other 3 templates work for real too, once you tap");
+    lines.push('// "Connect Google" on the task list page — see GOOGLE_SETUP.md for the one-time setup.');
     lines.push('const taskStore = createTaskStore({ url: process.env.TASKS_DB_URL ?? "file:.wappy/tasks.db" });');
+    lines.push("");
+    lines.push("// Bring-your-own Google OAuth client (GOOGLE_SETUP.md) — inert until GOOGLE_CLIENT_ID/SECRET");
+    lines.push("// are filled in and the task list's \"Connect Google\" button is actually tapped.");
+    lines.push("const googleConfig = {");
+    lines.push('  clientId: process.env.GOOGLE_CLIENT_ID ?? "",');
+    lines.push('  clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",');
+    lines.push('  redirectUri: process.env.GOOGLE_REDIRECT_URI ?? "http://localhost:3001/google/callback",');
+    lines.push("};");
+    lines.push('const googleTokenStore = createGoogleTokenStore({ url: process.env.GOOGLE_TOKENS_DB_URL ?? "file:.wappy/google-tokens.db" });');
+    lines.push("const googlePlugin = createGoogleOAuthPlugin({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock });");
+    lines.push("const googleActions = createGoogleActions({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock, knowledge });");
+    lines.push("");
     lines.push("export const taskRunner = createTaskRunner({");
-    lines.push("  store: taskStore, channel, clock: systemClock, actions: DEFAULT_ACTIONS,");
+    lines.push("  store: taskStore, channel, clock: systemClock,");
+    lines.push("  actions: { ...DEFAULT_ACTIONS, ...googleActions },");
     lines.push("  memory, sessionProfileStore, model,");
     lines.push("});");
-    lines.push("export const taskUiServer = createTaskUiServer({ store: taskStore, clock: systemClock });");
+    lines.push("export const taskUiServer = createTaskUiServer({ store: taskStore, clock: systemClock, oauthConnect: googlePlugin });");
     lines.push("");
   }
 
@@ -210,6 +235,14 @@ const TASKS_DB_ENV: EnvVarSpec = {
   description: "LibSQL URL for the productivity agent's task store. Default: a local file at .wappy/tasks.db (nothing to set).",
 };
 
+/** Both optional/blank — a project works fully without them (the 3 Google-backed templates stay
+ * honest stubs, per @wappy_ai/productivity's own default). See GOOGLE_SETUP.md for how to get real
+ * values. */
+const GOOGLE_ENV: EnvVarSpec[] = [
+  { name: "GOOGLE_CLIENT_ID", required: false, group: "Google", description: "Your own Google Cloud OAuth Client ID — see GOOGLE_SETUP.md." },
+  { name: "GOOGLE_CLIENT_SECRET", required: false, group: "Google", description: "Your own Google Cloud OAuth Client secret — see GOOGLE_SETUP.md." },
+];
+
 /** Every env var the generated project needs, in `.env.sample` order. Exposed for the ledger-driven
  * orchestrator (`generate.ts`), which declares the `.env.sample` step's `SetupManifest.envKeys`
  * from it — one source of truth rather than re-deriving it. */
@@ -218,7 +251,10 @@ export function collectEnvVars(opts: RenderProjectOptions): EnvVarSpec[] {
   const vars: EnvVarSpec[] = [...modelSetup(answers.model.provider).envVars, ...WHATSAPP_ENV];
   vars.push(MEMORY_ENV);
   vars.push(SESSION_PROFILE_ENV);
-  if (answers.productivity.enabled) vars.push(TASKS_DB_ENV);
+  if (answers.productivity.enabled) {
+    vars.push(TASKS_DB_ENV);
+    vars.push(...GOOGLE_ENV);
+  }
   return vars;
 }
 
@@ -269,7 +305,11 @@ function renderPackageJson(opts: RenderProjectOptions): string {
   };
   const modelDep = THIRD_PARTY_VERSIONS[answers.model.provider];
   deps[modelDep.pkg] = modelDep.range;
-  if (answers.productivity.enabled) deps["@wappy_ai/productivity"] = versions.productivity;
+  if (answers.productivity.enabled) {
+    deps["@wappy_ai/productivity"] = versions.productivity;
+    deps["@wappy_ai/connector-google"] = versions.connectorGoogle;
+    deps["@libsql/client"] = "0.18.0"; // for createKnowledge({client}) — the one place a generated project builds a raw Client itself
+  }
   const pkg = {
     name: projectName ?? "wappy-bot",
     version: "0.1.0",
@@ -380,6 +420,56 @@ function renderWhatsAppSetup(opts: RenderProjectOptions): string {
   return lines.join("\n");
 }
 
+/** Generated only when the productivity-agent interview step is "yes". Bring-your-own Google OAuth
+ * client — same unavoidable-one-time-setup category as WHATSAPP_SETUP.md, mirroring its format.
+ * Unlike WhatsApp, actually CONNECTING is a click on the task list page, not a step in this file —
+ * see that page's own "Connect Google" card. */
+function renderGoogleSetup(): string {
+  const lines: string[] = [];
+  lines.push("# Connecting Google (Calendar + Gmail digests)");
+  lines.push("");
+  lines.push("Your reminders and wake-ups already work with no Google account at all. This file is only for");
+  lines.push("the other 3 templates (meeting digests, email summaries, email search) — real read access to");
+  lines.push("your own Calendar and Gmail, full read (not write), never a shared Wappy-operated account.");
+  lines.push("");
+  lines.push("## 1. Create your own Google Cloud OAuth client");
+  lines.push("");
+  lines.push("This can't be skipped or automated — Google requires every app to be registered under");
+  lines.push("someone's own Cloud project, same category of one-time setup as WHATSAPP_SETUP.md.");
+  lines.push("");
+  lines.push("1. Go to https://console.cloud.google.com and create a project (or use an existing one).");
+  lines.push("2. Go to APIs & Services → Library, enable **Google Calendar API** and **Gmail API**.");
+  lines.push("3. Go to APIs & Services → OAuth consent screen. Choose **External**, fill in the required");
+  lines.push("   fields, and leave Publishing status as **Testing** — this is a personal tool, not a");
+  lines.push("   public app, so Google's full app-review process doesn't apply (Testing mode supports up");
+  lines.push("   to 100 users, which is every user this project has).");
+  lines.push("4. Go to APIs & Services → Credentials → Create Credentials → OAuth client ID.");
+  lines.push("5. Application type: **Web application**.");
+  lines.push("6. Under Authorized redirect URIs, add exactly: `http://localhost:3001/google/callback`");
+  lines.push("   (this must match `index.ts`'s `GOOGLE_REDIRECT_URI` default exactly — only change both");
+  lines.push("   together if you've customized `TASK_UI_PORT`).");
+  lines.push("7. Copy the **Client ID** and **Client secret** into `.env` as `GOOGLE_CLIENT_ID` and");
+  lines.push("   `GOOGLE_CLIENT_SECRET`.");
+  lines.push("");
+  lines.push("## 2. Connect — one click, on the task list page");
+  lines.push("");
+  lines.push("Restart `npm run dev` after filling in `.env`. Open the task list URL it prints — you'll see");
+  lines.push("a **Connect Google** card. Tap it, sign in with your own Google account, approve the real");
+  lines.push("consent screen (it will look unverified, since this is your own personal app in Testing");
+  lines.push("mode — that's expected, not an error). You'll land back on the task list showing");
+  lines.push("**✓ Google connected**.");
+  lines.push("");
+  lines.push("No CLI command, no second install — that's the whole flow.");
+  lines.push("");
+  lines.push("## 3. Test it");
+  lines.push("");
+  lines.push('Create a "Send tomorrow\'s meetings" task from the task list, trigger it (or wait for its');
+  lines.push("scheduled time) — you should get a real digest of your own calendar, not the earlier");
+  lines.push('"not connected yet" stub reply.');
+  lines.push("");
+  return lines.join("\n");
+}
+
 function renderReadme(opts: RenderProjectOptions): string {
   const { answers } = opts;
   const vars = collectEnvVars(opts);
@@ -408,7 +498,7 @@ function renderReadme(opts: RenderProjectOptions): string {
   lines.push(`- **Model:** ${answers.model.provider}`);
   lines.push("- **Memory:** local SQLite file (`.wappy/memory.db`), plus a session profile (`.wappy/session-profile.db`) — facts and where the conversation currently stands, TTL-bound");
   if (answers.productivity.enabled) {
-    lines.push("- **Productivity agent:** on — scheduled reminders and wake-ups work today with no extra setup; meeting/email digests reply honestly that they're not connected until you wire in a real Google connector. Tasks live in `.wappy/tasks.db`.");
+    lines.push("- **Productivity agent:** on — scheduled reminders and wake-ups work today with no extra setup; meeting/email digests reply honestly that they're not connected until you connect Google (see [`GOOGLE_SETUP.md`](./GOOGLE_SETUP.md), then tap \"Connect Google\" on the task list page). Tasks live in `.wappy/tasks.db`.");
   }
   lines.push("");
   lines.push("No tools/connectors are wired by default — see `index.ts`'s comment above `createAgent` for how to add one.");
@@ -435,7 +525,7 @@ function renderReadme(opts: RenderProjectOptions): string {
  */
 export function renderProject(opts: RenderProjectOptions): GeneratedFile[] {
   assertComplete(opts.answers);
-  return [
+  const files: GeneratedFile[] = [
     { path: "index.ts", content: renderIndexTs(opts) },
     { path: ".env.sample", content: renderEnvSample(opts) },
     { path: ".gitignore", content: renderGitignore() },
@@ -443,4 +533,6 @@ export function renderProject(opts: RenderProjectOptions): GeneratedFile[] {
     { path: "README.md", content: renderReadme(opts) },
     { path: "WHATSAPP_SETUP.md", content: renderWhatsAppSetup(opts) },
   ];
+  if (opts.answers.productivity.enabled) files.push({ path: "GOOGLE_SETUP.md", content: renderGoogleSetup() });
+  return files;
 }
