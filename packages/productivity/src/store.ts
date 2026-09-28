@@ -67,6 +67,9 @@ function rowToTask(row: Record<string, unknown>): Task {
 export interface TaskStore {
   create(input: NewTask, now: number): Promise<Task>;
   listByContact(contactId: string): Promise<Task[]>;
+  /** Every task, across all contacts, regardless of status — Phase 4's local admin UI page (a
+   * single-operator tool, not a per-contact login flow) shows everyone's tasks on one page. */
+  listAll(): Promise<Task[]>;
   /** Every `status: 'on'` task, across all contacts — what the runner (Phase 2) scans each tick. */
   listActive(): Promise<Task[]>;
   update(id: string, patch: TaskPatch, now: number): Promise<void>;
@@ -108,6 +111,12 @@ export function createTaskStore(opts: TaskStoreOptions): TaskStore {
     async listByContact(contactId) {
       await ensureSchema();
       const result = await client.execute({ sql: "SELECT * FROM tasks WHERE contactId = ? ORDER BY createdAt ASC", args: [contactId] });
+      return result.rows.map((r) => rowToTask(r as unknown as Record<string, unknown>));
+    },
+
+    async listAll() {
+      await ensureSchema();
+      const result = await client.execute({ sql: "SELECT * FROM tasks ORDER BY createdAt ASC" });
       return result.rows.map((r) => rowToTask(r as unknown as Record<string, unknown>));
     },
 

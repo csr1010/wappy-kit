@@ -74,6 +74,14 @@ describe("createTaskStore", () => {
     expect(active).toHaveLength(1);
     expect(active[0]!.contactId).toBe("+2222");
   });
+
+  test("listAll returns every task across every contact, regardless of status", async () => {
+    const store = freshStore();
+    const a = await store.create(newReminder({ contactId: "+1111" }), 1000);
+    await store.create(newReminder({ contactId: "+2222" }), 1000);
+    await store.setStatus(a.id, "off", 1500);
+    expect(await store.listAll()).toHaveLength(2);
+  });
 });
 
 describe("TASK_TEMPLATES", () => {
