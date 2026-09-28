@@ -6,7 +6,8 @@ const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1
 
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
   const model = overrides.model ?? DEFAULT_ANSWERS.model;
-  return { model };
+  const productivity = overrides.productivity ?? DEFAULT_ANSWERS.productivity;
+  return { model, productivity };
 }
 
 function fileMap(files: { path: string; content: string }[]): Map<string, string> {

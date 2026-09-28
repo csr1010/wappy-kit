@@ -16,11 +16,16 @@ import { DEFAULT_ANSWERS, renderProject, type RenderProjectOptions } from "@wapp
  * `@wappy_ai/X`'s own BUILT dist actually exports. Needs a prior `pnpm build`. (M12 removed the
  * `skills/*.ts` files this used to also scan; the "tools" step/`tools/*.ts` files this used to also
  * scan were removed entirely afterward — `@wappy_ai/tools-openapi` no longer ships from this repo.)
+ *
+ * A "productivity" interview step was added later (@wappy_ai/productivity): `VERSIONS`/`PACKAGE_DIR`
+ * updated to include it, and the combo matrix now covers productivity true/false, not just model
+ * providers — otherwise this test would silently stop checking the newest import surface it exists
+ * to catch bugs in (`--allow-test-change`, SPEC.md decisions log).
  */
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0" };
-const PACKAGE_DIR: Record<string, string> = { "@wappy_ai/core": "core", "@wappy_ai/harness": "harness", "@wappy_ai/whatsapp": "whatsapp" };
+const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", productivity: "0.1.0", createWappy: "0.1.0" };
+const PACKAGE_DIR: Record<string, string> = { "@wappy_ai/core": "core", "@wappy_ai/harness": "harness", "@wappy_ai/whatsapp": "whatsapp", "@wappy_ai/productivity": "productivity" };
 
 const IMPORT_RE = /^import\s+(?:type\s+)?\{([^}]+)\}\s+from\s+"(@wappy_ai\/[a-z-]+)";?$/gm;
 
@@ -41,9 +46,10 @@ function importedNames(content: string): { pkg: string; names: string[] }[] {
 }
 
 const combos: { label: string; answers: RenderProjectOptions["answers"] }[] = [
-  { label: "openai (default)", answers: { model: DEFAULT_ANSWERS.model } },
-  { label: "anthropic", answers: { model: { provider: "anthropic" } } },
-  { label: "ollama", answers: { model: { provider: "ollama" } } },
+  { label: "openai (default), productivity off", answers: { model: DEFAULT_ANSWERS.model, productivity: { enabled: false } } },
+  { label: "anthropic, productivity off", answers: { model: { provider: "anthropic" }, productivity: { enabled: false } } },
+  { label: "ollama, productivity off", answers: { model: { provider: "ollama" }, productivity: { enabled: false } } },
+  { label: "openai, productivity ON", answers: { model: DEFAULT_ANSWERS.model, productivity: { enabled: true } } },
 ];
 
 describe.each(combos)("generated project imports are real, for combo: $label", ({ answers }) => {

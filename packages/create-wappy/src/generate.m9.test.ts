@@ -11,7 +11,8 @@ const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", createWap
 // the Shopify-path branch it used to have (`--allow-test-change`, SPEC.md decisions log).
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
   const model = overrides.model ?? DEFAULT_ANSWERS.model;
-  return { model };
+  const productivity = overrides.productivity ?? DEFAULT_ANSWERS.productivity;
+  return { model, productivity };
 }
 
 const dirs: string[] = [];

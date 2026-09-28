@@ -23,12 +23,10 @@ async function selectOne<T extends string>(message: string, choices: { value: st
 }
 
 /**
- * Runs the interactive interview (just the `model` step, since the "tools" step was removed
- * entirely — domain connectors are out of scope for this repo now) and returns a complete, valid
- * `InterviewAnswers`. No "re-prompt on an invalid answer" loop here: with `model` the only step,
- * `applyAnswer` can never reject what `selectOne` returns (it's always one of the choices clack was
- * given), so that branch would be dead code, not real defensiveness — it existed when a second step
- * (the removed "tools" one) could genuinely produce an invalid combination.
+ * Runs the interactive interview (`model` then `productivity`) and returns a complete, valid
+ * `InterviewAnswers`. No "re-prompt on an invalid answer" loop here: `applyAnswer` can never reject
+ * what `selectOne` returns (it's always one of the choices clack was given), so that branch would be
+ * dead code, not real defensiveness.
  */
 export async function runInteractiveInterview(): Promise<CompleteInterviewAnswers> {
   clack.intro("Wappy agent setup — let's set up your WhatsApp agent");
@@ -41,6 +39,9 @@ export async function runInteractiveInterview(): Promise<CompleteInterviewAnswer
     switch (q.step) {
       case "model":
         value = { provider: await selectOne<ModelProvider>(q.prompt, q.choices!) };
+        break;
+      case "productivity":
+        value = { enabled: (await selectOne<"yes" | "no">(q.prompt, q.choices!)) === "yes" };
         break;
     }
 

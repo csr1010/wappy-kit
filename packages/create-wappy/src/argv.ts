@@ -13,12 +13,13 @@ export interface ParsedArgv extends NonInteractiveFlags {
 
 const FLAG_KEYS: Record<string, keyof ParsedArgv> = {
   "--model": "model",
+  "--productivity": "productivity",
   "--dir": "dir",
 };
 
 /** The set of flags `hasAnyStepFlag` (cli.ts) checks to decide interactive vs. non-interactive —
  * deliberately excludes `--dir` (a target-directory choice, not an interview answer). */
-export const STEP_FLAG_KEYS: (keyof ParsedArgv)[] = ["model"];
+export const STEP_FLAG_KEYS: (keyof ParsedArgv)[] = ["model", "productivity"];
 
 export class ArgvError extends Error {}
 

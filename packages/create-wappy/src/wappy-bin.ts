@@ -9,10 +9,12 @@ import { runDev } from "./dev.js";
  * (T9.7) exists so far — the others print a clear "not yet" rather than silently doing nothing.
  */
 
-const HELP_TEXT = `wappy — run a generated Wappy Kit project
+const HELP_TEXT = `wappy — run a generated Wappy project
 
 Usage:
   wappy dev              boot the webhook server (+ tunnel) for this project
+                          (and, if this project has a productivity agent, the
+                          local task list + scheduler too)
 
 Not yet implemented: wappy status / wappy reset / wappy doctor.
 `;

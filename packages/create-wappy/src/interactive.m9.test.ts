@@ -9,10 +9,11 @@ import { describe, expect, test, vi } from "vitest";
  *
  * The interview's "tools" step (M9, Shopify) was removed entirely (domain connectors are out of
  * scope for this open-source repo now) — this file was rewritten accordingly (`--allow-test-change`,
- * SPEC.md decisions log). With only the `model` step left, there's no longer a natural "the state
- * machine rejects this answer, re-prompt" scenario to exercise here (clack's own `select()` can only
- * ever return one of the choices it was given) — that invalid-combo coverage lives in
- * `interview.m9.test.ts`'s own `applyAnswer` tests instead.
+ * SPEC.md decisions log). A "productivity" step was added back later — updated again to script both
+ * `select()` calls, same reasoning. There's still no natural "the state machine rejects this answer,
+ * re-prompt" scenario to exercise here (clack's own `select()` can only ever return one of the
+ * choices it was given) — that invalid-combo coverage lives in `interview.m9.test.ts`'s own
+ * `applyAnswer` tests instead.
  */
 
 const CANCEL = Symbol("cancel");
@@ -44,14 +45,14 @@ function reset() {
 }
 
 describe("runInteractiveInterview — sequencing + answer mapping (clack mocked)", () => {
-  test("asks only for the model, then finishes — no credential, no tools/store question", async () => {
+  test("asks model then productivity, then finishes — no credential question", async () => {
     reset();
-    state.select = ["anthropic"];
+    state.select = ["anthropic", "yes"];
 
     const { runInteractiveInterview } = await importFresh();
     const answers = await runInteractiveInterview();
 
-    expect(answers).toEqual({ model: { provider: "anthropic" } });
+    expect(answers).toEqual({ model: { provider: "anthropic" }, productivity: { enabled: true } });
     expect(state.select).toHaveLength(0);
   });
 });

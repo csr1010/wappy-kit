@@ -29,6 +29,7 @@ Usage:
 
 Flags:
   --model <openai|anthropic|gemini|ollama>
+  --productivity <yes|no>              scheduled reminders/wake-ups + Google digests once connected
   --dir <path>                        target directory (default: current directory)
   --yes, -y                           accept defaults for any omitted step
   --help, -h                          show this help

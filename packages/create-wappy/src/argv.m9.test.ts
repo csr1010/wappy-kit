@@ -45,7 +45,9 @@ describe("parseArgv", () => {
     expect(() => parseArgv(["--model", "--dir"])).toThrow(ArgvError);
   });
 
-  test("STEP_FLAG_KEYS lists exactly the 1 interview-step flag, excluding --dir/--yes/--help", () => {
-    expect([...STEP_FLAG_KEYS]).toEqual(["model"]);
+  // productivity (--productivity, @wappy_ai/productivity) added as a second interview-step flag
+  // later — updated to match, excluding --dir/--yes/--help (`--allow-test-change`, SPEC.md decisions log).
+  test("STEP_FLAG_KEYS lists exactly the 2 interview-step flags, excluding --dir/--yes/--help", () => {
+    expect([...STEP_FLAG_KEYS]).toEqual(["model", "productivity"]);
   });
 });

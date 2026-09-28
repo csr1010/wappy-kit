@@ -6,16 +6,19 @@
  * `applyAnswer()`; non-interactive mode drives the exact same functions from flags instead.
  *
  * v0.1 asks only what genuinely changes the generated code, and never asks for a credential
- * (secrets go in `.env`, filled in from the generated `.env.sample`): just the model provider.
+ * (secrets go in `.env`, filled in from the generated `.env.sample`): the model provider, and
+ * (added back deliberately, see `ProductivityAnswer`) whether to wire in `@wappy_ai/productivity`.
  *
  * A "tools" step used to sit here (M9), offering a hand-written Shopify connector bundled inside
  * `@wappy_ai/tools-openapi`. Removed entirely (see docs/SPEC.md's decisions log): domain connectors
  * (Shopify and anything else) are out of scope for this open-source repo — they live in a separate
  * connectors repo/npm scope now, built on Composio rather than hand-mapped APIs, and are wired into
  * an agent by hand (`AgentDeps.tools`/`invokeTools`), not through this interview. wappy-kit's own
- * publishable surface is purely the agent OS: core, harness, whatsapp, create-agent — nothing
- * tool/connector-specific. A "skills" step (M8/M9, removed in M12) preceded this one; see M12's own
- * history for that removal.
+ * publishable surface is purely the agent OS: core, harness, whatsapp, create-agent, productivity —
+ * nothing domain/vendor-specific. A "skills" step (M8/M9, removed in M12) preceded this one; see
+ * M12's own history for that removal. Unlike tools/skills, `productivity` is NOT domain-specific
+ * (it doesn't know what Google or any vendor is — see `@wappy_ai/productivity`'s own docs), so this
+ * doesn't reopen that boundary.
  *
  * Memory (local SQLite/LibSQL), the router (LLM) and the agent framework (Vercel AI SDK) are fixed
  * in v0.1: the alternatives aren't implemented, and an option that can't be generated shouldn't be
@@ -31,11 +34,20 @@ export interface ModelAnswer {
   provider: ModelProvider;
 }
 
-export interface InterviewAnswers {
-  model?: ModelAnswer;
+/** M-productivity: whether to wire in `@wappy_ai/productivity` (scheduled reminders/wake-ups now,
+ * Google Calendar/Gmail digests once connected — see ARCHITECTURE.md). A deliberate, direct
+ * reversal of the earlier "model-only" simplification: that removal was because there was nothing
+ * real behind a second step at the time; there is now. */
+export interface ProductivityAnswer {
+  enabled: boolean;
 }
 
-export const INTERVIEW_STEP_ORDER = ["model"] as const;
+export interface InterviewAnswers {
+  model?: ModelAnswer;
+  productivity?: ProductivityAnswer;
+}
+
+export const INTERVIEW_STEP_ORDER = ["model", "productivity"] as const;
 export type InterviewStepId = (typeof INTERVIEW_STEP_ORDER)[number];
 
 export interface InterviewQuestionMeta {
@@ -53,6 +65,14 @@ const QUESTIONS: Record<InterviewStepId, InterviewQuestionMeta> = {
       { value: "anthropic", label: "Anthropic" },
       { value: "gemini", label: "Gemini" },
       { value: "ollama", label: "Local Ollama" },
+    ],
+  },
+  productivity: {
+    step: "productivity",
+    prompt: "Add a productivity agent (scheduled reminders, wake-ups, and — once you connect Google — meeting/email digests)?",
+    choices: [
+      { value: "no", label: "No" },
+      { value: "yes", label: "Yes" },
     ],
   },
 };
@@ -84,6 +104,7 @@ export function isComplete(answers: InterviewAnswers): boolean {
 /** What the generators (T9.3) require. */
 export interface CompleteInterviewAnswers {
   model: ModelAnswer;
+  productivity: ProductivityAnswer;
 }
 
 /** Narrows `answers` to `CompleteInterviewAnswers`, throwing a clear error if any applicable step
@@ -98,6 +119,8 @@ function validateAnswer(step: InterviewStepId, value: InterviewAnswers[Interview
   switch (step) {
     case "model":
       return value && "provider" in (value as ModelAnswer) ? [] : ["model: a provider is required."];
+    case "productivity":
+      return value && "enabled" in (value as ProductivityAnswer) ? [] : ["productivity: an enabled flag is required."];
   }
 }
 
@@ -137,6 +160,7 @@ export function goBack(answers: InterviewAnswers, fromStep: InterviewStepId): In
  * mode and a CLI's "press Enter to skip" reuse the same values instead of each hardcoding their own. */
 export const DEFAULT_ANSWERS: { [S in InterviewStepId]: NonNullable<InterviewAnswers[S]> } = {
   model: { provider: "openai" },
+  productivity: { enabled: false },
 };
 
 /** Applies `step`'s default answer (see `DEFAULT_ANSWERS`) — the pure implementation of "skip". */

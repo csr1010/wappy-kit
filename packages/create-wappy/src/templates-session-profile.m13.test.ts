@@ -5,7 +5,7 @@ import { renderProject, type PartVersions } from "./templates.js";
 const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", createWappy: "0.1.0" };
 
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
-  return { model: overrides.model ?? DEFAULT_ANSWERS.model };
+  return { model: overrides.model ?? DEFAULT_ANSWERS.model, productivity: overrides.productivity ?? DEFAULT_ANSWERS.productivity };
 }
 
 function fileMap(files: { path: string; content: string }[]): Map<string, string> {

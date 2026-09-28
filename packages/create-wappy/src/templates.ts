@@ -40,6 +40,10 @@ export interface PartVersions {
   core: string;
   harness: string;
   whatsapp: string;
+  /** Only actually depended on when the productivity-agent interview step is answered "yes" — see
+   * `renderPackageJson`. Always resolved regardless, same as every other part, so there's one code
+   * path for reading real installed versions, not a productivity-specific branch in `versions.ts`. */
+  productivity: string;
   /** `@wappy_ai/create-agent`'s own version — needed as a generated project's OWN dependency (not just
    * a scaffolding tool) so `npm run dev`/`status`/`doctor` can resolve the `wappy` bin it provides. */
   createWappy: string;
@@ -109,14 +113,20 @@ const SESSION_PROFILE_ENV: EnvVarSpec = {
 function renderIndexTs(opts: RenderProjectOptions): string {
   const { answers } = opts;
   const model = modelSetup(answers.model.provider);
+  const productivity = answers.productivity.enabled;
 
   const harnessImports = ["createAgent", "createVercelModel", "createLibsqlMemory", "createLibsqlSessionProfileStore", "createLlmRouter"];
+  const whatsappImports = ["createWhatsAppChannel"];
+  if (productivity) whatsappImports.push("createTemplateRegistry");
 
   const lines: string[] = [];
   lines.push('import "dotenv/config";');
   lines.push('import { createInMemoryTracer, systemClock } from "@wappy_ai/core";');
   lines.push(`import { ${[...harnessImports].sort().join(", ")} } from "@wappy_ai/harness";`);
-  lines.push('import { createWhatsAppChannel } from "@wappy_ai/whatsapp";');
+  lines.push(`import { ${[...whatsappImports].sort().join(", ")} } from "@wappy_ai/whatsapp";`);
+  if (productivity) {
+    lines.push('import { createTaskStore, createTaskRunner, createTaskUiServer, DEFAULT_ACTIONS, SCHEDULED_MESSAGE_TEMPLATE } from "@wappy_ai/productivity";');
+  }
   lines.push(model.importLine);
   lines.push("");
 
@@ -127,6 +137,21 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("const tracer = createInMemoryTracer();");
   lines.push("");
 
+  if (productivity) {
+    lines.push("// A scheduled/proactive message (a reminder, a wake-up, a digest) needs a Meta-approved");
+    lines.push("// Message Template to deliver outside a 24h session window the CONTACT opened — a real");
+    lines.push("// WhatsApp rule, found by hand-testing this, not a choice. See WHATSAPP_SETUP.md's");
+    lines.push('// "Scheduled messages" section for how to get SCHEDULED_MESSAGE_TEMPLATE approved.');
+    lines.push("const templateRegistry = createTemplateRegistry();");
+    lines.push("templateRegistry.register({");
+    lines.push("  name: SCHEDULED_MESSAGE_TEMPLATE.name,");
+    lines.push("  language: SCHEDULED_MESSAGE_TEMPLATE.language,");
+    lines.push("  category: SCHEDULED_MESSAGE_TEMPLATE.category,");
+    lines.push("  variables: [SCHEDULED_MESSAGE_TEMPLATE.bodyVariableName],");
+    lines.push("});");
+    lines.push("");
+  }
+
   // Exported (not just used locally): `wappy dev` (T9.7) needs channel.receive() to turn a raw
   // webhook into InboundMessages before it can call agent.handle() on each one — the Agent itself
   // only exposes handle(), not receive(), since receiving isn't an agent concern.
@@ -134,6 +159,11 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("  phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,");
   lines.push("  accessToken: process.env.WHATSAPP_ACCESS_TOKEN!,");
   lines.push("  clock: systemClock,");
+  if (productivity) {
+    lines.push("  templateRegistry,");
+    lines.push("  defaultTemplateName: SCHEDULED_MESSAGE_TEMPLATE.name,");
+    lines.push('  templateVariables: (message) => ({ [SCHEDULED_MESSAGE_TEMPLATE.bodyVariableName]: message.text ?? "" }),');
+  }
   lines.push("});");
   lines.push("");
 
@@ -147,6 +177,21 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("});");
   lines.push("");
 
+  if (productivity) {
+    lines.push("// Productivity agent: a local task store, the scheduler engine (retries + honest failure");
+    lines.push("// notices built in), and a local task-management page — `wappy dev` boots taskUiServer");
+    lines.push("// and starts taskRunner alongside the webhook server. reminder/wake_me_up work for real");
+    lines.push("// today; the Google-backed templates reply honestly that they're not connected yet until");
+    lines.push("// a real Google connector is wired in here (see @wappy_ai/productivity's own docs).");
+    lines.push('const taskStore = createTaskStore({ url: process.env.TASKS_DB_URL ?? "file:.wappy/tasks.db" });');
+    lines.push("export const taskRunner = createTaskRunner({");
+    lines.push("  store: taskStore, channel, clock: systemClock, actions: DEFAULT_ACTIONS,");
+    lines.push("  memory, sessionProfileStore, model,");
+    lines.push("});");
+    lines.push("export const taskUiServer = createTaskUiServer({ store: taskStore, clock: systemClock });");
+    lines.push("");
+  }
+
   return lines.join("\n");
 }
 
@@ -158,6 +203,13 @@ const WHATSAPP_ENV: EnvVarSpec[] = [
   { name: "WHATSAPP_APP_SECRET", required: true, group: "WhatsApp", description: "Meta developer app > App settings > Basic > App secret. Used to verify webhook signatures, so forged requests are rejected." },
 ];
 
+const TASKS_DB_ENV: EnvVarSpec = {
+  name: "TASKS_DB_URL",
+  required: false,
+  group: "Productivity",
+  description: "LibSQL URL for the productivity agent's task store. Default: a local file at .wappy/tasks.db (nothing to set).",
+};
+
 /** Every env var the generated project needs, in `.env.sample` order. Exposed for the ledger-driven
  * orchestrator (`generate.ts`), which declares the `.env.sample` step's `SetupManifest.envKeys`
  * from it — one source of truth rather than re-deriving it. */
@@ -166,6 +218,7 @@ export function collectEnvVars(opts: RenderProjectOptions): EnvVarSpec[] {
   const vars: EnvVarSpec[] = [...modelSetup(answers.model.provider).envVars, ...WHATSAPP_ENV];
   vars.push(MEMORY_ENV);
   vars.push(SESSION_PROFILE_ENV);
+  if (answers.productivity.enabled) vars.push(TASKS_DB_ENV);
   return vars;
 }
 
@@ -216,6 +269,7 @@ function renderPackageJson(opts: RenderProjectOptions): string {
   };
   const modelDep = THIRD_PARTY_VERSIONS[answers.model.provider];
   deps[modelDep.pkg] = modelDep.range;
+  if (answers.productivity.enabled) deps["@wappy_ai/productivity"] = versions.productivity;
   const pkg = {
     name: projectName ?? "wappy-bot",
     version: "0.1.0",
@@ -237,7 +291,7 @@ function renderPackageJson(opts: RenderProjectOptions): string {
  * of README.md on purpose — the README is meant to be skimmed, this is meant to be followed step by
  * step, and the two don't read well interleaved. `runCli` (cli.ts) points here right after
  * generation finishes, and `wappy dev`'s own missing-token message does too. */
-function renderWhatsAppSetup(): string {
+function renderWhatsAppSetup(opts: RenderProjectOptions): string {
   const lines: string[] = [];
   lines.push("# Connecting WhatsApp");
   lines.push("");
@@ -301,6 +355,28 @@ function renderWhatsAppSetup(): string {
   lines.push("A new tunnel URL from the built-in tunnel changes every time you restart `npm run dev` — if");
   lines.push("you stop and restart it, you'll need to paste the new URL back into Meta's webhook config.");
   lines.push("");
+
+  if (opts.answers.productivity.enabled) {
+    lines.push("## 5. Scheduled messages (needed for the productivity agent)");
+    lines.push("");
+    lines.push("A reminder, wake-up, or digest is a message YOUR agent starts, not a reply to something the");
+    lines.push("contact sent — WhatsApp calls this \"proactive,\" and it has a real rule attached: Meta only");
+    lines.push("lets you send one as plain text within 24 hours of the contact's own last message. Outside");
+    lines.push("that window, you need a pre-approved **Message Template** instead, or the send silently");
+    lines.push("queues and never arrives. This project already generates the template definition and the code");
+    lines.push("that registers it (`index.ts`'s `templateRegistry`) — you just need Meta to approve it once.");
+    lines.push("");
+    lines.push("1. In the Meta app, go to WhatsApp → Message Templates (or Business Manager → Account");
+    lines.push("   tools → Message Templates) and create a new template.");
+    lines.push("2. Name it exactly `wappy_scheduled_update`, category **Utility**, language **English (US)**.");
+    lines.push("3. Body text, exactly: `📋 Update from your Wappy agent:\\n\\n{{1}}`");
+    lines.push("4. Submit it. Approval is usually quick but isn't instant — anywhere from a few minutes to a");
+    lines.push("   few days. Reminders/wake-ups still work immediately within an open 24h window; the");
+    lines.push("   template only matters for messages sent outside one.");
+    lines.push("5. Once approved, nothing else to do — `index.ts` already points at this exact template name.");
+    lines.push("");
+  }
+
   return lines.join("\n");
 }
 
@@ -331,11 +407,19 @@ function renderReadme(opts: RenderProjectOptions): string {
   lines.push("");
   lines.push(`- **Model:** ${answers.model.provider}`);
   lines.push("- **Memory:** local SQLite file (`.wappy/memory.db`), plus a session profile (`.wappy/session-profile.db`) — facts and where the conversation currently stands, TTL-bound");
+  if (answers.productivity.enabled) {
+    lines.push("- **Productivity agent:** on — scheduled reminders and wake-ups work today with no extra setup; meeting/email digests reply honestly that they're not connected until you wire in a real Google connector. Tasks live in `.wappy/tasks.db`.");
+  }
   lines.push("");
   lines.push("No tools/connectors are wired by default — see `index.ts`'s comment above `createAgent` for how to add one.");
   lines.push("");
   lines.push("Once WHATSAPP_SETUP.md's steps are done, `npm run dev` (this project's `wappy dev`) starts the");
-  lines.push("webhook server. Run `wappy status` any time to see what's done vs. pending, and `wappy doctor` to");
+  lines.push(
+    answers.productivity.enabled
+      ? "webhook server and the local task-management page (its URL prints alongside the webhook URL)."
+      : "webhook server.",
+  );
+  lines.push("Run `wappy status` any time to see what's done vs. pending, and `wappy doctor` to");
   lines.push("validate your env + connectivity.");
   lines.push("");
   return lines.join("\n");
@@ -357,6 +441,6 @@ export function renderProject(opts: RenderProjectOptions): GeneratedFile[] {
     { path: ".gitignore", content: renderGitignore() },
     { path: "package.json", content: renderPackageJson(opts) },
     { path: "README.md", content: renderReadme(opts) },
-    { path: "WHATSAPP_SETUP.md", content: renderWhatsAppSetup() },
+    { path: "WHATSAPP_SETUP.md", content: renderWhatsAppSetup(opts) },
   ];
 }

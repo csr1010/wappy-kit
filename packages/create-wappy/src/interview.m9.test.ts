@@ -19,14 +19,19 @@ function must(r: ReturnType<typeof applyAnswer>): InterviewAnswers {
 }
 
 const openai = { provider: "openai" } as const;
+const noProductivity = { enabled: false } as const;
 
 // The interview's "tools" step (M9, Shopify) was removed entirely: domain connectors are out of
 // scope for this open-source repo now (see docs/SPEC.md's decisions log) — they live in a separate
-// connectors repo, wired into an agent by hand, not through this CLI. The interview is model-only.
-// This file was rewritten accordingly (`--allow-test-change`, SPEC.md decisions log).
+// connectors repo, wired into an agent by hand, not through this CLI.
+//
+// A "productivity" step was added back later (@wappy_ai/productivity — not domain-specific, so this
+// doesn't reopen the boundary above): the interview is now model + productivity, not model-only.
+// Every assertion below that hardcoded "just model" needed updating (`--allow-test-change`, same
+// decisions log).
 describe("the interview asks only what changes the generated code, and never a credential", () => {
-  test("step order is just model", () => {
-    expect([...INTERVIEW_STEP_ORDER]).toEqual(["model"]);
+  test("step order is model then productivity", () => {
+    expect([...INTERVIEW_STEP_ORDER]).toEqual(["model", "productivity"]);
   });
 
   test("questions carry prompts + choices; no free-text or credential questions exist", () => {
@@ -36,14 +41,17 @@ describe("the interview asks only what changes the generated code, and never a c
       expect(q.choices?.length).toBeGreaterThan(0);
     }
     expect(questionFor("model").choices?.map((c) => c.value)).toEqual(["openai", "anthropic", "gemini", "ollama"]);
+    expect(questionFor("productivity").choices?.map((c) => c.value)).toEqual(["no", "yes"]);
   });
 });
 
-describe("the interview is complete right after the one step", () => {
-  test("answering model completes the interview", () => {
+describe("the interview is complete once both steps are answered", () => {
+  test("answering model then productivity completes the interview", () => {
     let a: InterviewAnswers = {};
     expect(nextStep(a)).toBe("model");
     a = must(applyAnswer(a, "model", openai));
+    expect(nextStep(a)).toBe("productivity");
+    a = must(applyAnswer(a, "productivity", noProductivity));
     expect(nextStep(a)).toBeNull();
     expect(nextQuestion(a)).toBeNull();
     expect(isComplete(a)).toBe(true);
@@ -51,12 +59,16 @@ describe("the interview is complete right after the one step", () => {
 });
 
 describe("assertComplete", () => {
-  test("assertComplete throws naming the unanswered step", () => {
+  test("assertComplete throws naming the first unanswered step", () => {
     expect(() => assertComplete({})).toThrow(/"model" hasn't been answered/);
   });
 
-  test("assertComplete passes once model is answered", () => {
-    expect(() => assertComplete({ model: openai })).not.toThrow();
+  test("assertComplete throws naming productivity once model is answered but productivity isn't", () => {
+    expect(() => assertComplete({ model: openai })).toThrow(/"productivity" hasn't been answered/);
+  });
+
+  test("assertComplete passes once both steps are answered", () => {
+    expect(() => assertComplete({ model: openai, productivity: noProductivity })).not.toThrow();
   });
 });
 
@@ -71,6 +83,11 @@ describe("applyAnswer validation", () => {
     const r = applyAnswer({}, "model", {} as never);
     expect(r.ok).toBe(false);
   });
+
+  test("a missing productivity enabled flag is rejected", () => {
+    const r = applyAnswer({}, "productivity", {} as never);
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe("goBack / skipStep / defaults", () => {
@@ -81,13 +98,13 @@ describe("goBack / skipStep / defaults", () => {
     expect(nextStep(back)).toBe("model");
   });
 
-  test("defaults: openai", () => {
-    expect(DEFAULT_ANSWERS).toEqual({ model: openai });
+  test("defaults: openai, productivity off", () => {
+    expect(DEFAULT_ANSWERS).toEqual({ model: openai, productivity: noProductivity });
   });
 
-  test("skipping the only step completes the interview with the default", () => {
+  test("skipping every step completes the interview with the defaults", () => {
     let a: InterviewAnswers = {};
     while (!isComplete(a)) a = must(skipStep(a, nextStep(a)!));
-    expect(a).toEqual({ model: openai });
+    expect(a).toEqual({ model: openai, productivity: noProductivity });
   });
 });

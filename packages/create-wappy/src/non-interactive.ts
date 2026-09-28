@@ -21,6 +21,7 @@ export interface NonInteractiveFlags {
   /** Accept the default (`DEFAULT_ANSWERS`) for any step whose flag is omitted. */
   yes?: boolean;
   model?: string;
+  productivity?: string;
 }
 
 export type NonInteractiveResult = { ok: true; answers: CompleteInterviewAnswers } | { ok: false; errors: string[] };
@@ -41,6 +42,14 @@ function resolveStepAnswer(step: InterviewStepId, flags: NonInteractiveFlags, er
         return undefined;
       }
       return { provider: flags.model };
+    }
+    case "productivity": {
+      if (flags.productivity === undefined) return undefined;
+      if (flags.productivity !== "yes" && flags.productivity !== "no") {
+        errors.push(`--productivity must be "yes" or "no", got "${flags.productivity}".`);
+        return undefined;
+      }
+      return { enabled: flags.productivity === "yes" };
     }
   }
 }
