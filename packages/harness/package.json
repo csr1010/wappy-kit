@@ -20,6 +20,9 @@
   },
   "bugs": "https://github.com/csr1010/wappy-kit/issues",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
