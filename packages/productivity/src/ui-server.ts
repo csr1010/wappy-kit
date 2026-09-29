@@ -174,6 +174,17 @@ export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
   });
 }
 
+/**
+ * Neobrutalist/neon design (direct feedback: thick borders, hard offset "3D" shadows that collapse
+ * on press, neon accent colors, chunky toggle switches) with inline, fill-in-the-blank sentence
+ * editing — each template's `sentence` (templates.ts) renders as real, always-visible inputs
+ * embedded in the text itself, never a popup `prompt()`. A "Copy" button clones a task's current
+ * values as a fresh, independently-editable one.
+ *
+ * Real DOM text content is kept in normal case ("Your Tasks", "Remind me about", ...) even though it
+ * DISPLAYS shouty-uppercase — that's CSS `text-transform: uppercase`, not the actual text — so this
+ * stays meaningful (and matches what the existing tests already assert on).
+ */
 const PAGE_HTML = `<!doctype html>
 <html lang="en">
 <head>
@@ -181,48 +192,104 @@ const PAGE_HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Your Tasks</title>
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    --bg: #0b0b12;
+    --panel: #15151f;
+    --ink: #f5f5f7;
+    --pink: #ff2fd0;
+    --cyan: #00f0ff;
+    --lime: #ccff00;
+    --yellow: #ffe600;
+    --orange: #ff8a00;
+    --muted: #9a9aad;
+  }
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 16px; background: #f5f5f7; color: #1c1c1e; }
-  @media (prefers-color-scheme: dark) { body { background: #000; color: #f2f2f7; } .card { background: #1c1c1e !important; } input, select { background: #2c2c2e !important; color: #f2f2f7 !important; border-color: #3a3a3c !important; } }
-  h1 { font-size: 20px; text-align: center; margin: 8px 0 2px; }
-  .sub { text-align: center; color: #888; font-size: 13px; margin-bottom: 16px; }
-  .card { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  .card-title { font-weight: 600; font-size: 15px; }
-  .contact { color: #888; font-size: 12px; }
-  .warn { color: #b45309; font-size: 12px; margin-top: 6px; }
-  input, select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d1d6; font-size: 14px; margin-bottom: 6px; }
-  .toggle { border: none; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
-  .toggle.on { background: #34c759; color: #fff; }
-  .toggle.off { background: #e5e5ea; color: #555; }
-  .templates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-  .template-btn { padding: 12px; border-radius: 10px; border: 1px dashed #c7c7cc; background: transparent; text-align: center; font-size: 13px; cursor: pointer; }
-  .row { display: flex; gap: 6px; }
-  .row > * { flex: 1; }
-  .del { color: #ff3b30; background: none; border: none; font-size: 12px; cursor: pointer; padding: 4px; }
-  #addContact { margin-bottom: 14px; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px 16px 40px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 900;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 10px 0 2px;
+    text-shadow: 3px 3px 0 var(--pink);
+  }
+  .sub { text-align: center; color: var(--cyan); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 18px; }
+
+  .panel { background: var(--panel); border: 3px solid #000; border-radius: 6px; padding: 14px; margin-bottom: 14px; box-shadow: 5px 5px 0 #000; }
+  .panel-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+
+  input[type=text], input[type=time] {
+    background: #000; border: 2px solid var(--cyan); color: var(--yellow); font: inherit; font-weight: 800;
+    padding: 4px 8px; border-radius: 4px; outline: none;
+  }
+  input[type=text]:focus, input[type=time]:focus { border-color: var(--pink); }
+  #contactId { width: 100%; }
+
+  .task-card.c0 { border-color: var(--pink); box-shadow: 5px 5px 0 var(--pink); }
+  .task-card.c1 { border-color: var(--cyan); box-shadow: 5px 5px 0 var(--cyan); }
+  .task-card.c2 { border-color: var(--lime); box-shadow: 5px 5px 0 var(--lime); }
+  .task-card.c3 { border-color: var(--yellow); box-shadow: 5px 5px 0 var(--yellow); }
+  .task-card.c4 { border-color: var(--orange); box-shadow: 5px 5px 0 var(--orange); }
+  .task-icon { font-size: 20px; margin-bottom: 4px; }
+
+  .sentence { font-size: 15px; font-weight: 700; line-height: 2.2; }
+  .sentence input[type=text] { min-width: 90px; width: auto; }
+  .sentence input[type=time] { width: 96px; }
+
+  .task-meta { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; margin-top: 8px; }
+  .warn { color: var(--orange); font-size: 11px; font-weight: 800; text-transform: uppercase; margin-top: 6px; }
+
+  .actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+  .actions-left { display: flex; gap: 8px; }
+
+  .btn3d {
+    border: 3px solid #000; font-weight: 900; font-size: 12px; text-transform: uppercase;
+    padding: 7px 12px; border-radius: 5px; cursor: pointer; box-shadow: 3px 3px 0 #000;
+    transition: transform .06s ease, box-shadow .06s ease; background: var(--lime); color: #000;
+  }
+  .btn3d:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
+  .btn3d.copy { background: var(--cyan); }
+  .btn3d.del { background: var(--pink); }
+  .btn3d.template { background: var(--yellow); width: 100%; text-align: left; }
+  .btn3d.oauth { width: 100%; text-align: center; }
+
+  .toggle { position: relative; width: 56px; height: 30px; border: 3px solid #000; border-radius: 20px; background: #333; cursor: pointer; box-shadow: 3px 3px 0 #000; flex-shrink: 0; }
+  .toggle.on { background: var(--lime); }
+  .toggle .knob { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #000; border-radius: 50%; transition: left .1s ease; }
+  .toggle.on .knob { left: 28px; }
+
+  .templates-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .oauth-done { font-weight: 900; text-transform: uppercase; color: var(--lime); text-align: center; padding: 4px 0; }
 </style>
 </head>
 <body>
   <h1>📋 Your Tasks</h1>
   <div class="sub" id="summary">loading...</div>
 
-  <div class="card" id="addContact">
-    <div class="card-title" style="margin-bottom:6px;">Your WhatsApp number</div>
-    <input id="contactId" placeholder="+15551234567" />
+  <div class="panel">
+    <div class="panel-label">Your WhatsApp number</div>
+    <input type="text" id="contactId" placeholder="+15551234567" />
   </div>
 
-  <div class="card" id="oauthCard" style="display:none;"></div>
+  <div class="panel" id="oauthCard" style="display:none;"></div>
 
   <div id="taskList"></div>
 
-  <div class="card">
-    <div class="card-title" style="margin-bottom:8px;">Start from a template</div>
-    <div class="templates" id="templateList"></div>
+  <div class="panel">
+    <div class="panel-label">Start from a template</div>
+    <div class="templates-grid" id="templateList"></div>
   </div>
 
 <script>
+const ACCENTS = ["c0", "c1", "c2", "c3", "c4"];
 const state = { tasks: [], templates: [] };
 
 function loadContactId() {
@@ -241,55 +308,112 @@ async function api(path, opts) {
 
 function templateFor(id) { return state.templates.find((t) => t.id === id); }
 
+/** Renders a template's \`sentence\` ("Remind me about {text} at {time}") as real text nodes
+ * interleaved with real <input>s at each {key} — the fill-in-the-blank, always-editable line. */
+function buildSentence(template, task, onFieldChange) {
+  const wrap = document.createElement("div");
+  wrap.className = "sentence";
+  for (const part of template.sentence.split(/(\\{\\w+\\})/g)) {
+    const m = /^\\{(\\w+)\\}$/.exec(part);
+    if (!m) { wrap.appendChild(document.createTextNode(part)); continue; }
+    const key = m[1];
+    const field = template.placeholders.find((p) => p.key === key);
+    const input = document.createElement("input");
+    input.type = field && field.kind === "time" ? "time" : "text";
+    input.value = task.placeholders[key] || "";
+    input.placeholder = field ? field.label : key;
+    input.onchange = () => onFieldChange(key, input.value);
+    wrap.appendChild(input);
+  }
+  return wrap;
+}
+
 function renderTasks() {
   const list = document.getElementById("taskList");
   list.innerHTML = "";
   const active = state.tasks.filter((t) => t.status === "on").length;
-  document.getElementById("summary").textContent = state.tasks.length + " task(s) · " + active + " active";
+  document.getElementById("summary").textContent = state.tasks.length + " task(s) \\u00b7 " + active + " active";
 
-  for (const task of state.tasks) {
+  state.tasks.forEach((task, i) => {
     const template = templateFor(task.templateId);
-    const card = document.createElement("div");
-    card.className = "card";
+    if (!template) return;
 
-    const top = document.createElement("div");
-    top.className = "card-top";
-    const title = document.createElement("div");
-    title.className = "card-title";
-    title.textContent = (template ? template.icon + " " : "") + task.title;
-    const toggle = document.createElement("button");
-    toggle.className = "toggle " + (task.status === "on" ? "on" : "off");
-    toggle.textContent = task.status === "on" ? "On" : "Off";
+    const card = document.createElement("div");
+    card.className = "panel task-card " + ACCENTS[i % ACCENTS.length];
+
+    const icon = document.createElement("div");
+    icon.className = "task-icon";
+    icon.textContent = template.icon;
+    card.appendChild(icon);
+
+    card.appendChild(buildSentence(template, task, async (key, value) => {
+      const placeholders = { ...task.placeholders, [key]: value };
+      const patch = { placeholders };
+      if (key === "time") patch.scheduleValue = value;
+      await api("/api/tasks/" + task.id, { method: "PATCH", body: JSON.stringify(patch) });
+      await refresh();
+    }));
+
+    const meta = document.createElement("div");
+    meta.className = "task-meta";
+    meta.textContent = task.contactId + (task.scheduleKind === "once" ? " \\u00b7 once" : " \\u00b7 daily");
+    card.appendChild(meta);
+
+    if (template.requiresGoogle) {
+      const warn = document.createElement("div");
+      warn.className = "warn";
+      warn.textContent = "\\u26a0 Needs Google connected";
+      card.appendChild(warn);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    const left = document.createElement("div");
+    left.className = "actions-left";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "btn3d copy";
+    copyBtn.textContent = "Copy";
+    copyBtn.onclick = async () => {
+      await api("/api/tasks", {
+        method: "POST",
+        body: JSON.stringify({ contactId: task.contactId, templateId: task.templateId, placeholders: task.placeholders, scheduleKind: task.scheduleKind, scheduleValue: task.scheduleValue }),
+      });
+      await refresh();
+    };
+    left.appendChild(copyBtn);
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn3d del";
+    delBtn.textContent = "Delete";
+    delBtn.onclick = async () => {
+      await api("/api/tasks/" + task.id, { method: "DELETE" });
+      await refresh();
+    };
+    left.appendChild(delBtn);
+    actions.appendChild(left);
+
+    const toggle = document.createElement("div");
+    toggle.className = "toggle" + (task.status === "on" ? " on" : "");
+    const knob = document.createElement("div");
+    knob.className = "knob";
+    toggle.appendChild(knob);
     toggle.onclick = async () => {
       await api("/api/tasks/" + task.id, { method: "PATCH", body: JSON.stringify({ status: task.status === "on" ? "off" : "on" }) });
       await refresh();
     };
-    top.append(title, toggle);
-    card.appendChild(top);
+    actions.appendChild(toggle);
 
-    const contact = document.createElement("div");
-    contact.className = "contact";
-    contact.textContent = task.contactId + " · at " + task.scheduleValue + (task.scheduleKind === "once" ? "" : " daily");
-    card.appendChild(contact);
-
-    if (template && template.requiresGoogle) {
-      const warn = document.createElement("div");
-      warn.className = "warn";
-      warn.textContent = "⚠ Needs Google connected to send real data";
-      card.appendChild(warn);
-    }
-
-    const del = document.createElement("button");
-    del.className = "del";
-    del.textContent = "Delete";
-    del.onclick = async () => {
-      await api("/api/tasks/" + task.id, { method: "DELETE" });
-      await refresh();
-    };
-    card.appendChild(del);
-
+    card.appendChild(actions);
     list.appendChild(card);
-  }
+  });
+}
+
+function defaultPlaceholders(template) {
+  const p = {};
+  for (const f of template.placeholders) p[f.key] = f.kind === "time" ? "09:00" : "";
+  return p;
 }
 
 function renderTemplates() {
@@ -297,32 +421,23 @@ function renderTemplates() {
   grid.innerHTML = "";
   for (const template of state.templates) {
     const btn = document.createElement("button");
-    btn.className = "template-btn";
-    btn.textContent = template.icon + " " + template.label;
+    btn.className = "btn3d template";
+    btn.textContent = template.icon + "  " + template.label;
     btn.onclick = () => addFromTemplate(template);
     grid.appendChild(btn);
   }
 }
 
+/** Tapping a template creates the task immediately with sensible defaults (an empty text blank,
+ * "09:00" for time) — it appears as a real card with its blanks ready to fill in inline, instead of
+ * a popup asking for values before the card even exists. */
 async function addFromTemplate(template) {
   const contactId = document.getElementById("contactId").value.trim();
   if (!contactId) { alert("Enter your WhatsApp number first."); return; }
-  const placeholders = {};
-  for (const field of template.placeholders) {
-    const value = prompt(field.label + (field.kind === "time" ? " (HH:MM)" : ""));
-    if (value === null) return;
-    placeholders[field.key] = value;
-  }
-  const time = placeholders.time;
+  const placeholders = defaultPlaceholders(template);
   await api("/api/tasks", {
     method: "POST",
-    body: JSON.stringify({
-      contactId,
-      templateId: template.id,
-      placeholders,
-      scheduleKind: template.defaultScheduleKind,
-      scheduleValue: time || new Date().toISOString(),
-    }),
+    body: JSON.stringify({ contactId, templateId: template.id, placeholders, scheduleKind: template.defaultScheduleKind, scheduleValue: placeholders.time || "09:00" }),
   });
   await refresh();
 }
@@ -335,21 +450,17 @@ async function refresh() {
 async function refreshOauth() {
   const status = await api("/api/oauth-status");
   const card = document.getElementById("oauthCard");
-  if (!status.available) {
-    card.style.display = "none";
-    return;
-  }
+  if (!status.available) { card.style.display = "none"; return; }
   card.style.display = "block";
   card.innerHTML = "";
   if (status.connected) {
     const done = document.createElement("div");
-    done.className = "card-title";
-    done.textContent = "✓ " + status.label + " connected";
+    done.className = "oauth-done";
+    done.textContent = "\\u2713 " + status.label + " connected";
     card.appendChild(done);
   } else {
     const btn = document.createElement("button");
-    btn.className = "template-btn";
-    btn.style.width = "100%";
+    btn.className = "btn3d template oauth";
     btn.textContent = "Connect " + status.label;
     btn.onclick = () => { window.location.href = status.authUrl; };
     card.appendChild(btn);

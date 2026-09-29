@@ -23,6 +23,11 @@ export interface TaskTemplate {
   label: string;
   icon: string;
   placeholders: PlaceholderField[];
+  /** The fill-in-the-blank sentence the UI (Phase 4) renders directly, inline-editable — `{key}`
+   * tokens mark where each `placeholders` entry's input goes. E.g. "Remind me about {text} at
+   * {time}" becomes "Remind me about [____] at [__:__]" with real, always-visible inputs, not a
+   * popup prompt. One source of truth for both the task list page and (later) any other renderer. */
+  sentence: string;
   defaultScheduleKind: ScheduleKind;
   /** Whether this template can fully run today (Phase 3) or is an honest stub until Phase 6 wires
    * a real Google connector action in. Purely informational for the UI's warning banner (Phase 4) —
@@ -39,6 +44,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
       { key: "text", label: "What should I remind you about?", kind: "text" },
       { key: "time", label: "At", kind: "time" },
     ],
+    sentence: "Remind me about {text} at {time}",
     defaultScheduleKind: "dailyAt",
     requiresGoogle: false,
   },
@@ -47,6 +53,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
     label: "Wake me up at",
     icon: "☀️",
     placeholders: [{ key: "time", label: "At", kind: "time" }],
+    sentence: "Wake me up at {time}",
     defaultScheduleKind: "dailyAt",
     requiresGoogle: false,
   },
@@ -55,6 +62,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
     label: "Send tomorrow's meetings",
     icon: "🗓️",
     placeholders: [{ key: "time", label: "At", kind: "time" }],
+    sentence: "Send tomorrow's meetings at {time}",
     defaultScheduleKind: "dailyAt",
     requiresGoogle: true,
   },
@@ -63,6 +71,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
     label: "Summarize my emails",
     icon: "📧",
     placeholders: [{ key: "time", label: "At", kind: "time" }],
+    sentence: "Summarize my emails at {time}",
     defaultScheduleKind: "dailyAt",
     requiresGoogle: true,
   },
@@ -74,6 +83,7 @@ export const TASK_TEMPLATES: readonly TaskTemplate[] = [
       { key: "query", label: "Search for", kind: "text" },
       { key: "time", label: "At", kind: "time" },
     ],
+    sentence: "Find emails about {query} at {time}",
     defaultScheduleKind: "dailyAt",
     requiresGoogle: true,
   },

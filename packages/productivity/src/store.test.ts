@@ -98,6 +98,13 @@ describe("TASK_TEMPLATES", () => {
     }
   });
 
+  test("every template's sentence contains a {key} token for each of its placeholders, and no others", () => {
+    for (const t of TASK_TEMPLATES) {
+      const tokens = [...t.sentence.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+      expect(tokens.sort()).toEqual(t.placeholders.map((p) => p.key).sort());
+    }
+  });
+
   test("templateById returns the matching template, throws for an unknown id", () => {
     expect(templateById("reminder").label).toBe("Remind me about");
     // @ts-expect-error deliberately invalid id
