@@ -14,9 +14,10 @@ import { createWebhookServer } from "@wappy_ai/whatsapp";
  * bin from the project's own `@wappy_ai/create-agent` dependency — see templates.ts's renderPackageJson).
  *
  * When that project also has a productivity agent wired in (templates.ts, only when that interview
- * step was "yes" — it exports `taskUiServer`/`taskRunner` alongside `agent`/`channel` in that case),
- * this same command additionally boots the local task-management page and starts the scheduler loop
- * — one command, one process, same as everything else here.
+ * step was "yes" — it exports `taskUiServer` alongside `agent`/`channel` in that case), this same
+ * command additionally boots the local task-management page — one command, one process. There's no
+ * background loop to start: v2's task router is purely reactive, matched per inbound message inside
+ * `agent.handle()` itself, so nothing here needs to be started or stopped for it.
  *
  * Deliberately dynamic-imports `<cwd>/index.ts` directly rather than requiring a build step. Loads
  * `<cwd>/.env` itself (via `dotenv`), explicitly and first — NOT by relying on the generated
@@ -27,21 +28,13 @@ import { createWebhookServer } from "@wappy_ai/whatsapp";
  * CLI, not by a unit test — the unit tests all injected env directly).
  */
 
-/** A minimal structural type, not `@wappy_ai/productivity`'s real `TaskRunner` — `dev.ts` only ever
- * calls `start()`/`stop()` on it, and importing the real package here just to name a type would add
- * a dependency this file doesn't otherwise need. */
-export interface TaskRunnerLike {
-  start(): void;
-  stop(): void;
-}
-
 export interface GeneratedProjectExports {
   agent: Agent;
   channel: MessageChannel;
-  /** Only present when the productivity-agent interview step was answered "yes" (templates.ts). Both
-   * are optional and always checked together — a generated project either exports neither or both. */
+  /** Only present when the productivity-agent interview step was answered "yes" (templates.ts) — the
+   * local task-management page. No `taskRunner`/scheduler export anymore: v2's task router is purely
+   * reactive (matched inside `agent.handle()` itself), so there's no background loop to start/stop. */
   taskUiServer?: Server;
-  taskRunner?: TaskRunnerLike;
 }
 
 export interface RunDevOptions {
@@ -147,20 +140,18 @@ export async function runDev(opts: RunDevOptions): Promise<RunDevResult> {
   }
 
   // Productivity agent (templates.ts, only present when that interview step was "yes"): boot the
-  // local task-management page and start the scheduler loop alongside the webhook server, same
-  // process, same `wappy dev` command — no separate step for the person running this.
-  if (project.taskUiServer && project.taskRunner) {
+  // local task-management page alongside the webhook server, same process, same `wappy dev` command
+  // — no separate step for the person running this, and nothing to start/stop in the background.
+  if (project.taskUiServer) {
     const taskUiPort = Number(env.TASK_UI_PORT ?? port + 1);
     await new Promise<void>((resolvePromise, reject) => {
       project.taskUiServer!.once("error", reject);
       project.taskUiServer!.listen(taskUiPort, () => resolvePromise());
     });
     opts.print(`Task list: http://localhost:${taskUiPort}/`);
-    project.taskRunner.start();
   }
 
   const close = async () => {
-    project.taskRunner?.stop();
     await tunnelClose?.();
     await new Promise<void>((r) => server.close(() => r()));
     if (project.taskUiServer) await new Promise<void>((r) => project.taskUiServer!.close(() => r()));

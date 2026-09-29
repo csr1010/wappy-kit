@@ -36,10 +36,10 @@ describe("createTaskUiServer", () => {
     expect(html).toContain("Your Tasks");
   });
 
-  test("GET /api/templates lists all 5 templates", async () => {
+  test("GET /api/templates lists all 4 templates", async () => {
     const res = await fetch(base + "/api/templates");
     const templates = await res.json();
-    expect(templates).toHaveLength(5);
+    expect(templates).toHaveLength(4);
   });
 
   test("GET /api/tasks starts empty, then reflects a created task", async () => {
@@ -48,11 +48,11 @@ describe("createTaskUiServer", () => {
     const createRes = await fetch(base + "/api/tasks", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ contactId: "+15551234567", templateId: "reminder", placeholders: { text: "call mom", time: "17:00" }, scheduleKind: "dailyAt", scheduleValue: "17:00" }),
+      body: JSON.stringify({ contactId: "+15551234567", templateId: "find_emails", placeholders: { query: "invoices" } }),
     });
     expect(createRes.status).toBe(201);
     const created = await createRes.json();
-    expect(created.title).toContain("call mom");
+    expect(created.title).toContain("invoices");
 
     const list = await (await fetch(base + "/api/tasks")).json();
     expect(list).toHaveLength(1);
@@ -63,28 +63,31 @@ describe("createTaskUiServer", () => {
     const res = await fetch(base + "/api/tasks", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ templateId: "reminder" }),
+      body: JSON.stringify({ templateId: "find_emails" }),
     });
     expect(res.status).toBe(400);
   });
 
-  test("PATCH .../:id with a status flips on/off (the play/stop toggle)", async () => {
-    const created = await store.create({ contactId: "+1", templateId: "reminder", title: "t", placeholders: {}, scheduleKind: "dailyAt", scheduleValue: "09:00" }, 1000);
-    const res = await fetch(`${base}/api/tasks/${created.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "off" }) });
-    expect(res.status).toBe(200);
-    const [after] = await store.listAll();
-    expect(after!.status).toBe("off");
+  test("POST /api/tasks with a blank placeholder still creates the task (the template's own default applies)", async () => {
+    const res = await fetch(base + "/api/tasks", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ contactId: "+1", templateId: "summarize_emails", placeholders: { from: "" } }),
+    });
+    expect(res.status).toBe(201);
+    const created = await res.json();
+    expect(created.title).toBe("Summarize my unread emails");
   });
 
   test("PATCH .../:id with placeholders edits inline and persists", async () => {
-    const created = await store.create({ contactId: "+1", templateId: "reminder", title: "t", placeholders: { text: "call mom" }, scheduleKind: "dailyAt", scheduleValue: "09:00" }, 1000);
-    await fetch(`${base}/api/tasks/${created.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ placeholders: { text: "call dad" } }) });
+    const created = await store.create({ contactId: "+1", templateId: "find_emails", title: "t", placeholders: { query: "invoices" } }, 1000);
+    await fetch(`${base}/api/tasks/${created.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ placeholders: { query: "travel" } }) });
     const [after] = await store.listAll();
-    expect(after!.placeholders).toEqual({ text: "call dad" });
+    expect(after!.placeholders).toEqual({ query: "travel" });
   });
 
   test("DELETE .../:id removes the task", async () => {
-    const created = await store.create({ contactId: "+1", templateId: "reminder", title: "t", placeholders: {}, scheduleKind: "dailyAt", scheduleValue: "09:00" }, 1000);
+    const created = await store.create({ contactId: "+1", templateId: "find_emails", title: "t", placeholders: {} }, 1000);
     const res = await fetch(`${base}/api/tasks/${created.id}`, { method: "DELETE" });
     expect(res.status).toBe(200);
     expect(await store.listAll()).toHaveLength(0);

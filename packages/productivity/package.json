@@ -1,13 +1,11 @@
 {
   "name": "@wappy_ai/productivity",
-  "version": "0.1.3",
-  "description": "A proactive productivity agent for WhatsApp - scheduled reminders, wake-ups, and pluggable digests, backed by a local SQLite file and a local task-management UI.",
+  "version": "0.2.0",
+  "description": "A reactive productivity agent for WhatsApp - saved Gmail/Calendar tasks matched against the live chat thread, no cron, no WhatsApp Message Templates required, backed by a local SQLite file and a local task-management UI.",
   "keywords": [
     "whatsapp",
     "ai-agent",
     "productivity",
-    "scheduler",
-    "cron",
     "typescript",
     "local-first"
   ],
@@ -41,6 +39,7 @@
   },
   "dependencies": {
     "@libsql/client": "0.18.0",
-    "@wappy_ai/core": "workspace:*"
+    "@wappy_ai/core": "workspace:*",
+    "zod": "^4.6.5"
   }
 }

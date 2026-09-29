@@ -118,9 +118,7 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   const productivity = answers.productivity.enabled;
 
   const harnessImports = ["createAgent", "createVercelModel", "createLibsqlMemory", "createLibsqlSessionProfileStore", "createLlmRouter"];
-  if (productivity) harnessImports.push("createKnowledge", "createKnowledgeRag");
   const whatsappImports = ["createWhatsAppChannel"];
-  if (productivity) whatsappImports.push("createTemplateRegistry");
 
   const lines: string[] = [];
   lines.push('import "dotenv/config";');
@@ -128,9 +126,8 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push(`import { ${[...harnessImports].sort().join(", ")} } from "@wappy_ai/harness";`);
   lines.push(`import { ${[...whatsappImports].sort().join(", ")} } from "@wappy_ai/whatsapp";`);
   if (productivity) {
-    lines.push('import { createClient } from "@libsql/client";');
-    lines.push('import { createTaskStore, createTaskRunner, createTaskUiServer, DEFAULT_ACTIONS, SCHEDULED_MESSAGE_TEMPLATE } from "@wappy_ai/productivity";');
-    lines.push('import { createGoogleActions, createGoogleOAuthPlugin, createGoogleTokenStore } from "@wappy_ai/connector-google";');
+    lines.push('import { createTaskRouter, createTaskStore, createTaskUiServer } from "@wappy_ai/productivity";');
+    lines.push('import { createCalendarContextFn, createGmailContextFn, createGoogleOAuthPlugin, createGoogleTokenStore } from "@wappy_ai/connector-google";');
   }
   lines.push(model.importLine);
   lines.push("");
@@ -142,59 +139,35 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("const tracer = createInMemoryTracer();");
   lines.push("");
 
-  if (productivity) {
-    lines.push("// Real synced Google content (see below) is ingested here so a plain-text follow-up like");
-    lines.push('// "what\'s my next meeting" gets a grounded answer via this existing RAG pipeline instead of');
-    lines.push("// nothing to go on — knowledge has no per-contact scoping (a deliberate v0.1 scope limit:");
-    lines.push("// this project connects ONE Google account, not one per contact, so there's nothing to leak).");
-    lines.push('const knowledge = createKnowledge({ client: createClient({ url: process.env.KNOWLEDGE_DB_URL ?? "file:.wappy/knowledge.db" }) });');
-    lines.push("");
-    lines.push("// A scheduled/proactive message (a reminder, a wake-up, a digest) needs a Meta-approved");
-    lines.push("// Message Template to deliver outside a 24h session window the CONTACT opened — a real");
-    lines.push("// WhatsApp rule, found by hand-testing this, not a choice. See WHATSAPP_SETUP.md's");
-    lines.push('// "Scheduled messages" section for how to get SCHEDULED_MESSAGE_TEMPLATE approved.');
-    lines.push("const templateRegistry = createTemplateRegistry();");
-    lines.push("templateRegistry.register({");
-    lines.push("  name: SCHEDULED_MESSAGE_TEMPLATE.name,");
-    lines.push("  language: SCHEDULED_MESSAGE_TEMPLATE.language,");
-    lines.push("  category: SCHEDULED_MESSAGE_TEMPLATE.category,");
-    lines.push("  variables: [SCHEDULED_MESSAGE_TEMPLATE.bodyVariableName],");
-    lines.push("});");
-    lines.push("");
-  }
-
   // Exported (not just used locally): `wappy dev` (T9.7) needs channel.receive() to turn a raw
   // webhook into InboundMessages before it can call agent.handle() on each one — the Agent itself
-  // only exposes handle(), not receive(), since receiving isn't an agent concern.
+  // only exposes handle(), not receive(), since receiving isn't an agent concern. No WhatsApp
+  // Message Template is ever configured here — every reply this project sends (the reactive agent's
+  // own, or a matched task's, below) is a direct response to an inbound message, so it's always
+  // inside the 24h session window Meta opens when the contact messages you; that rule only bites a
+  // message that pushes on its own, unprompted, which this project deliberately never does.
   lines.push("export const channel = createWhatsAppChannel({");
   lines.push("  phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,");
   lines.push("  accessToken: process.env.WHATSAPP_ACCESS_TOKEN!,");
   lines.push("  clock: systemClock,");
-  if (productivity) {
-    lines.push("  templateRegistry,");
-    lines.push("  defaultTemplateName: SCHEDULED_MESSAGE_TEMPLATE.name,");
-    lines.push('  templateVariables: (message) => ({ [SCHEDULED_MESSAGE_TEMPLATE.bodyVariableName]: message.text ?? "" }),');
-  }
   lines.push("});");
   lines.push("");
 
   lines.push("// This scaffold ships with no tools wired in. To give the agent tools (a store, a");
   lines.push("// calendar, anything else), see @wappy_ai/core's Tool/ToolProvider interfaces and");
   lines.push("// @wappy_ai/harness's docs on wiring a tool invoker into createAgent below.");
-  lines.push("export const agent = createAgent({");
+  lines.push(`export const ${productivity ? "reactiveAgent" : "agent"} = createAgent({`);
   lines.push("  channel, memory, router, model, tracer,");
   lines.push("  clock: systemClock,");
   lines.push("  sessionProfileStore,");
-  if (productivity) lines.push("  retrieveRag: createKnowledgeRag({ knowledge }),");
   lines.push("});");
   lines.push("");
 
   if (productivity) {
-    lines.push("// Productivity agent: a local task store, the scheduler engine (retries + honest failure");
-    lines.push("// notices built in), and a local task-management page — `wappy dev` boots taskUiServer");
-    lines.push("// and starts taskRunner alongside the webhook server. reminder/wake_me_up work for real");
-    lines.push("// today, no Google needed. The other 3 templates work for real too, once you tap");
-    lines.push('// "Connect Google" on the task list page — see GOOGLE_SETUP.md for the one-time setup.');
+    lines.push("// Productivity agent: saved Gmail/Calendar tasks (title + one optional filter, no schedule —");
+    lines.push("// nothing pushes on a timer) matched reactively against whatever the contact just said. See");
+    lines.push("// GOOGLE_SETUP.md for the one-time Google connection; tasks work fully today with no Google");
+    lines.push('// connected too — a matched task just replies that it needs "Connect Google" tapped first.');
     lines.push('const taskStore = createTaskStore({ url: process.env.TASKS_DB_URL ?? "file:.wappy/tasks.db" });');
     lines.push("");
     lines.push("// Bring-your-own Google OAuth client (GOOGLE_SETUP.md) — inert until GOOGLE_CLIENT_ID/SECRET");
@@ -206,13 +179,27 @@ function renderIndexTs(opts: RenderProjectOptions): string {
     lines.push("};");
     lines.push('const googleTokenStore = createGoogleTokenStore({ url: process.env.GOOGLE_TOKENS_DB_URL ?? "file:.wappy/google-tokens.db" });');
     lines.push("const googlePlugin = createGoogleOAuthPlugin({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock });");
-    lines.push("const googleActions = createGoogleActions({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock, knowledge });");
     lines.push("");
-    lines.push("export const taskRunner = createTaskRunner({");
-    lines.push("  store: taskStore, channel, clock: systemClock,");
-    lines.push("  actions: { ...DEFAULT_ACTIONS, ...googleActions },");
-    lines.push("  memory, sessionProfileStore, model,");
+    lines.push("const taskRouter = createTaskRouter({");
+    lines.push("  store: taskStore, model,");
+    lines.push("  connectors: {");
+    lines.push("    gmail: createGmailContextFn({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock }),");
+    lines.push("    calendar: createCalendarContextFn({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock }),");
+    lines.push("  },");
     lines.push("});");
+    lines.push("");
+    lines.push("// Wraps the reactive agent: every inbound message is tried against the contact's saved tasks");
+    lines.push("// first; a confident match replies directly from fresh Gmail/Calendar data, anything else");
+    lines.push("// falls through to the normal reactive agent unchanged — no cron, no background loop, no");
+    lines.push("// separate 'proactive' path at all.");
+    lines.push("export const agent = {");
+    lines.push("  async handle(message: Parameters<typeof reactiveAgent.handle>[0]) {");
+    lines.push("    const routed = await taskRouter.maybeHandle(message);");
+    lines.push("    if (routed.handled) return channel.send(message.contactId, { text: routed.reply! });");
+    lines.push("    return reactiveAgent.handle(message);");
+    lines.push("  },");
+    lines.push("};");
+    lines.push("");
     lines.push("export const taskUiServer = createTaskUiServer({ store: taskStore, clock: systemClock, oauthConnect: googlePlugin });");
     lines.push("");
   }
@@ -308,7 +295,6 @@ function renderPackageJson(opts: RenderProjectOptions): string {
   if (answers.productivity.enabled) {
     deps["@wappy_ai/productivity"] = versions.productivity;
     deps["@wappy_ai/connector-google"] = versions.connectorGoogle;
-    deps["@libsql/client"] = "0.18.0"; // for createKnowledge({client}) — the one place a generated project builds a raw Client itself
   }
   const pkg = {
     name: projectName ?? "wappy-bot",
@@ -397,23 +383,14 @@ function renderWhatsAppSetup(opts: RenderProjectOptions): string {
   lines.push("");
 
   if (opts.answers.productivity.enabled) {
-    lines.push("## 5. Scheduled messages (needed for the productivity agent)");
+    lines.push("## 5. About the productivity agent and WhatsApp Message Templates");
     lines.push("");
-    lines.push("A reminder, wake-up, or digest is a message YOUR agent starts, not a reply to something the");
-    lines.push("contact sent — WhatsApp calls this \"proactive,\" and it has a real rule attached: Meta only");
-    lines.push("lets you send one as plain text within 24 hours of the contact's own last message. Outside");
-    lines.push("that window, you need a pre-approved **Message Template** instead, or the send silently");
-    lines.push("queues and never arrives. This project already generates the template definition and the code");
-    lines.push("that registers it (`index.ts`'s `templateRegistry`) — you just need Meta to approve it once.");
-    lines.push("");
-    lines.push("1. In the Meta app, go to WhatsApp → Message Templates (or Business Manager → Account");
-    lines.push("   tools → Message Templates) and create a new template.");
-    lines.push("2. Name it exactly `wappy_scheduled_update`, category **Utility**, language **English (US)**.");
-    lines.push("3. Body text, exactly: `📋 Update from your Wappy agent:\\n\\n{{1}}`");
-    lines.push("4. Submit it. Approval is usually quick but isn't instant — anywhere from a few minutes to a");
-    lines.push("   few days. Reminders/wake-ups still work immediately within an open 24h window; the");
-    lines.push("   template only matters for messages sent outside one.");
-    lines.push("5. Once approved, nothing else to do — `index.ts` already points at this exact template name.");
+    lines.push("You do **not** need to set up a WhatsApp Message Template for anything in this project. A");
+    lines.push("Message Template is Meta's requirement for a message your agent sends unprompted, outside the");
+    lines.push("24 hours since the contact last messaged you — this project deliberately never does that.");
+    lines.push("Every reply, including a matched productivity task's, is a direct response to something the");
+    lines.push("contact just said, so it's always inside that open window. See GOOGLE_SETUP.md for connecting");
+    lines.push("Gmail/Calendar, which is the only extra setup the productivity agent needs.");
     lines.push("");
   }
 
@@ -426,11 +403,11 @@ function renderWhatsAppSetup(opts: RenderProjectOptions): string {
  * see that page's own "Connect Google" card. */
 function renderGoogleSetup(): string {
   const lines: string[] = [];
-  lines.push("# Connecting Google (Calendar + Gmail digests)");
+  lines.push("# Connecting Google (Calendar + Gmail tasks)");
   lines.push("");
-  lines.push("Your reminders and wake-ups already work with no Google account at all. This file is only for");
-  lines.push("the other 3 templates (meeting digests, email summaries, email search) — real read access to");
-  lines.push("your own Calendar and Gmail, full read (not write), never a shared Wappy-operated account.");
+  lines.push("Every productivity task template needs this — real read access to your own Calendar and");
+  lines.push("Gmail, full read (not write), never a shared Wappy-operated account. Without it, a matched task");
+  lines.push('just replies honestly that it needs "Connect Google" tapped first, instead of failing silently.');
   lines.push("");
   lines.push("## 1. Create your own Google Cloud OAuth client");
   lines.push("");
@@ -463,9 +440,9 @@ function renderGoogleSetup(): string {
   lines.push("");
   lines.push("## 3. Test it");
   lines.push("");
-  lines.push('Create a "Send tomorrow\'s meetings" task from the task list, trigger it (or wait for its');
-  lines.push("scheduled time) — you should get a real digest of your own calendar, not the earlier");
-  lines.push('"not connected yet" stub reply.');
+  lines.push('Create a "Send me my meetings" task from the task list, then just text your bot something like');
+  lines.push('"what\'s on my calendar" — you should get a real reply from your own calendar, not the earlier');
+  lines.push('"Gmail/Calendar isn\'t connected yet" reply.');
   lines.push("");
   return lines.join("\n");
 }
@@ -498,7 +475,7 @@ function renderReadme(opts: RenderProjectOptions): string {
   lines.push(`- **Model:** ${answers.model.provider}`);
   lines.push("- **Memory:** local SQLite file (`.wappy/memory.db`), plus a session profile (`.wappy/session-profile.db`) — facts and where the conversation currently stands, TTL-bound");
   if (answers.productivity.enabled) {
-    lines.push("- **Productivity agent:** on — scheduled reminders and wake-ups work today with no extra setup; meeting/email digests reply honestly that they're not connected until you connect Google (see [`GOOGLE_SETUP.md`](./GOOGLE_SETUP.md), then tap \"Connect Google\" on the task list page). Tasks live in `.wappy/tasks.db`.");
+    lines.push("- **Productivity agent:** on — saved Gmail/Calendar tasks (title + one optional filter, no schedule) matched reactively against the live chat, no cron and no WhatsApp Message Template ever needed. Reply honestly that they're not connected until you connect Google (see [`GOOGLE_SETUP.md`](./GOOGLE_SETUP.md), then tap \"Connect Google\" on the task list page). Tasks live in `.wappy/tasks.db`.");
   }
   lines.push("");
   lines.push("No tools/connectors are wired by default — see `index.ts`'s comment above `createAgent` for how to add one.");

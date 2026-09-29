@@ -14,7 +14,7 @@ const HELP_TEXT = `wappy — run a generated Wappy project
 Usage:
   wappy dev              boot the webhook server (+ tunnel) for this project
                           (and, if this project has a productivity agent, the
-                          local task list + scheduler too)
+                          local task list too)
 
 Not yet implemented: wappy status / wappy reset / wappy doctor.
 `;

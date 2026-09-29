@@ -196,9 +196,6 @@ importers:
       '@wappy_ai/core':
         specifier: workspace:*
         version: link:../core
-      '@wappy_ai/harness':
-        specifier: workspace:*
-        version: link:../harness
       '@wappy_ai/productivity':
         specifier: workspace:*
         version: link:../productivity
@@ -339,6 +336,9 @@ importers:
       '@wappy_ai/core':
         specifier: workspace:*
         version: link:../core
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
     devDependencies:
       '@types/node':
         specifier: ^26.6.2

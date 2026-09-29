@@ -1,21 +1,19 @@
 import { describe, expect, test } from "vitest";
 import { createTaskStore, type NewTask } from "./store.js";
-import { TASK_TEMPLATES, templateById } from "./templates.js";
+import { buildInstructions, TASK_TEMPLATES, templateById } from "./templates.js";
 
-/** Phase 1 (plan: "Task store — backend only, no UI, no scheduling execution yet"). */
+/** v2 (plan pivot: reactive tasks, no scheduling — "we should not setup cron or templates"). */
 
 function freshStore() {
   return createTaskStore({ url: ":memory:" });
 }
 
-function newReminder(overrides: Partial<NewTask> = {}): NewTask {
+function newTask(overrides: Partial<NewTask> = {}): NewTask {
   return {
     contactId: "+15550001111",
-    templateId: "reminder",
-    title: "Remind me about call mom",
-    placeholders: { text: "call mom", time: "17:00" },
-    scheduleKind: "dailyAt",
-    scheduleValue: "17:00",
+    templateId: "find_emails",
+    title: "Find emails about invoices",
+    placeholders: { query: "invoices" },
     ...overrides,
   };
 }
@@ -23,18 +21,16 @@ function newReminder(overrides: Partial<NewTask> = {}): NewTask {
 describe("createTaskStore", () => {
   test("create then listByContact returns it", async () => {
     const store = freshStore();
-    const created = await store.create(newReminder(), 1000);
+    const created = await store.create(newTask(), 1000);
     const list = await store.listByContact(created.contactId);
     expect(list).toHaveLength(1);
     expect(list[0]).toEqual(created);
-    expect(created.status).toBe("on");
-    expect(created.retryCount).toBe(0);
   });
 
   test("two different contactIds never see each other's tasks", async () => {
     const store = freshStore();
-    await store.create(newReminder({ contactId: "+1111" }), 1000);
-    await store.create(newReminder({ contactId: "+2222" }), 1000);
+    await store.create(newTask({ contactId: "+1111" }), 1000);
+    await store.create(newTask({ contactId: "+2222" }), 1000);
     expect(await store.listByContact("+1111")).toHaveLength(1);
     expect(await store.listByContact("+2222")).toHaveLength(1);
     expect((await store.listByContact("+1111"))[0]!.contactId).toBe("+1111");
@@ -42,66 +38,44 @@ describe("createTaskStore", () => {
 
   test("update() persists a placeholder change", async () => {
     const store = freshStore();
-    const created = await store.create(newReminder(), 1000);
-    await store.update(created.id, { placeholders: { text: "call dad", time: "18:00" } }, 2000);
+    const created = await store.create(newTask(), 1000);
+    await store.update(created.id, { placeholders: { query: "travel" }, title: "Find emails about travel" }, 2000);
     const [updated] = await store.listByContact(created.contactId);
-    expect(updated!.placeholders).toEqual({ text: "call dad", time: "18:00" });
+    expect(updated!.placeholders).toEqual({ query: "travel" });
+    expect(updated!.title).toBe("Find emails about travel");
     expect(updated!.updatedAt).toBe(2000);
-  });
-
-  test("setStatus round-trips off then on", async () => {
-    const store = freshStore();
-    const created = await store.create(newReminder(), 1000);
-    await store.setStatus(created.id, "off", 1500);
-    expect((await store.listByContact(created.contactId))[0]!.status).toBe("off");
-    await store.setStatus(created.id, "on", 1600);
-    expect((await store.listByContact(created.contactId))[0]!.status).toBe("on");
   });
 
   test("delete removes the task", async () => {
     const store = freshStore();
-    const created = await store.create(newReminder(), 1000);
+    const created = await store.create(newTask(), 1000);
     await store.delete(created.id);
     expect(await store.listByContact(created.contactId)).toHaveLength(0);
   });
 
-  test("listActive returns only status:'on' tasks, across all contacts", async () => {
+  test("listAll returns every task across every contact", async () => {
     const store = freshStore();
-    const a = await store.create(newReminder({ contactId: "+1111" }), 1000);
-    await store.create(newReminder({ contactId: "+2222" }), 1000);
-    await store.setStatus(a.id, "off", 1500);
-    const active = await store.listActive();
-    expect(active).toHaveLength(1);
-    expect(active[0]!.contactId).toBe("+2222");
-  });
-
-  test("listAll returns every task across every contact, regardless of status", async () => {
-    const store = freshStore();
-    const a = await store.create(newReminder({ contactId: "+1111" }), 1000);
-    await store.create(newReminder({ contactId: "+2222" }), 1000);
-    await store.setStatus(a.id, "off", 1500);
+    await store.create(newTask({ contactId: "+1111" }), 1000);
+    await store.create(newTask({ contactId: "+2222" }), 1000);
     expect(await store.listAll()).toHaveLength(2);
   });
 });
 
 describe("TASK_TEMPLATES", () => {
-  test("all 5 templates have a valid id/label/placeholder shape", () => {
-    expect(TASK_TEMPLATES).toHaveLength(5);
+  test("all 4 templates have a valid id/label/placeholder shape, at most one placeholder each", () => {
+    expect(TASK_TEMPLATES).toHaveLength(4);
     for (const t of TASK_TEMPLATES) {
       expect(t.id).toBeTruthy();
       expect(t.label).toBeTruthy();
+      expect(t.placeholders.length).toBeLessThanOrEqual(1);
+      expect(["gmail", "calendar"]).toContain(t.connector);
       expect(typeof t.repeatable).toBe("boolean");
-      expect(Array.isArray(t.placeholders)).toBe(true);
-      for (const p of t.placeholders) {
-        expect(p.key).toBeTruthy();
-        expect(["text", "time"]).toContain(p.kind);
-      }
     }
   });
 
-  test("reminder and find_emails are repeatable (you'd want several); wake_me_up/daily_meetings/summarize_emails are not (one is what makes sense)", () => {
+  test("find_emails and find_events are repeatable (you'd want several with different filters); summarize_emails/daily_meetings are not", () => {
     const repeatable = TASK_TEMPLATES.filter((t) => t.repeatable).map((t) => t.id);
-    expect(repeatable.sort()).toEqual(["find_emails", "reminder"]);
+    expect(repeatable.sort()).toEqual(["find_emails", "find_events"]);
   });
 
   test("every template's sentence contains a {key} token for each of its placeholders, and no others", () => {
@@ -112,13 +86,43 @@ describe("TASK_TEMPLATES", () => {
   });
 
   test("templateById returns the matching template, throws for an unknown id", () => {
-    expect(templateById("reminder").label).toBe("Remind me about");
+    expect(templateById("find_emails").label).toBe("Find emails about");
     // @ts-expect-error deliberately invalid id
     expect(() => templateById("not-a-real-template")).toThrow(/unknown template id/);
   });
+});
 
-  test("only the 2 zero-external-account templates are marked as not requiring Google", () => {
-    const noGoogle = TASK_TEMPLATES.filter((t) => !t.requiresGoogle).map((t) => t.id);
-    expect(noGoogle.sort()).toEqual(["reminder", "wake_me_up"]);
+describe("buildInstructions — defaults when a placeholder is left blank", () => {
+  test("summarize_emails with no 'from' filter defaults to unfiltered unread inbox", () => {
+    const text = buildInstructions(templateById("summarize_emails"), { from: "" });
+    expect(text).not.toContain("from ");
+    expect(text).toContain("unread emails");
+  });
+
+  test("summarize_emails with a 'from' filter mentions it", () => {
+    const text = buildInstructions(templateById("summarize_emails"), { from: "boss@example.com" });
+    expect(text).toContain("from boss@example.com");
+  });
+
+  test("find_emails with no query defaults to no topic filter, still asks for at most 5", () => {
+    const text = buildInstructions(templateById("find_emails"), { query: "" });
+    expect(text).not.toContain("about ");
+    expect(text).toContain("at most 5");
+  });
+
+  test("daily_meetings with no 'when' defaults to 'today'", () => {
+    const text = buildInstructions(templateById("daily_meetings"), { when: "" });
+    expect(text).toContain("for today");
+  });
+
+  test("daily_meetings with an explicit 'when' uses it instead of the default", () => {
+    const text = buildInstructions(templateById("daily_meetings"), { when: "tomorrow" });
+    expect(text).toContain("for tomorrow");
+    expect(text).not.toContain("for today");
+  });
+
+  test("find_events with a query mentions it", () => {
+    const text = buildInstructions(templateById("find_events"), { query: "offsite" });
+    expect(text).toContain("about offsite");
   });
 });

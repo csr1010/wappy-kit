@@ -4,11 +4,16 @@ import { TASK_TEMPLATES, templateById, type TemplateId } from "./templates.js";
 import type { NewTask, TaskStore } from "./store.js";
 
 /**
- * Phase 4: the local task-management page — a single static, mobile-friendly HTML+vanilla-JS page
- * plus a small JSON API, served over plain `node:http` (matching `@wappy_ai/whatsapp`'s
+ * The local task-management page — a single static, mobile-friendly HTML+vanilla-JS page plus a
+ * small JSON API, served over plain `node:http` (matching `@wappy_ai/whatsapp`'s
  * `webhook-server.ts` convention: no Express, no new heavy dependency). A single-operator admin
  * page, not a per-contact login flow (see `store.ts`'s `listAll()`) — shows every task across every
  * contact on one page, which is the right shape for this project's current single-operator scope.
+ *
+ * v2: no scheduling fields anywhere here (`store.ts` dropped them) — a task is created or deleted,
+ * nothing to toggle on/off, no run history to show. It's matched reactively by `router.ts` when the
+ * contact texts the bot; this page is purely for authoring the filter placeholder and connecting
+ * Google, not for watching anything run.
  */
 
 /**
@@ -66,8 +71,8 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.length > 0;
 }
 
-/** Builds a `title` string from a template + its placeholders — same rendering a generated project's
- * own code would use, kept here so the UI's "created via the API" tasks read the same as any other. */
+/** Builds a `title` string from a template + its placeholder — same rendering a generated project's
+ * own code would use, kept here so tasks created via the API read the same as any other. */
 function renderTitle(templateId: TemplateId, placeholders: Record<string, string>): string {
   const template = templateById(templateId);
   const parts = template.placeholders.map((p) => placeholders[p.key]).filter(isNonEmptyString);
@@ -122,20 +127,13 @@ export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
 
         if (req.method === "POST" && url.pathname === "/api/tasks") {
           const body = (await readJsonBody(req)) as Partial<NewTask>;
-          if (!isNonEmptyString(body.contactId) || !isNonEmptyString(body.templateId) || !isNonEmptyString(body.scheduleKind) || !isNonEmptyString(body.scheduleValue)) {
-            sendJson(res, 400, { error: "contactId, templateId, scheduleKind, and scheduleValue are required" });
+          if (!isNonEmptyString(body.contactId) || !isNonEmptyString(body.templateId)) {
+            sendJson(res, 400, { error: "contactId and templateId are required" });
             return;
           }
           const placeholders = (body.placeholders && typeof body.placeholders === "object" ? body.placeholders : {}) as Record<string, string>;
           const task = await store.create(
-            {
-              contactId: body.contactId,
-              templateId: body.templateId as TemplateId,
-              title: renderTitle(body.templateId as TemplateId, placeholders),
-              placeholders,
-              scheduleKind: body.scheduleKind as NewTask["scheduleKind"],
-              scheduleValue: body.scheduleValue,
-            },
+            { contactId: body.contactId, templateId: body.templateId as TemplateId, title: renderTitle(body.templateId as TemplateId, placeholders), placeholders },
             clock.now(),
           );
           sendJson(res, 201, task);
@@ -147,15 +145,10 @@ export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
           const id = taskIdMatch[1]!;
           if (req.method === "PATCH") {
             const body = (await readJsonBody(req)) as Record<string, unknown>;
-            if (isNonEmptyString(body.status)) {
-              await store.setStatus(id, body.status as "on" | "off", clock.now());
-            } else {
-              const patch: Record<string, unknown> = {};
-              if (body.placeholders) patch.placeholders = body.placeholders;
-              if (isNonEmptyString(body.scheduleKind as string)) patch.scheduleKind = body.scheduleKind;
-              if (isNonEmptyString(body.scheduleValue as string)) patch.scheduleValue = body.scheduleValue;
-              await store.update(id, patch, clock.now());
-            }
+            const patch: Record<string, unknown> = {};
+            if (body.placeholders) patch.placeholders = body.placeholders;
+            if (isNonEmptyString(body.title as string)) patch.title = body.title;
+            await store.update(id, patch, clock.now());
             sendJson(res, 200, { ok: true });
             return;
           }
@@ -175,21 +168,16 @@ export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
 }
 
 /**
- * Neobrutalist/neon design on a light (cream/white) canvas, not dark — thick black borders, hard
- * offset "3D" shadows that collapse on press, saturated neon accent colors, a chunky sliding toggle.
- * Inline, fill-in-the-blank sentence editing: each template's \`sentence\` (templates.ts) renders as
- * real, always-visible inputs embedded in the text, never a popup \`prompt()\`.
+ * Neobrutalist/neon design on a light (cream/white) canvas — thick black borders, hard offset "3D"
+ * shadows that collapse on press, saturated neon accent colors. Inline, fill-in-the-blank sentence
+ * editing: each template's \`sentence\` (templates.ts) renders as a real, always-visible input
+ * embedded in the text, never a popup \`prompt()\`.
  *
- * ONE unified list, not a separate "pick a template" section: every template that makes sense to
- * have just one of (\`repeatable: false\` — a wake-up alarm, a meetings/email digest) always shows
- * exactly one slot, real once it has a task, a dashed "not set up yet" draft otherwise. Every
- * template you'd plausibly want several of (\`repeatable: true\` — reminders, saved searches) shows
- * all its real tasks plus one trailing draft slot to add another. A draft has no id yet; editing any
- * of its blanks creates the real task on the spot.
- *
- * Real DOM text content is kept in normal case ("Your Tasks", "Remind me about", ...) even though it
- * DISPLAYS shouty-uppercase — that's CSS \`text-transform: uppercase\`, not the actual text — so this
- * stays meaningful (and matches what the existing tests already assert on).
+ * v2: ONE unified list, same as before, but no more scheduling — every template shows its real
+ * tasks (editable inline, copy/delete) plus, when it makes sense to add another (\`repeatable: true\`,
+ * or \`repeatable: false\` with none yet), a dashed draft card with an explicit "+ Add" button — a
+ * draft is local-only until that button is tapped, so accepting every default (leaving the one
+ * filter blank) is one tap, not an accidental side effect of focusing then blurring a field.
  */
 const PAGE_HTML = `<!doctype html>
 <html lang="en">
@@ -232,11 +220,11 @@ const PAGE_HTML = `<!doctype html>
   .panel { background: var(--panel); border: 3px solid #000; border-radius: 6px; padding: 14px; margin-bottom: 14px; box-shadow: 5px 5px 0 #000; }
   .panel-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
 
-  input[type=text], input[type=time] {
+  input[type=text] {
     background: var(--bg); border: 2px solid var(--ink); color: var(--ink); font: inherit; font-weight: 800;
     padding: 4px 8px; border-radius: 4px; outline: none;
   }
-  input[type=text]:focus, input[type=time]:focus { border-color: var(--pink); background: #fff; }
+  input[type=text]:focus { border-color: var(--pink); background: #fff; }
   #contactId { width: 100%; }
 
   .task-card.c0 { border-color: var(--pink); box-shadow: 5px 5px 0 var(--pink); }
@@ -249,14 +237,12 @@ const PAGE_HTML = `<!doctype html>
   .draft-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
 
   .sentence { font-size: 15px; font-weight: 700; line-height: 2.2; }
-  .sentence input[type=text] { min-width: 90px; width: auto; }
-  .sentence input[type=time] { width: 96px; }
+  .sentence input[type=text] { min-width: 110px; width: auto; }
 
   .task-meta { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; margin-top: 8px; }
   .warn { color: var(--orange); font-size: 11px; font-weight: 800; text-transform: uppercase; margin-top: 6px; }
 
-  .actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
-  .actions-left { display: flex; gap: 8px; }
+  .actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 
   .btn3d {
     border: 3px solid #000; font-weight: 900; font-size: 12px; text-transform: uppercase;
@@ -266,12 +252,8 @@ const PAGE_HTML = `<!doctype html>
   .btn3d:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
   .btn3d.copy { background: var(--cyan); color: #fff; }
   .btn3d.del { background: var(--pink); color: #fff; }
+  .btn3d.add { background: var(--lime); }
   .btn3d.oauth { width: 100%; text-align: center; background: var(--yellow); }
-
-  .toggle { position: relative; width: 56px; height: 30px; border: 3px solid #000; border-radius: 20px; background: #ddd; cursor: pointer; box-shadow: 3px 3px 0 #000; flex-shrink: 0; }
-  .toggle.on { background: var(--lime); }
-  .toggle .knob { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #000; border-radius: 50%; transition: left .1s ease; }
-  .toggle.on .knob { left: 28px; }
 
   .oauth-done { font-weight: 900; text-transform: uppercase; color: var(--lime); text-align: center; padding: 4px 0; }
 </style>
@@ -291,7 +273,7 @@ const PAGE_HTML = `<!doctype html>
 
 <script>
 const ACCENTS = ["c0", "c1", "c2", "c3", "c4"];
-const state = { tasks: [], templates: [] };
+const state = { tasks: [], templates: [], googleConnected: false };
 
 function loadContactId() {
   const saved = localStorage.getItem("wappy-contact-id");
@@ -307,8 +289,8 @@ async function api(path, opts) {
   return res.status === 200 || res.status === 201 ? res.json() : undefined;
 }
 
-/** Renders a template's \`sentence\` ("Remind me about {text} at {time}") as real text nodes
- * interleaved with real <input>s at each {key} — the fill-in-the-blank, always-editable line. */
+/** Renders a template's \`sentence\` ("Find emails about {query}") as real text nodes interleaved
+ * with a real <input> at its one {key} — the fill-in-the-blank, always-editable line. */
 function buildSentence(template, placeholders, onFieldChange) {
   const wrap = document.createElement("div");
   wrap.className = "sentence";
@@ -318,22 +300,21 @@ function buildSentence(template, placeholders, onFieldChange) {
     const key = m[1];
     const field = template.placeholders.find((p) => p.key === key);
     const input = document.createElement("input");
-    input.type = field && field.kind === "time" ? "time" : "text";
+    input.type = "text";
     input.value = placeholders[key] || "";
-    input.placeholder = field ? field.label : key;
+    input.placeholder = field ? field.placeholderHint : key;
     input.onchange = () => onFieldChange(key, input.value);
     wrap.appendChild(input);
   }
   return wrap;
 }
 
-function defaultPlaceholders(template) {
-  const p = {};
-  for (const f of template.placeholders) p[f.key] = f.kind === "time" ? "09:00" : "";
-  return p;
+function connectorLabel(template) {
+  return template.connector === "gmail" ? "Gmail" : "Calendar";
 }
 
-/** A real, already-created task — full sentence, meta, warning badge, copy/delete, on/off toggle. */
+/** A real, already-created task — sentence, meta, copy/delete. No toggle, no run status: a task
+ * either exists (and router.ts may match it against an inbound message) or it's deleted. */
 function buildTaskCard(template, task, accentClass) {
   const card = document.createElement("div");
   card.className = "panel task-card " + accentClass;
@@ -345,38 +326,24 @@ function buildTaskCard(template, task, accentClass) {
 
   card.appendChild(buildSentence(template, task.placeholders, async (key, value) => {
     const placeholders = { ...task.placeholders, [key]: value };
-    const patch = { placeholders };
-    if (key === "time") patch.scheduleValue = value;
-    await api("/api/tasks/" + task.id, { method: "PATCH", body: JSON.stringify(patch) });
+    await api("/api/tasks/" + task.id, { method: "PATCH", body: JSON.stringify({ placeholders }) });
     await refresh();
   }));
 
   const meta = document.createElement("div");
   meta.className = "task-meta";
-  meta.textContent = task.contactId + (task.scheduleKind === "once" ? " \\u00b7 once" : " \\u00b7 daily");
+  meta.textContent = task.contactId;
   card.appendChild(meta);
 
-  if (template.requiresGoogle) {
+  if (!state.googleConnected) {
     const warn = document.createElement("div");
     warn.className = "warn";
-    warn.textContent = "\\u26a0 Needs Google connected";
-    card.appendChild(warn);
-  }
-
-  // Runs fine but didn't reach the contact (24h WhatsApp window closed, no Message Template set up
-  // yet) — an honest, expected state for a trial run, not an error; see WHATSAPP_SETUP.md §5.
-  if (task.lastStatus === "queued") {
-    const warn = document.createElement("div");
-    warn.className = "warn";
-    warn.textContent = "\\u26a0 Last run wasn't delivered \\u2014 text the bot to reopen the chat, or set up a Message Template (optional)";
+    warn.textContent = "\\u26a0 Needs " + connectorLabel(template) + " connected";
     card.appendChild(warn);
   }
 
   const actions = document.createElement("div");
   actions.className = "actions";
-
-  const left = document.createElement("div");
-  left.className = "actions-left";
 
   const copyBtn = document.createElement("button");
   copyBtn.className = "btn3d copy";
@@ -384,11 +351,11 @@ function buildTaskCard(template, task, accentClass) {
   copyBtn.onclick = async () => {
     await api("/api/tasks", {
       method: "POST",
-      body: JSON.stringify({ contactId: task.contactId, templateId: task.templateId, placeholders: task.placeholders, scheduleKind: task.scheduleKind, scheduleValue: task.scheduleValue }),
+      body: JSON.stringify({ contactId: task.contactId, templateId: task.templateId, placeholders: task.placeholders }),
     });
     await refresh();
   };
-  left.appendChild(copyBtn);
+  actions.appendChild(copyBtn);
 
   const delBtn = document.createElement("button");
   delBtn.className = "btn3d del";
@@ -397,33 +364,21 @@ function buildTaskCard(template, task, accentClass) {
     await api("/api/tasks/" + task.id, { method: "DELETE" });
     await refresh();
   };
-  left.appendChild(delBtn);
-  actions.appendChild(left);
-
-  const toggle = document.createElement("div");
-  toggle.className = "toggle" + (task.status === "on" ? " on" : "");
-  const knob = document.createElement("div");
-  knob.className = "knob";
-  toggle.appendChild(knob);
-  toggle.onclick = async () => {
-    await api("/api/tasks/" + task.id, { method: "PATCH", body: JSON.stringify({ status: task.status === "on" ? "off" : "on" }) });
-    await refresh();
-  };
-  actions.appendChild(toggle);
+  actions.appendChild(delBtn);
 
   card.appendChild(actions);
   return card;
 }
 
-/** Not created yet — dashed outline, blanks pre-filled with sensible defaults, no toggle/copy/delete
- * (none of those make sense before it exists). Editing any blank creates the real task immediately. */
+/** Not created yet — dashed outline, local-only until "+ Add" is tapped, so accepting every default
+ * (leaving the one filter blank) is a deliberate single tap, not a side effect of focus/blur. */
 function buildDraftCard(template) {
   const card = document.createElement("div");
   card.className = "panel task-card draft";
 
   const label = document.createElement("div");
   label.className = "draft-label";
-  label.textContent = "+ Add \\u2014 not set up yet";
+  label.textContent = "+ Add";
   card.appendChild(label);
 
   const icon = document.createElement("div");
@@ -431,36 +386,41 @@ function buildDraftCard(template) {
   icon.textContent = template.icon;
   card.appendChild(icon);
 
-  const placeholders = defaultPlaceholders(template);
-  card.appendChild(buildSentence(template, placeholders, async (key, value) => {
-    const contactId = document.getElementById("contactId").value.trim();
-    if (!contactId) { alert("Enter your WhatsApp number first."); return; }
-    const finalPlaceholders = { ...placeholders, [key]: value };
-    await api("/api/tasks", {
-      method: "POST",
-      body: JSON.stringify({ contactId, templateId: template.id, placeholders: finalPlaceholders, scheduleKind: template.defaultScheduleKind, scheduleValue: finalPlaceholders.time || "09:00" }),
-    });
-    await refresh();
-  }));
+  const draft = {};
+  for (const f of template.placeholders) draft[f.key] = "";
+  card.appendChild(buildSentence(template, draft, (key, value) => { draft[key] = value; }));
 
-  if (template.requiresGoogle) {
+  if (!state.googleConnected) {
     const warn = document.createElement("div");
     warn.className = "warn";
-    warn.textContent = "\\u26a0 Needs Google connected";
+    warn.textContent = "\\u26a0 Needs " + connectorLabel(template) + " connected";
     card.appendChild(warn);
   }
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  const addBtn = document.createElement("button");
+  addBtn.className = "btn3d add";
+  addBtn.textContent = "+ Add";
+  addBtn.onclick = async () => {
+    const contactId = document.getElementById("contactId").value.trim();
+    if (!contactId) { alert("Enter your WhatsApp number first."); return; }
+    await api("/api/tasks", { method: "POST", body: JSON.stringify({ contactId, templateId: template.id, placeholders: draft }) });
+    await refresh();
+  };
+  actions.appendChild(addBtn);
+  card.appendChild(actions);
 
   return card;
 }
 
 /** One unified list: for each template, its real tasks (in creation order), then — if repeatable, or
  * if not repeatable and none exists yet — exactly one trailing draft slot. No separate "pick a
- * template" section anywhere else on the page. */
+ * template" section anywhere on the page. */
 function renderList() {
   const list = document.getElementById("taskList");
   list.innerHTML = "";
-  const active = state.tasks.filter((t) => t.status === "on").length;
-  document.getElementById("summary").textContent = state.tasks.length + " task(s) \\u00b7 " + active + " active";
+  document.getElementById("summary").textContent = state.tasks.length + " task(s)";
 
   let accentIndex = 0;
   for (const template of state.templates) {
@@ -482,6 +442,7 @@ async function refresh() {
 
 async function refreshOauth() {
   const status = await api("/api/oauth-status");
+  state.googleConnected = Boolean(status.connected);
   const card = document.getElementById("oauthCard");
   if (!status.available) { card.style.display = "none"; return; }
   card.style.display = "block";
@@ -503,8 +464,8 @@ async function refreshOauth() {
 (async function init() {
   loadContactId();
   state.templates = await api("/api/templates");
-  await refresh();
   await refreshOauth();
+  await refresh();
 })();
 </script>
 </body>

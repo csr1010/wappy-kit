@@ -5,10 +5,14 @@ import { join } from "node:path";
 import type { Server } from "node:http";
 import { EventEmitter } from "node:events";
 import type { Agent, DeliveryResult, MessageChannel } from "@wappy_ai/core";
-import { runDev, type TaskRunnerLike } from "./dev.js";
+import { runDev } from "./dev.js";
 
-/** Phase 5 (plan): `wappy dev` boots the task UI server and starts the task runner alongside the
- * webhook server, only when a generated project actually exports them (productivity=yes). */
+/**
+ * Phase 5 (plan), rewritten for the v2 pivot (--allow-test-change "dropped the cron scheduler
+ * entirely in favor of a reactive task router matched inside agent.handle() itself — nothing left to
+ * start/stop in the background"): `wappy dev` boots the task UI server alongside the webhook server,
+ * only when a generated project actually exports one (productivity=yes).
+ */
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -40,36 +44,30 @@ function fakeServer(): Server {
   }) as Server["close"];
   return emitter;
 }
-function fakeTaskRunner(): TaskRunnerLike & { started: boolean; stopped: boolean } {
-  const r = { started: false, stopped: false, start: () => (r.started = true), stop: () => (r.stopped = true) };
-  return r;
-}
 
 const ENV = { WHATSAPP_VERIFY_TOKEN: "vt", WHATSAPP_APP_SECRET: "secret" };
 
-describe("runDev — productivity agent (taskUiServer/taskRunner exports)", () => {
-  test("a project WITHOUT productivity exports never touches a task UI server or runner", async () => {
+describe("runDev — productivity agent (taskUiServer export)", () => {
+  test("a project WITHOUT productivity exports never touches a task UI server", async () => {
     const webhookServer = fakeServer();
     const importProject = vi.fn(async () => ({ agent: fakeAgent(), channel: fakeChannel() }));
     const result = await runDev({ cwd: projectDir(), print: () => {}, env: ENV, createServer: () => webhookServer, importProject, tunnel: false });
     expect(result.exitCode).toBe(0);
-    // No taskUiServer/taskRunner on the resolved project — nothing extra should have been booted;
-    // implicitly proven by the happy-path tests in dev.m9.test.ts never mentioning a second port.
+    // No taskUiServer on the resolved project — nothing extra should have been booted; implicitly
+    // proven by the happy-path tests in dev.m9.test.ts never mentioning a second port.
   });
 
-  test("a project WITH productivity exports boots the task UI server and starts the runner", async () => {
+  test("a project WITH a productivity export boots the task UI server", async () => {
     const print = vi.fn();
     const webhookServer = fakeServer();
     const taskUiServer = fakeServer();
     const taskUiListen = vi.spyOn(taskUiServer, "listen");
-    const taskRunner = fakeTaskRunner();
-    const importProject = vi.fn(async () => ({ agent: fakeAgent(), channel: fakeChannel(), taskUiServer, taskRunner }));
+    const importProject = vi.fn(async () => ({ agent: fakeAgent(), channel: fakeChannel(), taskUiServer }));
 
     const result = await runDev({ cwd: projectDir(), print, env: ENV, port: 4321, createServer: () => webhookServer, importProject, tunnel: false });
 
     expect(result.exitCode).toBe(0);
     expect(taskUiListen).toHaveBeenCalledWith(4322, expect.any(Function)); // webhook port + 1 by default
-    expect(taskRunner.started).toBe(true);
     expect(print).toHaveBeenCalledWith(expect.stringContaining("4322"));
   });
 
@@ -77,25 +75,22 @@ describe("runDev — productivity agent (taskUiServer/taskRunner exports)", () =
     const webhookServer = fakeServer();
     const taskUiServer = fakeServer();
     const taskUiListen = vi.spyOn(taskUiServer, "listen");
-    const taskRunner = fakeTaskRunner();
-    const importProject = vi.fn(async () => ({ agent: fakeAgent(), channel: fakeChannel(), taskUiServer, taskRunner }));
+    const importProject = vi.fn(async () => ({ agent: fakeAgent(), channel: fakeChannel(), taskUiServer }));
 
     await runDev({ cwd: projectDir(), print: () => {}, env: { ...ENV, TASK_UI_PORT: "7000" }, port: 4321, createServer: () => webhookServer, importProject, tunnel: false });
 
     expect(taskUiListen).toHaveBeenCalledWith(7000, expect.any(Function));
   });
 
-  test("close() stops the task runner and closes the task UI server too", async () => {
+  test("close() closes the task UI server too", async () => {
     const webhookServer = fakeServer();
     const taskUiServer = fakeServer();
     const taskUiCloseSpy = vi.spyOn(taskUiServer, "close");
-    const taskRunner = fakeTaskRunner();
-    const importProject = vi.fn(async () => ({ agent: fakeAgent(), channel: fakeChannel(), taskUiServer, taskRunner }));
+    const importProject = vi.fn(async () => ({ agent: fakeAgent(), channel: fakeChannel(), taskUiServer }));
 
     const result = await runDev({ cwd: projectDir(), print: () => {}, env: ENV, createServer: () => webhookServer, importProject, tunnel: false });
     await result.close?.();
 
-    expect(taskRunner.stopped).toBe(true);
     expect(taskUiCloseSpy).toHaveBeenCalled();
   });
 });
