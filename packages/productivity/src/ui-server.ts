@@ -175,14 +175,20 @@ export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
 }
 
 /**
- * Neobrutalist/neon design (direct feedback: thick borders, hard offset "3D" shadows that collapse
- * on press, neon accent colors, chunky toggle switches) with inline, fill-in-the-blank sentence
- * editing — each template's `sentence` (templates.ts) renders as real, always-visible inputs
- * embedded in the text itself, never a popup `prompt()`. A "Copy" button clones a task's current
- * values as a fresh, independently-editable one.
+ * Neobrutalist/neon design on a light (cream/white) canvas, not dark — thick black borders, hard
+ * offset "3D" shadows that collapse on press, saturated neon accent colors, a chunky sliding toggle.
+ * Inline, fill-in-the-blank sentence editing: each template's \`sentence\` (templates.ts) renders as
+ * real, always-visible inputs embedded in the text, never a popup \`prompt()\`.
+ *
+ * ONE unified list, not a separate "pick a template" section: every template that makes sense to
+ * have just one of (\`repeatable: false\` — a wake-up alarm, a meetings/email digest) always shows
+ * exactly one slot, real once it has a task, a dashed "not set up yet" draft otherwise. Every
+ * template you'd plausibly want several of (\`repeatable: true\` — reminders, saved searches) shows
+ * all its real tasks plus one trailing draft slot to add another. A draft has no id yet; editing any
+ * of its blanks creates the real task on the spot.
  *
  * Real DOM text content is kept in normal case ("Your Tasks", "Remind me about", ...) even though it
- * DISPLAYS shouty-uppercase — that's CSS `text-transform: uppercase`, not the actual text — so this
+ * DISPLAYS shouty-uppercase — that's CSS \`text-transform: uppercase\`, not the actual text — so this
  * stays meaningful (and matches what the existing tests already assert on).
  */
 const PAGE_HTML = `<!doctype html>
@@ -193,15 +199,15 @@ const PAGE_HTML = `<!doctype html>
 <title>Your Tasks</title>
 <style>
   :root {
-    --bg: #0b0b12;
-    --panel: #15151f;
-    --ink: #f5f5f7;
+    --bg: #faf3e6;
+    --panel: #fffdf7;
+    --ink: #16151a;
     --pink: #ff2fd0;
-    --cyan: #00f0ff;
-    --lime: #ccff00;
-    --yellow: #ffe600;
-    --orange: #ff8a00;
-    --muted: #9a9aad;
+    --cyan: #00b8c4;
+    --lime: #8fb800;
+    --yellow: #e6a600;
+    --orange: #ff6a1a;
+    --muted: #6b6a72;
   }
   * { box-sizing: border-box; }
   body {
@@ -221,16 +227,16 @@ const PAGE_HTML = `<!doctype html>
     margin: 10px 0 2px;
     text-shadow: 3px 3px 0 var(--pink);
   }
-  .sub { text-align: center; color: var(--cyan); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 18px; }
+  .sub { text-align: center; color: var(--pink); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 18px; }
 
   .panel { background: var(--panel); border: 3px solid #000; border-radius: 6px; padding: 14px; margin-bottom: 14px; box-shadow: 5px 5px 0 #000; }
   .panel-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
 
   input[type=text], input[type=time] {
-    background: #000; border: 2px solid var(--cyan); color: var(--yellow); font: inherit; font-weight: 800;
+    background: var(--bg); border: 2px solid var(--ink); color: var(--ink); font: inherit; font-weight: 800;
     padding: 4px 8px; border-radius: 4px; outline: none;
   }
-  input[type=text]:focus, input[type=time]:focus { border-color: var(--pink); }
+  input[type=text]:focus, input[type=time]:focus { border-color: var(--pink); background: #fff; }
   #contactId { width: 100%; }
 
   .task-card.c0 { border-color: var(--pink); box-shadow: 5px 5px 0 var(--pink); }
@@ -238,7 +244,9 @@ const PAGE_HTML = `<!doctype html>
   .task-card.c2 { border-color: var(--lime); box-shadow: 5px 5px 0 var(--lime); }
   .task-card.c3 { border-color: var(--yellow); box-shadow: 5px 5px 0 var(--yellow); }
   .task-card.c4 { border-color: var(--orange); box-shadow: 5px 5px 0 var(--orange); }
+  .task-card.draft { border-style: dashed; box-shadow: 5px 5px 0 rgba(0,0,0,.15); opacity: .9; }
   .task-icon { font-size: 20px; margin-bottom: 4px; }
+  .draft-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
 
   .sentence { font-size: 15px; font-weight: 700; line-height: 2.2; }
   .sentence input[type=text] { min-width: 90px; width: auto; }
@@ -256,17 +264,15 @@ const PAGE_HTML = `<!doctype html>
     transition: transform .06s ease, box-shadow .06s ease; background: var(--lime); color: #000;
   }
   .btn3d:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
-  .btn3d.copy { background: var(--cyan); }
-  .btn3d.del { background: var(--pink); }
-  .btn3d.template { background: var(--yellow); width: 100%; text-align: left; }
-  .btn3d.oauth { width: 100%; text-align: center; }
+  .btn3d.copy { background: var(--cyan); color: #fff; }
+  .btn3d.del { background: var(--pink); color: #fff; }
+  .btn3d.oauth { width: 100%; text-align: center; background: var(--yellow); }
 
-  .toggle { position: relative; width: 56px; height: 30px; border: 3px solid #000; border-radius: 20px; background: #333; cursor: pointer; box-shadow: 3px 3px 0 #000; flex-shrink: 0; }
+  .toggle { position: relative; width: 56px; height: 30px; border: 3px solid #000; border-radius: 20px; background: #ddd; cursor: pointer; box-shadow: 3px 3px 0 #000; flex-shrink: 0; }
   .toggle.on { background: var(--lime); }
   .toggle .knob { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #000; border-radius: 50%; transition: left .1s ease; }
   .toggle.on .knob { left: 28px; }
 
-  .templates-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
   .oauth-done { font-weight: 900; text-transform: uppercase; color: var(--lime); text-align: center; padding: 4px 0; }
 </style>
 </head>
@@ -282,11 +288,6 @@ const PAGE_HTML = `<!doctype html>
   <div class="panel" id="oauthCard" style="display:none;"></div>
 
   <div id="taskList"></div>
-
-  <div class="panel">
-    <div class="panel-label">Start from a template</div>
-    <div class="templates-grid" id="templateList"></div>
-  </div>
 
 <script>
 const ACCENTS = ["c0", "c1", "c2", "c3", "c4"];
@@ -306,11 +307,9 @@ async function api(path, opts) {
   return res.status === 200 || res.status === 201 ? res.json() : undefined;
 }
 
-function templateFor(id) { return state.templates.find((t) => t.id === id); }
-
 /** Renders a template's \`sentence\` ("Remind me about {text} at {time}") as real text nodes
  * interleaved with real <input>s at each {key} — the fill-in-the-blank, always-editable line. */
-function buildSentence(template, task, onFieldChange) {
+function buildSentence(template, placeholders, onFieldChange) {
   const wrap = document.createElement("div");
   wrap.className = "sentence";
   for (const part of template.sentence.split(/(\\{\\w+\\})/g)) {
@@ -320,94 +319,12 @@ function buildSentence(template, task, onFieldChange) {
     const field = template.placeholders.find((p) => p.key === key);
     const input = document.createElement("input");
     input.type = field && field.kind === "time" ? "time" : "text";
-    input.value = task.placeholders[key] || "";
+    input.value = placeholders[key] || "";
     input.placeholder = field ? field.label : key;
     input.onchange = () => onFieldChange(key, input.value);
     wrap.appendChild(input);
   }
   return wrap;
-}
-
-function renderTasks() {
-  const list = document.getElementById("taskList");
-  list.innerHTML = "";
-  const active = state.tasks.filter((t) => t.status === "on").length;
-  document.getElementById("summary").textContent = state.tasks.length + " task(s) \\u00b7 " + active + " active";
-
-  state.tasks.forEach((task, i) => {
-    const template = templateFor(task.templateId);
-    if (!template) return;
-
-    const card = document.createElement("div");
-    card.className = "panel task-card " + ACCENTS[i % ACCENTS.length];
-
-    const icon = document.createElement("div");
-    icon.className = "task-icon";
-    icon.textContent = template.icon;
-    card.appendChild(icon);
-
-    card.appendChild(buildSentence(template, task, async (key, value) => {
-      const placeholders = { ...task.placeholders, [key]: value };
-      const patch = { placeholders };
-      if (key === "time") patch.scheduleValue = value;
-      await api("/api/tasks/" + task.id, { method: "PATCH", body: JSON.stringify(patch) });
-      await refresh();
-    }));
-
-    const meta = document.createElement("div");
-    meta.className = "task-meta";
-    meta.textContent = task.contactId + (task.scheduleKind === "once" ? " \\u00b7 once" : " \\u00b7 daily");
-    card.appendChild(meta);
-
-    if (template.requiresGoogle) {
-      const warn = document.createElement("div");
-      warn.className = "warn";
-      warn.textContent = "\\u26a0 Needs Google connected";
-      card.appendChild(warn);
-    }
-
-    const actions = document.createElement("div");
-    actions.className = "actions";
-
-    const left = document.createElement("div");
-    left.className = "actions-left";
-
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "btn3d copy";
-    copyBtn.textContent = "Copy";
-    copyBtn.onclick = async () => {
-      await api("/api/tasks", {
-        method: "POST",
-        body: JSON.stringify({ contactId: task.contactId, templateId: task.templateId, placeholders: task.placeholders, scheduleKind: task.scheduleKind, scheduleValue: task.scheduleValue }),
-      });
-      await refresh();
-    };
-    left.appendChild(copyBtn);
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "btn3d del";
-    delBtn.textContent = "Delete";
-    delBtn.onclick = async () => {
-      await api("/api/tasks/" + task.id, { method: "DELETE" });
-      await refresh();
-    };
-    left.appendChild(delBtn);
-    actions.appendChild(left);
-
-    const toggle = document.createElement("div");
-    toggle.className = "toggle" + (task.status === "on" ? " on" : "");
-    const knob = document.createElement("div");
-    knob.className = "knob";
-    toggle.appendChild(knob);
-    toggle.onclick = async () => {
-      await api("/api/tasks/" + task.id, { method: "PATCH", body: JSON.stringify({ status: task.status === "on" ? "off" : "on" }) });
-      await refresh();
-    };
-    actions.appendChild(toggle);
-
-    card.appendChild(actions);
-    list.appendChild(card);
-  });
 }
 
 function defaultPlaceholders(template) {
@@ -416,35 +333,142 @@ function defaultPlaceholders(template) {
   return p;
 }
 
-function renderTemplates() {
-  const grid = document.getElementById("templateList");
-  grid.innerHTML = "";
-  for (const template of state.templates) {
-    const btn = document.createElement("button");
-    btn.className = "btn3d template";
-    btn.textContent = template.icon + "  " + template.label;
-    btn.onclick = () => addFromTemplate(template);
-    grid.appendChild(btn);
+/** A real, already-created task — full sentence, meta, warning badge, copy/delete, on/off toggle. */
+function buildTaskCard(template, task, accentClass) {
+  const card = document.createElement("div");
+  card.className = "panel task-card " + accentClass;
+
+  const icon = document.createElement("div");
+  icon.className = "task-icon";
+  icon.textContent = template.icon;
+  card.appendChild(icon);
+
+  card.appendChild(buildSentence(template, task.placeholders, async (key, value) => {
+    const placeholders = { ...task.placeholders, [key]: value };
+    const patch = { placeholders };
+    if (key === "time") patch.scheduleValue = value;
+    await api("/api/tasks/" + task.id, { method: "PATCH", body: JSON.stringify(patch) });
+    await refresh();
+  }));
+
+  const meta = document.createElement("div");
+  meta.className = "task-meta";
+  meta.textContent = task.contactId + (task.scheduleKind === "once" ? " \\u00b7 once" : " \\u00b7 daily");
+  card.appendChild(meta);
+
+  if (template.requiresGoogle) {
+    const warn = document.createElement("div");
+    warn.className = "warn";
+    warn.textContent = "\\u26a0 Needs Google connected";
+    card.appendChild(warn);
   }
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+
+  const left = document.createElement("div");
+  left.className = "actions-left";
+
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "btn3d copy";
+  copyBtn.textContent = "Copy";
+  copyBtn.onclick = async () => {
+    await api("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({ contactId: task.contactId, templateId: task.templateId, placeholders: task.placeholders, scheduleKind: task.scheduleKind, scheduleValue: task.scheduleValue }),
+    });
+    await refresh();
+  };
+  left.appendChild(copyBtn);
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "btn3d del";
+  delBtn.textContent = "Delete";
+  delBtn.onclick = async () => {
+    await api("/api/tasks/" + task.id, { method: "DELETE" });
+    await refresh();
+  };
+  left.appendChild(delBtn);
+  actions.appendChild(left);
+
+  const toggle = document.createElement("div");
+  toggle.className = "toggle" + (task.status === "on" ? " on" : "");
+  const knob = document.createElement("div");
+  knob.className = "knob";
+  toggle.appendChild(knob);
+  toggle.onclick = async () => {
+    await api("/api/tasks/" + task.id, { method: "PATCH", body: JSON.stringify({ status: task.status === "on" ? "off" : "on" }) });
+    await refresh();
+  };
+  actions.appendChild(toggle);
+
+  card.appendChild(actions);
+  return card;
 }
 
-/** Tapping a template creates the task immediately with sensible defaults (an empty text blank,
- * "09:00" for time) — it appears as a real card with its blanks ready to fill in inline, instead of
- * a popup asking for values before the card even exists. */
-async function addFromTemplate(template) {
-  const contactId = document.getElementById("contactId").value.trim();
-  if (!contactId) { alert("Enter your WhatsApp number first."); return; }
+/** Not created yet — dashed outline, blanks pre-filled with sensible defaults, no toggle/copy/delete
+ * (none of those make sense before it exists). Editing any blank creates the real task immediately. */
+function buildDraftCard(template) {
+  const card = document.createElement("div");
+  card.className = "panel task-card draft";
+
+  const label = document.createElement("div");
+  label.className = "draft-label";
+  label.textContent = "+ Add \\u2014 not set up yet";
+  card.appendChild(label);
+
+  const icon = document.createElement("div");
+  icon.className = "task-icon";
+  icon.textContent = template.icon;
+  card.appendChild(icon);
+
   const placeholders = defaultPlaceholders(template);
-  await api("/api/tasks", {
-    method: "POST",
-    body: JSON.stringify({ contactId, templateId: template.id, placeholders, scheduleKind: template.defaultScheduleKind, scheduleValue: placeholders.time || "09:00" }),
-  });
-  await refresh();
+  card.appendChild(buildSentence(template, placeholders, async (key, value) => {
+    const contactId = document.getElementById("contactId").value.trim();
+    if (!contactId) { alert("Enter your WhatsApp number first."); return; }
+    const finalPlaceholders = { ...placeholders, [key]: value };
+    await api("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({ contactId, templateId: template.id, placeholders: finalPlaceholders, scheduleKind: template.defaultScheduleKind, scheduleValue: finalPlaceholders.time || "09:00" }),
+    });
+    await refresh();
+  }));
+
+  if (template.requiresGoogle) {
+    const warn = document.createElement("div");
+    warn.className = "warn";
+    warn.textContent = "\\u26a0 Needs Google connected";
+    card.appendChild(warn);
+  }
+
+  return card;
+}
+
+/** One unified list: for each template, its real tasks (in creation order), then — if repeatable, or
+ * if not repeatable and none exists yet — exactly one trailing draft slot. No separate "pick a
+ * template" section anywhere else on the page. */
+function renderList() {
+  const list = document.getElementById("taskList");
+  list.innerHTML = "";
+  const active = state.tasks.filter((t) => t.status === "on").length;
+  document.getElementById("summary").textContent = state.tasks.length + " task(s) \\u00b7 " + active + " active";
+
+  let accentIndex = 0;
+  for (const template of state.templates) {
+    const existing = state.tasks.filter((t) => t.templateId === template.id);
+    for (const task of existing) {
+      list.appendChild(buildTaskCard(template, task, ACCENTS[accentIndex % ACCENTS.length]));
+      accentIndex++;
+    }
+    if (template.repeatable || existing.length === 0) {
+      list.appendChild(buildDraftCard(template));
+    }
+  }
 }
 
 async function refresh() {
   state.tasks = await api("/api/tasks");
-  renderTasks();
+  renderList();
 }
 
 async function refreshOauth() {
@@ -460,7 +484,7 @@ async function refreshOauth() {
     card.appendChild(done);
   } else {
     const btn = document.createElement("button");
-    btn.className = "btn3d template oauth";
+    btn.className = "btn3d oauth";
     btn.textContent = "Connect " + status.label;
     btn.onclick = () => { window.location.href = status.authUrl; };
     card.appendChild(btn);
@@ -470,7 +494,6 @@ async function refreshOauth() {
 (async function init() {
   loadContactId();
   state.templates = await api("/api/templates");
-  renderTemplates();
   await refresh();
   await refreshOauth();
 })();

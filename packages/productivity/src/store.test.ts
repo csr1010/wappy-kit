@@ -90,12 +90,18 @@ describe("TASK_TEMPLATES", () => {
     for (const t of TASK_TEMPLATES) {
       expect(t.id).toBeTruthy();
       expect(t.label).toBeTruthy();
+      expect(typeof t.repeatable).toBe("boolean");
       expect(Array.isArray(t.placeholders)).toBe(true);
       for (const p of t.placeholders) {
         expect(p.key).toBeTruthy();
         expect(["text", "time"]).toContain(p.kind);
       }
     }
+  });
+
+  test("reminder and find_emails are repeatable (you'd want several); wake_me_up/daily_meetings/summarize_emails are not (one is what makes sense)", () => {
+    const repeatable = TASK_TEMPLATES.filter((t) => t.repeatable).map((t) => t.id);
+    expect(repeatable.sort()).toEqual(["find_emails", "reminder"]);
   });
 
   test("every template's sentence contains a {key} token for each of its placeholders, and no others", () => {

@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/connector-google",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Bring-your-own Google Cloud OAuth: real Calendar + Gmail digests for @wappy_ai/productivity, connected from its own local task UI, not a CLI command.",
   "keywords": [
     "whatsapp",

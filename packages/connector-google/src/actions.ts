@@ -64,7 +64,7 @@ const summarizeEmails = (opts: CreateGoogleActionsOptions): Action => async (tas
   if (emails.length === 0) return { ok: true, message: "No unread emails." };
 
   const lines = emails.map((e, i) => `${i + 1}. ${e.subject} — from ${e.from}\n   ${e.snippet}`);
-  const message = ["Your recent emails:", ...lines].join("\n");
+  const message = ["Your unread emails:", ...lines].join("\n");
 
   if (opts.knowledge) await opts.knowledge.ingest(`email-digest:${task.contactId}`, message);
   return { ok: true, message };

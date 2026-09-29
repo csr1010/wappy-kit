@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/productivity",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A proactive productivity agent for WhatsApp - scheduled reminders, wake-ups, and pluggable digests, backed by a local SQLite file and a local task-management UI.",
   "keywords": [
     "whatsapp",
