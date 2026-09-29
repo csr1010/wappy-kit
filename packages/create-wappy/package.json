@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/create-agent",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "npm create @wappy_ai/agent — scaffold a real WhatsApp AI agent (your own model, your own number, your own data) in one command.",
   "keywords": [
     "whatsapp",
