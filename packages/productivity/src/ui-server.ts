@@ -363,6 +363,15 @@ function buildTaskCard(template, task, accentClass) {
     card.appendChild(warn);
   }
 
+  // Runs fine but didn't reach the contact (24h WhatsApp window closed, no Message Template set up
+  // yet) — an honest, expected state for a trial run, not an error; see WHATSAPP_SETUP.md §5.
+  if (task.lastStatus === "queued") {
+    const warn = document.createElement("div");
+    warn.className = "warn";
+    warn.textContent = "\\u26a0 Last run wasn't delivered \\u2014 text the bot to reopen the chat, or set up a Message Template (optional)";
+    card.appendChild(warn);
+  }
+
   const actions = document.createElement("div");
   actions.className = "actions";
 

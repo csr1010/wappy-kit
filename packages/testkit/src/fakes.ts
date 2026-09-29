@@ -22,6 +22,9 @@ import {
 export interface FakeChannel extends MessageChannel {
   sent: Array<{ to: string; message: SmartMessage }>;
   failNextSend(status: "failed" | "fellBack", reason: string): void;
+  /** Scripts the next send() to come back "queued" — the real outcome when the 24h session window is
+   * closed and no Message Template is configured, distinct from an actual failure. */
+  queueNextSend(reason: string): void;
 }
 
 export function fakeChannel(name = "fake"): FakeChannel {
@@ -55,6 +58,9 @@ export function fakeChannel(name = "fake"): FakeChannel {
     },
     failNextSend(status, reason) {
       scripted.push({ status, reason });
+    },
+    queueNextSend(reason) {
+      scripted.push({ status: "queued", reason });
     },
   };
 }

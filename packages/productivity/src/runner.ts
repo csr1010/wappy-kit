@@ -132,11 +132,32 @@ export function createTaskRunner(opts: CreateTaskRunnerOptions): TaskRunner {
       const result = await runWithRetry(action, task, ctx, opts.retry, opts.clock);
 
       if (result.ok) {
-        await opts.channel.send(task.contactId, { text: result.message });
-        await opts.store.update(task.id, { lastRunAt: now, lastStatus: "success", retryCount: 0 }, now);
-        if (task.scheduleKind === "once") await opts.store.setStatus(task.id, "off", now);
+        const delivery = await opts.channel.send(task.contactId, { text: result.message });
+        // "queued" is a real, ungated outcome — not a bug, not a reason to retry. It means: no
+        // WhatsApp Message Template is configured (or none approved yet) AND the contact hasn't
+        // messaged this bot in the last 24h, so Meta's platform rule leaves nothing to actually send
+        // to. That's expected and fine for someone just trying this out — see WHATSAPP_SETUP.md §5,
+        // an OPTIONAL step, not a prerequisite. What matters is never pretending it was delivered.
+        if (delivery.status === "queued") {
+          // eslint-disable-next-line no-console -- the one place a trial user (no template set up,
+          // running locally) can actually see why a reminder didn't show up on their phone.
+          console.warn(
+            `[productivity] task "${task.title}" (${task.contactId}) ran fine but wasn't delivered: ${delivery.reason ?? "24h session window closed"}. ` +
+              `Text the bot to reopen the window, or see WHATSAPP_SETUP.md §5 to set up a Message Template (optional).`,
+          );
+          await opts.store.update(task.id, { lastRunAt: now, lastStatus: "queued", retryCount: 0 }, now);
+          // Deliberately does NOT flip a `once` task off — it never actually reached the contact, so
+          // it stays `'on'` and gets another honest attempt at its next due check, instead of silently
+          // disabling itself after a delivery that never happened.
+        } else {
+          await opts.store.update(task.id, { lastRunAt: now, lastStatus: "success", retryCount: 0 }, now);
+          if (task.scheduleKind === "once") await opts.store.setStatus(task.id, "off", now);
+        }
       } else {
-        await opts.channel.send(task.contactId, { text: `Your scheduled task "${task.title}" didn't run: ${result.message}` });
+        const delivery = await opts.channel.send(task.contactId, { text: `Your scheduled task "${task.title}" didn't run: ${result.message}` });
+        // Best-effort: if even the failure notice comes back "queued", there's nothing more to do —
+        // don't loop trying to announce a queued announcement.
+        void delivery;
         await opts.store.update(task.id, { lastRunAt: now, lastStatus: "failed", retryCount: (opts.retry?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS) - 1 }, now);
       }
     }

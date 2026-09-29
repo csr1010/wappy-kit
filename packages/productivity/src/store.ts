@@ -3,7 +3,11 @@ import { createClient, type Client } from "@libsql/client";
 import type { ScheduleKind, TemplateId } from "./templates.js";
 
 export type TaskStatus = "on" | "off";
-export type TaskLastStatus = "success" | "failed";
+/** "queued" is distinct from "failed": the action ran fine and produced a real message, but WhatsApp's
+ * 24h session-window rule means it was never actually sent (no open conversation, no approved Message
+ * Template configured) — not an error to retry, just an honest "it didn't reach them" outcome. See
+ * runner.ts's delivery-status handling. */
+export type TaskLastStatus = "success" | "failed" | "queued";
 
 export interface Task {
   id: string;

@@ -157,6 +157,71 @@ describe("createTaskRunner — retry and failure notification", () => {
   });
 });
 
+describe("createTaskRunner — delivery status (queued vs. actually sent)", () => {
+  test("a successful action whose send() comes back 'queued' (24h window closed, no template) records lastStatus:'queued', not 'success'", async () => {
+    const store = freshStore();
+    const clock = fakeClock(atLocalTime(new Date(), 9, 0));
+    const channel = fakeChannel();
+    channel.queueNextSend("24h session window is closed and no fallback template is configured");
+    const succeed: Action = async () => ({ ok: true, message: "reminder: call mom" });
+    const created = await store.create(DAILY, clock.now());
+
+    const runner = createTaskRunner({ store, channel, clock, actions: { reminder: succeed } });
+    await runner.tick();
+
+    const [after] = await store.listByContact(created.contactId);
+    expect(after!.lastStatus).toBe("queued");
+  });
+
+  test("a 'once' task whose delivery comes back 'queued' does NOT flip to 'off' — it never actually reached the contact, so it stays eligible to try again", async () => {
+    const store = freshStore();
+    const clock = fakeClock(2_000);
+    const channel = fakeChannel();
+    channel.queueNextSend("window closed");
+    const succeed: Action = async () => ({ ok: true, message: "wake up!" });
+    const created = await store.create({ ...DAILY, scheduleKind: "once", scheduleValue: new Date(2_000).toISOString() }, clock.now());
+
+    const runner = createTaskRunner({ store, channel, clock, actions: { reminder: succeed } });
+    await runner.tick();
+
+    const [after] = await store.listByContact(created.contactId);
+    expect(after!.status).toBe("on");
+    expect(after!.lastStatus).toBe("queued");
+  });
+
+  test("a queued delivery is logged (not silently swallowed) so a trial user with no template set up can see why nothing arrived", async () => {
+    const store = freshStore();
+    const clock = fakeClock(atLocalTime(new Date(), 9, 0));
+    const channel = fakeChannel();
+    channel.queueNextSend("24h session window is closed and no fallback template is configured");
+    const succeed: Action = async () => ({ ok: true, message: "reminder: call mom" });
+    await store.create(DAILY, clock.now());
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const runner = createTaskRunner({ store, channel, clock, actions: { reminder: succeed } });
+    await runner.tick();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]![0]).toContain("wasn't delivered");
+    warnSpy.mockRestore();
+  });
+
+  test("a normal 'sent' delivery still records lastStatus:'success' and flips a 'once' task off, unchanged from before", async () => {
+    const store = freshStore();
+    const clock = fakeClock(2_000);
+    const channel = fakeChannel();
+    const succeed: Action = async () => ({ ok: true, message: "wake up!" });
+    const created = await store.create({ ...DAILY, scheduleKind: "once", scheduleValue: new Date(2_000).toISOString() }, clock.now());
+
+    const runner = createTaskRunner({ store, channel, clock, actions: { reminder: succeed } });
+    await runner.tick();
+
+    const [after] = await store.listByContact(created.contactId);
+    expect(after!.status).toBe("off");
+    expect(after!.lastStatus).toBe("success");
+  });
+});
+
 describe("createTaskRunner — start()/stop()", () => {
   test("start() drives tick() on the injected clock's timer; stop() cancels it", async () => {
     const store = freshStore();
