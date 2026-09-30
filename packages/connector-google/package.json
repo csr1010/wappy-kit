@@ -19,6 +19,9 @@
   },
   "bugs": "https://github.com/csr1010/wappy-kit/issues",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "publishConfig": {
     "access": "public"
   },

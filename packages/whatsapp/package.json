@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/whatsapp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A real WhatsApp Cloud API integration: webhook parsing, message rendering, delivery retries, and the 24-hour session-window rule, done correctly.",
   "keywords": [
     "whatsapp",
@@ -18,6 +18,9 @@
   },
   "bugs": "https://github.com/csr1010/wappy-kit/issues",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "publishConfig": {
     "access": "public"
   },

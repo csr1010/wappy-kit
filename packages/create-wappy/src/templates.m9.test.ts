@@ -83,6 +83,10 @@ describe("renderProject — golden path (openai)", () => {
     expect(pkg.dependencies["@wappy_ai/create-agent"]).toBe("0.1.0"); // provides the `wappy` bin `npm run dev` needs
     expect(pkg.dependencies["@ai-sdk/openai"]).toBeDefined();
     expect(pkg.dependencies["@wappy_ai/tools-openapi"]).toBeUndefined();
+    // The `ai` package (createVercelModel's real dependency) requires Node >=22, not the commonly
+    // assumed >=20 — confirmed against its own package.json. Declared so `npm install` warns on an
+    // incompatible Node version instead of a confusing runtime failure later.
+    expect(pkg.engines).toEqual({ node: ">=22" });
     expect(pkg.dependencies["@libsql/client"]).toBeUndefined();
   });
 

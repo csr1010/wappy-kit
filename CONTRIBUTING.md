@@ -21,8 +21,8 @@ pnpm -w -r build
 pnpm -w -r test
 ```
 
-Requires Node.js 20+ and pnpm (see the `packageManager` field in `package.json` for the pinned
-version).
+Requires Node.js 22+ (the Vercel AI SDK, a direct dependency, requires it) and pnpm (see the
+`packageManager` field in `package.json` for the pinned version).
 
 ## Ground rules
 

@@ -6,7 +6,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 22, 24]
+        node: [22, 24]
     steps:
       # Full history + tags: the gate diffs old tests/fixtures against the previous m<n>-done tag (B2).
       - uses: actions/checkout@v4

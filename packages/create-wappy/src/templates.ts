@@ -290,6 +290,11 @@ function renderPackageJson(opts: RenderProjectOptions): string {
     version: "0.1.0",
     private: true,
     type: "module",
+    // The `ai` package (Vercel AI SDK — createVercelModel's real dependency, pulled in by every
+    // generated project) requires Node >=22, not the commonly-assumed >=20 — confirmed against its
+    // own package.json, not guessed. Declared here so `npm install` actually warns on an
+    // incompatible Node version instead of failing confusingly later at runtime.
+    engines: { node: ">=22" },
     // No build step exists yet — index.ts is run directly via wappy dev's dynamic import (dev.ts),
     // never compiled to index.js. `start: "node index.js"` was a stale placeholder that fails
     // MODULE_NOT_FOUND on any real install (caught by hand-testing a real npm install through a

@@ -6,7 +6,7 @@ code. If you're a coding agent working in this repo, start here before touching 
 
 ## Tech stack
 
-- **Language:** TypeScript, Node.js 20+. Distributed via npm.
+- **Language:** TypeScript, Node.js 22+ (the Vercel AI SDK requires it). Distributed via npm.
 - **Package manager / monorepo:** pnpm workspaces + Turborepo. `pnpm -w -r build/test` runs every
   package; `pnpm gate <n>` runs the cumulative test/lint/typecheck/coverage gate (see
   `scripts/gate.mjs`).

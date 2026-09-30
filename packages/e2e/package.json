@@ -1,6 +1,9 @@
 {
   "name": "@wappy_ai/e2e",
   "version": "0.0.0",
+  "engines": {
+    "node": ">=22"
+  },
   "private": true,
   "type": "module",
   "main": "dist/harness.js",

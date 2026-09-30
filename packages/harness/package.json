@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/harness",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The agent itself: routing, memory, session profile, local RAG, and reply-format reasoning for a WhatsApp AI agent. Bring your own model.",
   "keywords": [
     "whatsapp",
@@ -20,6 +20,9 @@
   },
   "bugs": "https://github.com/csr1010/wappy-kit/issues",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "publishConfig": {
     "access": "public"
   },

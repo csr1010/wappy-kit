@@ -148,7 +148,7 @@ required.
 
 ## Requirements
 
-- **Node.js 20+**
+- **Node.js 22+** (the Vercel AI SDK, which every generated project depends on directly, requires it)
 - **A WhatsApp Cloud API app.** Free, via [Meta's developer portal](https://developers.facebook.com/apps). You'll need a phone number, an access token, and an app secret. The generated project's own README walks you through every field.
 - **A model API key.** OpenAI, Anthropic, or Gemini. Or skip it entirely and run fully offline against local Ollama.
 

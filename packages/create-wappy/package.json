@@ -1,7 +1,7 @@
 {
   "name": "@wappy_ai/create-agent",
   "version": "0.3.1",
-  "description": "npm create @wappy_ai/agent — scaffold a real WhatsApp AI agent (your own model, your own number, your own data) in one command.",
+  "description": "npm create @wappy_ai/agent \u2014 scaffold a real WhatsApp AI agent (your own model, your own number, your own data) in one command.",
   "keywords": [
     "whatsapp",
     "whatsapp-bot",
@@ -19,6 +19,9 @@
   },
   "bugs": "https://github.com/csr1010/wappy-kit/issues",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "publishConfig": {
     "access": "public"
   },
