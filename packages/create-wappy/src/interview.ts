@@ -34,8 +34,9 @@ export interface ModelAnswer {
   provider: ModelProvider;
 }
 
-/** M-productivity: whether to wire in `@wappy_ai/productivity` (scheduled reminders/wake-ups now,
- * Google Calendar/Gmail digests once connected — see ARCHITECTURE.md). A deliberate, direct
+/** M-productivity: whether to wire in `@wappy_ai/productivity` — a real Gmail/Calendar assistant
+ * that answers any question in plain language via read-only, parameterized search tools, once you
+ * connect Google (see ARCHITECTURE.md). No fixed command list, no scheduling. A deliberate, direct
  * reversal of the earlier "model-only" simplification: that removal was because there was nothing
  * real behind a second step at the time; there is now. */
 export interface ProductivityAnswer {
@@ -69,7 +70,7 @@ const QUESTIONS: Record<InterviewStepId, InterviewQuestionMeta> = {
   },
   productivity: {
     step: "productivity",
-    prompt: "Add a productivity agent (scheduled reminders, wake-ups, and — once you connect Google — meeting/email digests)?",
+    prompt: "Add a productivity agent (reads your Gmail/Calendar once you connect Google, answers any question about them in plain language)?",
     choices: [
       { value: "no", label: "No" },
       { value: "yes", label: "Yes" },

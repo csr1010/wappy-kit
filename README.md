@@ -28,10 +28,15 @@ $ npm create @wappy_ai/agent
 │  ○ OpenAI
 │  ○ Gemini
 │  ○ Local Ollama
+│
+◆  Add a productivity agent (reads your Gmail/Calendar once you connect Google, answers
+│  any question about them in plain language)?
+│  ○ No
+│  ● Yes
 └
 ◇  Interview complete — generating your project...
 
-Done — 6 file(s) written in ./my-agent.
+Done — 7 file(s) written in ./my-agent.
 See README.md for next steps. Full WhatsApp connection walkthrough in WHATSAPP_SETUP.md.
 ```
 
@@ -70,6 +75,27 @@ not this project. Here's what actually goes wrong with those, and what happens h
 
 Tested by hand against a real WhatsApp number, not just automated checks. If it's in here, it works.
 
+## A real sample tool: Gmail/Calendar assistant
+
+Say "yes" to the second interview question and you get a working example of the tool-calling
+harness already used for everything else here, not a toy demo. Once you connect your own Google
+account (one click, on a local page the generated project serves), you can text the bot **anything**
+about your Gmail or Calendar in plain language, there's no fixed command list to learn:
+
+- "What's on my calendar today?"
+- "Find emails about the invoice from last week"
+- "Summarize my unread mail by topic from the last 2 days"
+
+Under the hood it's two generic, parameterized, read-only tools (`search_gmail`, `search_calendar`)
+using Gmail's and Calendar's own real query syntax. The model constructs the actual query itself
+from whatever you asked, no hand-built filtering logic, no MCP server, no extra framework, just
+`@wappy_ai/core`'s own `Tool` interface and the multi-step tool-calling loop `@wappy_ai/harness`'s
+model layer already runs. It only reads, never sends an email or creates/edits/deletes an event,
+that's real open-source headroom if you want to build it.
+
+Not connected yet? A matched question just replies honestly that it needs "Connect Google" tapped
+first, never a fabricated answer.
+
 ## Packages
 
 | Package | What it is |
@@ -77,9 +103,12 @@ Tested by hand against a real WhatsApp number, not just automated checks. If it'
 | `@wappy_ai/core` | The shared contracts everything else is built on. |
 | `@wappy_ai/harness` | The agent itself: how it thinks, remembers, and decides what to do. |
 | `@wappy_ai/whatsapp` | Talking to WhatsApp correctly: message formatting, retries, a real webhook server. |
-| `@wappy_ai/create-agent` | The installer (`npm create @wappy_ai/agent`). One question, then a working project. |
+| `@wappy_ai/create-agent` | The installer (`npm create @wappy_ai/agent`). Two questions, then a working project. |
+| `@wappy_ai/productivity` *(optional)* | The Gmail/Calendar assistant above — generic, read-only, parameterized search tools plus the local "Connect Google" page. |
+| `@wappy_ai/connector-google` *(optional)* | Bring-your-own Google OAuth + the real Gmail/Calendar API calls behind `@wappy_ai/productivity`'s tools. |
 
-Every install pulls in exactly these four. Nothing extra, nothing tied to a business or use case.
+Every install pulls in the first four. The last two are opt-in, only added when you answer "yes"
+to the productivity question, nothing extra otherwise.
 
 ## Why this exists
 
