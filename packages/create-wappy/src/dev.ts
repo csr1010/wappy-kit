@@ -149,7 +149,7 @@ export async function runDev(opts: RunDevOptions): Promise<RunDevResult> {
       project.taskUiServer!.once("error", reject);
       project.taskUiServer!.listen(taskUiPort, () => resolvePromise());
     });
-    opts.print(`Task list: http://localhost:${taskUiPort}/`);
+    opts.print(`Connect Google: http://localhost:${taskUiPort}/`);
   }
 
   const close = async () => {
