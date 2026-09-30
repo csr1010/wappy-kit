@@ -78,6 +78,18 @@ describe("createTaskRouter", () => {
     expect(result).toEqual({ handled: false });
   });
 
+  test("the contact's exact live wording reaches the compose step, not just the task's fixed instructions", async () => {
+    const store = freshStore();
+    const created = await store.create({ contactId: "+1", templateId: "summarize_emails", title: "Summarize my unread emails from anyone", placeholders: { from: "" } }, 1000);
+    const model = mockModel([{ structured: { taskId: created.id, confidence: 0.9 } }, { text: "Grouped by topic: ..." }]);
+    const gmail = async () => "1. Invoice due — from billing@x.com\n2. Team offsite — from hr@x.com";
+    const router = createTaskRouter({ store, model, connectors: { gmail } });
+
+    await router.maybeHandle(inbound("summarize my emails by topic in the last 2 days", "+1"));
+
+    expect(model.calls[1]!.prompt).toContain("summarize my emails by topic in the last 2 days");
+  });
+
   test("a gmail-templated task with no gmail connector configured still composes an honest 'not connected' reply", async () => {
     const store = freshStore();
     const created = await store.create({ contactId: "+1", templateId: "summarize_emails", title: "Summarize my unread emails from anyone", placeholders: {} }, 1000);

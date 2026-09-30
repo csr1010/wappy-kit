@@ -97,8 +97,25 @@ export function createTaskRouter(opts: CreateTaskRouterOptions): TaskRouter {
       const context = await fetchContext(template.connector, opts.connectors);
 
       try {
+        // The task's fixed instructions set the baseline (what it always does); the contact's actual
+        // live wording rides alongside it so extra detail they typed just now — "by topic," "last 2
+        // days," anything not covered by the one saved placeholder — gets a real shot at being
+        // honored, instead of being silently dropped the moment a match is found. It's still bounded
+        // by whatever `context` was actually fetched (a fixed default window/count, not re-queried
+        // per request) — told explicitly to say so rather than pretend the data supports more than
+        // it does.
         const composed = await opts.model.generate({
-          prompt: [instructions, "", "Data:", context, "", "Reply as a short WhatsApp message — plain text, no markdown headers."].join("\n"),
+          prompt: [
+            instructions,
+            "",
+            `The contact's exact message just now: "${text}"`,
+            "If it asks for something more specific than the instructions above (a topic grouping, a date range, a particular sender), honor it as far as the data below actually supports — and say plainly if the data doesn't cover what they asked, rather than guessing.",
+            "",
+            "Data:",
+            context,
+            "",
+            "Reply as a short WhatsApp message — plain text, no markdown headers.",
+          ].join("\n"),
         });
         const reply = composed.text?.trim();
         if (!reply) return NO_MATCH;

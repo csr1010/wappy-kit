@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/productivity",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A reactive productivity agent for WhatsApp - saved Gmail/Calendar tasks matched against the live chat thread, no cron, no WhatsApp Message Templates required, backed by a local SQLite file and a local task-management UI.",
   "keywords": [
     "whatsapp",
