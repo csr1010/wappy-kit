@@ -18,14 +18,17 @@ interface CalendarApiResponse {
   error?: { message?: string };
 }
 
-/** `dayStart`/`dayEnd` are epoch ms — the caller decides "today" vs "tomorrow" (local time), this
- * function just fetches whatever range it's given. */
-export async function fetchEvents(accessToken: string, dayStart: number, dayEnd: number, fetchImpl: FetchImpl = fetch): Promise<CalendarEvent[]> {
+/** `dayStart`/`dayEnd` are epoch ms — the caller decides the actual range, this function just
+ * fetches whatever it's given. `query` (optional) is passed straight through as Calendar API's own
+ * free-text `q` search param (title/description/location/attendees) — delegating filtering to
+ * Google's own search, not a client-side re-implementation of it. */
+export async function fetchEvents(accessToken: string, dayStart: number, dayEnd: number, query?: string, fetchImpl: FetchImpl = fetch): Promise<CalendarEvent[]> {
   const url = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
   url.searchParams.set("timeMin", new Date(dayStart).toISOString());
   url.searchParams.set("timeMax", new Date(dayEnd).toISOString());
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
+  if (query) url.searchParams.set("q", query);
 
   const res = await fetchImpl(url.toString(), { headers: { authorization: `Bearer ${accessToken}` } });
   const json = (await res.json()) as CalendarApiResponse;

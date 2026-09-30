@@ -1,26 +1,18 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { Clock } from "@wappy_ai/core";
-import { TASK_TEMPLATES, templateById, type TemplateId } from "./templates.js";
-import type { NewTask, TaskStore } from "./store.js";
 
 /**
- * The local task-management page — a single static, mobile-friendly HTML+vanilla-JS page plus a
- * small JSON API, served over plain `node:http` (matching `@wappy_ai/whatsapp`'s
- * `webhook-server.ts` convention: no Express, no new heavy dependency). A single-operator admin
- * page, not a per-contact login flow (see `store.ts`'s `listAll()`) — shows every task across every
- * contact on one page, which is the right shape for this project's current single-operator scope.
- *
- * v2: no scheduling fields anywhere here (`store.ts` dropped them) — a task is created or deleted,
- * nothing to toggle on/off, no run history to show. It's matched reactively by `router.ts` when the
- * contact texts the bot; this page is purely for authoring the filter placeholder and connecting
- * Google, not for watching anything run.
+ * v3 redesign — the local "connect Google" page. Everything task-related (the 4 fixed templates, the
+ * per-contact task store, the inline fill-in-the-blank sentence UI) is gone: `assistant.ts`'s
+ * `createGoogleAssistant` answers ANY Gmail/Calendar question reactively, no saved task required, so
+ * there's nothing left to author or list here. This page's only job now is the one real manual step
+ * that can't be automated away — connecting your own Google account — served over plain `node:http`
+ * (matching `@wappy_ai/whatsapp`'s `webhook-server.ts` convention: no Express, no new dependency).
  */
 
 /**
  * A generic "connect a third-party account from this page" plug-in point — deliberately NOT named
- * or shaped after Google specifically, so this package stays domain-agnostic (it doesn't know what
- * Google or any vendor is, matching every other extension point here). A connector package (e.g.
- * `@wappy_ai/connector-google`) builds a real implementation; a generated project's `index.ts`
+ * or shaped after Google specifically, so this package stays domain-agnostic. A connector package
+ * (e.g. `@wappy_ai/connector-google`) builds a real implementation; a generated project's `index.ts`
  * (orchestration code, allowed to wire multiple parts together) passes it in here — this file never
  * imports anything connector-specific itself.
  */
@@ -41,9 +33,7 @@ export interface OAuthConnectPlugin {
   handleCallback(url: URL): Promise<boolean>;
 }
 
-export interface CreateTaskUiServerOptions {
-  store: TaskStore;
-  clock: Clock;
+export interface CreateConnectUiServerOptions {
   port?: number;
   oauthConnect?: OAuthConnectPlugin;
 }
@@ -59,28 +49,10 @@ function sendHtml(res: ServerResponse, html: string): void {
   res.end(html);
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
-  const text = Buffer.concat(chunks).toString("utf8");
-  if (!text) return {};
-  return JSON.parse(text);
-}
-
-function isNonEmptyString(v: unknown): v is string {
-  return typeof v === "string" && v.length > 0;
-}
-
-/** Builds a `title` string from a template + its placeholder — same rendering a generated project's
- * own code would use, kept here so tasks created via the API read the same as any other. */
-function renderTitle(templateId: TemplateId, placeholders: Record<string, string>): string {
-  const template = templateById(templateId);
-  const parts = template.placeholders.map((p) => placeholders[p.key]).filter(isNonEmptyString);
-  return parts.length > 0 ? `${template.label} ${parts.join(" ")}` : template.label;
-}
-
-export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
-  const { store, clock, oauthConnect } = opts;
+/** Plain `node:http` server serving the connect page + its small JSON status API + the oauth
+ * plugin's own callback route. */
+export function createConnectUiServer(opts: CreateConnectUiServerOptions): Server {
+  const { oauthConnect } = opts;
 
   return createServer((req, res) => {
     void (async () => {
@@ -89,11 +61,6 @@ export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
       try {
         if (req.method === "GET" && url.pathname === "/") {
           sendHtml(res, PAGE_HTML);
-          return;
-        }
-
-        if (req.method === "GET" && url.pathname === "/api/templates") {
-          sendJson(res, 200, TASK_TEMPLATES);
           return;
         }
 
@@ -120,45 +87,6 @@ export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
           }
         }
 
-        if (req.method === "GET" && url.pathname === "/api/tasks") {
-          sendJson(res, 200, await store.listAll());
-          return;
-        }
-
-        if (req.method === "POST" && url.pathname === "/api/tasks") {
-          const body = (await readJsonBody(req)) as Partial<NewTask>;
-          if (!isNonEmptyString(body.contactId) || !isNonEmptyString(body.templateId)) {
-            sendJson(res, 400, { error: "contactId and templateId are required" });
-            return;
-          }
-          const placeholders = (body.placeholders && typeof body.placeholders === "object" ? body.placeholders : {}) as Record<string, string>;
-          const task = await store.create(
-            { contactId: body.contactId, templateId: body.templateId as TemplateId, title: renderTitle(body.templateId as TemplateId, placeholders), placeholders },
-            clock.now(),
-          );
-          sendJson(res, 201, task);
-          return;
-        }
-
-        const taskIdMatch = /^\/api\/tasks\/([^/]+)$/.exec(url.pathname);
-        if (taskIdMatch) {
-          const id = taskIdMatch[1]!;
-          if (req.method === "PATCH") {
-            const body = (await readJsonBody(req)) as Record<string, unknown>;
-            const patch: Record<string, unknown> = {};
-            if (body.placeholders) patch.placeholders = body.placeholders;
-            if (isNonEmptyString(body.title as string)) patch.title = body.title;
-            await store.update(id, patch, clock.now());
-            sendJson(res, 200, { ok: true });
-            return;
-          }
-          if (req.method === "DELETE") {
-            await store.delete(id);
-            sendJson(res, 200, { ok: true });
-            return;
-          }
-        }
-
         sendJson(res, 404, { error: "not found" });
       } catch (e) {
         sendJson(res, 500, { error: e instanceof Error ? e.message : String(e) });
@@ -169,22 +97,16 @@ export function createTaskUiServer(opts: CreateTaskUiServerOptions): Server {
 
 /**
  * Neobrutalist/neon design on a light (cream/white) canvas — thick black borders, hard offset "3D"
- * shadows that collapse on press, saturated neon accent colors. Inline, fill-in-the-blank sentence
- * editing: each template's \`sentence\` (templates.ts) renders as a real, always-visible input
- * embedded in the text, never a popup \`prompt()\`.
- *
- * v2: ONE unified list, same as before, but no more scheduling — every template shows its real
- * tasks (editable inline, copy/delete) plus, when it makes sense to add another (\`repeatable: true\`,
- * or \`repeatable: false\` with none yet), a dashed draft card with an explicit "+ Add" button — a
- * draft is local-only until that button is tapped, so accepting every default (leaving the one
- * filter blank) is one tap, not an accidental side effect of focusing then blurring a field.
+ * shadows, saturated neon accents — carried over unchanged from the task-list page's own styling.
+ * Content is now just: what this connects, what it can/can't do (read-only, no CRUD — stated plainly
+ * and warmly, with an open-source invitation rather than a bare refusal), and the connect button.
  */
 const PAGE_HTML = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Your Tasks</title>
+<title>Connect Google</title>
 <style>
   :root {
     --bg: #faf3e6;
@@ -218,255 +140,81 @@ const PAGE_HTML = `<!doctype html>
   .sub { text-align: center; color: var(--pink); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 18px; }
 
   .panel { background: var(--panel); border: 3px solid #000; border-radius: 6px; padding: 14px; margin-bottom: 14px; box-shadow: 5px 5px 0 #000; }
+  .panel.c0 { border-color: var(--cyan); box-shadow: 5px 5px 0 var(--cyan); }
+  .panel.c1 { border-color: var(--lime); box-shadow: 5px 5px 0 var(--lime); }
   .panel-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
-
-  input[type=text] {
-    background: var(--bg); border: 2px solid var(--ink); color: var(--ink); font: inherit; font-weight: 800;
-    padding: 4px 8px; border-radius: 4px; outline: none;
-  }
-  input[type=text]:focus { border-color: var(--pink); background: #fff; }
-  #contactId { width: 100%; }
-
-  .task-card.c0 { border-color: var(--pink); box-shadow: 5px 5px 0 var(--pink); }
-  .task-card.c1 { border-color: var(--cyan); box-shadow: 5px 5px 0 var(--cyan); }
-  .task-card.c2 { border-color: var(--lime); box-shadow: 5px 5px 0 var(--lime); }
-  .task-card.c3 { border-color: var(--yellow); box-shadow: 5px 5px 0 var(--yellow); }
-  .task-card.c4 { border-color: var(--orange); box-shadow: 5px 5px 0 var(--orange); }
-  .task-card.draft { border-style: dashed; box-shadow: 5px 5px 0 rgba(0,0,0,.15); opacity: .9; }
-  .task-icon { font-size: 20px; margin-bottom: 4px; }
-  .draft-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
-
-  .sentence { font-size: 15px; font-weight: 700; line-height: 2.2; }
-  .sentence input[type=text] { min-width: 110px; width: auto; }
-
-  .task-meta { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; margin-top: 8px; }
-  .warn { color: var(--orange); font-size: 11px; font-weight: 800; text-transform: uppercase; margin-top: 6px; }
-
-  .actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .panel p { margin: 0; line-height: 1.5; font-size: 14px; }
+  .panel p + p { margin-top: 8px; }
+  .example { font-weight: 800; }
+  .muted-note { color: var(--muted); font-size: 12px; margin-top: 8px; }
 
   .btn3d {
     border: 3px solid #000; font-weight: 900; font-size: 12px; text-transform: uppercase;
-    padding: 7px 12px; border-radius: 5px; cursor: pointer; box-shadow: 3px 3px 0 #000;
-    transition: transform .06s ease, box-shadow .06s ease; background: var(--lime); color: #000;
+    padding: 10px 12px; border-radius: 5px; cursor: pointer; box-shadow: 3px 3px 0 #000;
+    transition: transform .06s ease, box-shadow .06s ease; background: var(--yellow); color: #000;
+    width: 100%; text-align: center;
   }
   .btn3d:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
-  .btn3d.copy { background: var(--cyan); color: #fff; }
-  .btn3d.del { background: var(--pink); color: #fff; }
-  .btn3d.add { background: var(--lime); }
-  .btn3d.oauth { width: 100%; text-align: center; background: var(--yellow); }
 
   .oauth-done { font-weight: 900; text-transform: uppercase; color: var(--lime); text-align: center; padding: 4px 0; }
+  .oauth-unavailable { color: var(--muted); font-size: 13px; text-align: center; }
 </style>
 </head>
 <body>
-  <h1>📋 Your Tasks</h1>
+  <h1>🔌 Connect Google</h1>
   <div class="sub" id="summary">loading...</div>
 
-  <div class="panel">
-    <div class="panel-label">Your WhatsApp number</div>
-    <input type="text" id="contactId" placeholder="+15551234567" />
+  <div class="panel c0">
+    <div class="panel-label">What this does</div>
+    <p>Once connected, just text your bot things like <span class="example">"what's on my calendar today"</span> or <span class="example">"find emails about the flight"</span> — no setup beyond this page, no saved tasks to create first.</p>
   </div>
 
-  <div class="panel" id="oauthCard" style="display:none;"></div>
+  <div class="panel c1">
+    <div class="panel-label">Read-only</div>
+    <p>This can only read your Gmail and Calendar — it can't send an email or create, edit, or delete anything.</p>
+    <p class="muted-note">This is free, open-source software — if a write capability like that is something you want, contributions are very welcome.</p>
+  </div>
 
-  <div id="taskList"></div>
+  <div class="panel" id="oauthCard"></div>
 
 <script>
-const ACCENTS = ["c0", "c1", "c2", "c3", "c4"];
-const state = { tasks: [], templates: [], googleConnected: false };
-
-function loadContactId() {
-  const saved = localStorage.getItem("wappy-contact-id");
-  if (saved) document.getElementById("contactId").value = saved;
-}
-document.getElementById("contactId").addEventListener("change", (e) => {
-  localStorage.setItem("wappy-contact-id", e.target.value);
-});
-
-async function api(path, opts) {
-  const res = await fetch(path, { headers: { "content-type": "application/json" }, ...opts });
+async function api(path) {
+  const res = await fetch(path);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
-  return res.status === 200 || res.status === 201 ? res.json() : undefined;
-}
-
-/** Renders a template's \`sentence\` ("Find emails about {query}") as real text nodes interleaved
- * with a real <input> at its one {key} — the fill-in-the-blank, always-editable line. */
-function buildSentence(template, placeholders, onFieldChange) {
-  const wrap = document.createElement("div");
-  wrap.className = "sentence";
-  for (const part of template.sentence.split(/(\\{\\w+\\})/g)) {
-    const m = /^\\{(\\w+)\\}$/.exec(part);
-    if (!m) { wrap.appendChild(document.createTextNode(part)); continue; }
-    const key = m[1];
-    const field = template.placeholders.find((p) => p.key === key);
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = placeholders[key] || "";
-    input.placeholder = field ? field.placeholderHint : key;
-    input.onchange = () => onFieldChange(key, input.value);
-    wrap.appendChild(input);
-  }
-  return wrap;
-}
-
-function connectorLabel(template) {
-  return template.connector === "gmail" ? "Gmail" : "Calendar";
-}
-
-/** A real, already-created task — sentence, meta, copy/delete. No toggle, no run status: a task
- * either exists (and router.ts may match it against an inbound message) or it's deleted. */
-function buildTaskCard(template, task, accentClass) {
-  const card = document.createElement("div");
-  card.className = "panel task-card " + accentClass;
-
-  const icon = document.createElement("div");
-  icon.className = "task-icon";
-  icon.textContent = template.icon;
-  card.appendChild(icon);
-
-  card.appendChild(buildSentence(template, task.placeholders, async (key, value) => {
-    const placeholders = { ...task.placeholders, [key]: value };
-    await api("/api/tasks/" + task.id, { method: "PATCH", body: JSON.stringify({ placeholders }) });
-    await refresh();
-  }));
-
-  const meta = document.createElement("div");
-  meta.className = "task-meta";
-  meta.textContent = task.contactId;
-  card.appendChild(meta);
-
-  if (!state.googleConnected) {
-    const warn = document.createElement("div");
-    warn.className = "warn";
-    warn.textContent = "\\u26a0 Needs " + connectorLabel(template) + " connected";
-    card.appendChild(warn);
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "actions";
-
-  const copyBtn = document.createElement("button");
-  copyBtn.className = "btn3d copy";
-  copyBtn.textContent = "Copy";
-  copyBtn.onclick = async () => {
-    await api("/api/tasks", {
-      method: "POST",
-      body: JSON.stringify({ contactId: task.contactId, templateId: task.templateId, placeholders: task.placeholders }),
-    });
-    await refresh();
-  };
-  actions.appendChild(copyBtn);
-
-  const delBtn = document.createElement("button");
-  delBtn.className = "btn3d del";
-  delBtn.textContent = "Delete";
-  delBtn.onclick = async () => {
-    await api("/api/tasks/" + task.id, { method: "DELETE" });
-    await refresh();
-  };
-  actions.appendChild(delBtn);
-
-  card.appendChild(actions);
-  return card;
-}
-
-/** Not created yet — dashed outline, local-only until "+ Add" is tapped, so accepting every default
- * (leaving the one filter blank) is a deliberate single tap, not a side effect of focus/blur. */
-function buildDraftCard(template) {
-  const card = document.createElement("div");
-  card.className = "panel task-card draft";
-
-  const label = document.createElement("div");
-  label.className = "draft-label";
-  label.textContent = "+ Add";
-  card.appendChild(label);
-
-  const icon = document.createElement("div");
-  icon.className = "task-icon";
-  icon.textContent = template.icon;
-  card.appendChild(icon);
-
-  const draft = {};
-  for (const f of template.placeholders) draft[f.key] = "";
-  card.appendChild(buildSentence(template, draft, (key, value) => { draft[key] = value; }));
-
-  if (!state.googleConnected) {
-    const warn = document.createElement("div");
-    warn.className = "warn";
-    warn.textContent = "\\u26a0 Needs " + connectorLabel(template) + " connected";
-    card.appendChild(warn);
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "actions";
-  const addBtn = document.createElement("button");
-  addBtn.className = "btn3d add";
-  addBtn.textContent = "+ Add";
-  addBtn.onclick = async () => {
-    const contactId = document.getElementById("contactId").value.trim();
-    if (!contactId) { alert("Enter your WhatsApp number first."); return; }
-    await api("/api/tasks", { method: "POST", body: JSON.stringify({ contactId, templateId: template.id, placeholders: draft }) });
-    await refresh();
-  };
-  actions.appendChild(addBtn);
-  card.appendChild(actions);
-
-  return card;
-}
-
-/** One unified list: for each template, its real tasks (in creation order), then — if repeatable, or
- * if not repeatable and none exists yet — exactly one trailing draft slot. No separate "pick a
- * template" section anywhere on the page. */
-function renderList() {
-  const list = document.getElementById("taskList");
-  list.innerHTML = "";
-  document.getElementById("summary").textContent = state.tasks.length + " task(s)";
-
-  let accentIndex = 0;
-  for (const template of state.templates) {
-    const existing = state.tasks.filter((t) => t.templateId === template.id);
-    for (const task of existing) {
-      list.appendChild(buildTaskCard(template, task, ACCENTS[accentIndex % ACCENTS.length]));
-      accentIndex++;
-    }
-    if (template.repeatable || existing.length === 0) {
-      list.appendChild(buildDraftCard(template));
-    }
-  }
-}
-
-async function refresh() {
-  state.tasks = await api("/api/tasks");
-  renderList();
+  return res.json();
 }
 
 async function refreshOauth() {
   const status = await api("/api/oauth-status");
-  state.googleConnected = Boolean(status.connected);
   const card = document.getElementById("oauthCard");
-  if (!status.available) { card.style.display = "none"; return; }
-  card.style.display = "block";
+  const summary = document.getElementById("summary");
+  if (!status.available) {
+    summary.textContent = "not set up";
+    card.innerHTML = "";
+    const note = document.createElement("div");
+    note.className = "oauth-unavailable";
+    note.textContent = "Add GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET to .env first — see GOOGLE_SETUP.md.";
+    card.appendChild(note);
+    return;
+  }
   card.innerHTML = "";
   if (status.connected) {
+    summary.textContent = "connected";
     const done = document.createElement("div");
     done.className = "oauth-done";
     done.textContent = "\\u2713 " + status.label + " connected";
     card.appendChild(done);
   } else {
+    summary.textContent = "not connected yet";
     const btn = document.createElement("button");
-    btn.className = "btn3d oauth";
+    btn.className = "btn3d";
     btn.textContent = "Connect " + status.label;
     btn.onclick = () => { window.location.href = status.authUrl; };
     card.appendChild(btn);
   }
 }
 
-(async function init() {
-  loadContactId();
-  state.templates = await api("/api/templates");
-  await refreshOauth();
-  await refresh();
-})();
+refreshOauth();
 </script>
 </body>
 </html>`;

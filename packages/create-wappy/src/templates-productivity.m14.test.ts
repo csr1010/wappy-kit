@@ -4,14 +4,14 @@ import { renderProject, type PartVersions } from "./templates.js";
 
 /**
  * Phase 5 (plan: "Wire @wappy_ai/productivity into create-agent and wappy dev"), rewritten for the
- * v2 pivot (--allow-test-change "dropped cron scheduling and WhatsApp Message Templates entirely in
- * favor of a reactive task router — direct feedback: 'we should not setup cron or templates at this
- * point especially for free open source projects thats too much'"). Confirms the interview step
- * actually changes generated output, and that a "no" answer leaves everything exactly as it was
- * before this step existed — no leftover productivity code either way.
+ * v3 pivot (--allow-test-change "retired the saved-task/fixed-template system entirely in favor of
+ * generic, parameterized Gmail/Calendar search tools + the harness's own multi-step tool-calling
+ * loop — direct feedback: 'whatever we are going to build it should work for anything that user
+ * might ask'"). Confirms the interview step actually changes generated output, and that a "no"
+ * answer leaves everything exactly as it was before this step existed.
  */
 
-const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.1", productivity: "0.2.0", connectorGoogle: "0.2.0", createWappy: "0.1.0" };
+const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.1", productivity: "0.3.0", connectorGoogle: "0.3.0", createWappy: "0.1.0" };
 
 function withProductivity(enabled: boolean): CompleteInterviewAnswers {
   return { model: DEFAULT_ANSWERS.model, productivity: { enabled } };
@@ -27,7 +27,7 @@ describe("renderProject — productivity: false (default)", () => {
   test("index.ts has no productivity imports or wiring", () => {
     const indexTs = files.get("index.ts")!;
     expect(indexTs).not.toContain("@wappy_ai/productivity");
-    expect(indexTs).not.toContain("taskRouter");
+    expect(indexTs).not.toContain("googleAssistant");
     expect(indexTs).not.toContain("taskUiServer");
     expect(indexTs).toContain("export const agent = createAgent(");
   });
@@ -35,10 +35,6 @@ describe("renderProject — productivity: false (default)", () => {
   test("package.json has no @wappy_ai/productivity dependency", () => {
     const pkg = JSON.parse(files.get("package.json")!);
     expect(pkg.dependencies["@wappy_ai/productivity"]).toBeUndefined();
-  });
-
-  test(".env.sample has no TASKS_DB_URL", () => {
-    expect(files.get(".env.sample")!).not.toContain("TASKS_DB_URL");
   });
 
   test("WHATSAPP_SETUP.md has no productivity-agent section", () => {
@@ -64,41 +60,56 @@ describe("renderProject — productivity: true", () => {
   const files = fileMap(renderProject({ answers: withProductivity(true), versions: VERSIONS }));
   const indexTs = files.get("index.ts")!;
 
-  test("index.ts imports and wires the productivity package's reactive router (no scheduler, no templates)", () => {
+  test("index.ts imports and wires createGoogleAssistant — no task store, no templates", () => {
     expect(indexTs).toContain('from "@wappy_ai/productivity"');
-    expect(indexTs).toContain("createTaskStore");
-    expect(indexTs).toContain("createTaskRouter");
-    expect(indexTs).toContain("createTaskUiServer");
+    expect(indexTs).toContain("createGoogleAssistant");
+    expect(indexTs).toContain("createConnectUiServer");
     expect(indexTs).toContain("export const taskUiServer");
-    expect(indexTs).not.toContain("createTaskRunner");
-    expect(indexTs).not.toContain("taskRunner");
+    expect(indexTs).not.toContain("createTaskStore");
+    expect(indexTs).not.toContain("createTaskRouter");
+    expect(indexTs).not.toContain("TASK_TEMPLATES");
   });
 
   test("index.ts never configures a WhatsApp Message Template — every reply is a direct response", () => {
     expect(indexTs).not.toContain("createTemplateRegistry");
     expect(indexTs).not.toContain("templateRegistry");
     expect(indexTs).not.toContain("defaultTemplateName");
-    expect(indexTs).not.toContain("SCHEDULED_MESSAGE_TEMPLATE");
   });
 
-  test("index.ts wraps the reactive agent: tries the task router first, falls through to the base agent", () => {
+  test("index.ts wraps the reactive agent: offers the Google assistant first, falls through to the base agent", () => {
     expect(indexTs).toContain("export const reactiveAgent = createAgent(");
-    expect(indexTs).toMatch(/export const agent = \{[\s\S]*taskRouter\.maybeHandle\(message\)[\s\S]*reactiveAgent\.handle\(message\)/);
+    expect(indexTs).toMatch(/export const agent = \{[\s\S]*googleAssistant\.maybeHandle\(message\)[\s\S]*reactiveAgent\.handle\(message\)/);
   });
 
-  test("the task router shares the SAME model as the reactive agent, not a freshly re-constructed instance", () => {
-    expect(indexTs).toMatch(/createTaskRouter\(\{\s*store: taskStore, model,/);
+  test("the Google assistant shares the SAME model as the reactive agent, not a freshly re-constructed instance", () => {
+    expect(indexTs).toMatch(/createGoogleAssistant\(\{\s*model, clock: systemClock,/);
   });
 
-  test("package.json depends on @wappy_ai/productivity at the resolved version", () => {
+  test("index.ts wires both a parameterized Gmail and Calendar search function as the assistant's connectors", () => {
+    expect(indexTs).toContain('from "@wappy_ai/connector-google"');
+    expect(indexTs).toContain("createGmailSearchFn");
+    expect(indexTs).toContain("createCalendarSearchFn");
+    expect(indexTs).toContain("createGoogleOAuthPlugin");
+    expect(indexTs).toContain("createGoogleTokenStore");
+    expect(indexTs).toMatch(/connectors:\s*\{\s*gmail:\s*createGmailSearchFn\(/);
+  });
+
+  test("index.ts wires the OAuth plugin into createConnectUiServer, not left unused", () => {
+    expect(indexTs).toContain("oauthConnect: googlePlugin");
+  });
+
+  test("package.json depends on @wappy_ai/productivity and @wappy_ai/connector-google at the resolved versions", () => {
     const pkg = JSON.parse(files.get("package.json")!);
-    expect(pkg.dependencies["@wappy_ai/productivity"]).toBe("0.2.0");
+    expect(pkg.dependencies["@wappy_ai/productivity"]).toBe("0.3.0");
+    expect(pkg.dependencies["@wappy_ai/connector-google"]).toBe("0.3.0");
   });
 
-  test(".env.sample lists TASKS_DB_URL as optional, under its own group", () => {
+  test(".env.sample has no TASKS_DB_URL (no task store exists anymore) and lists GOOGLE_CLIENT_ID/SECRET as optional", () => {
     const env = files.get(".env.sample")!;
-    expect(env).toContain("Productivity");
-    expect(env).toContain("\n# TASKS_DB_URL=\n");
+    expect(env).not.toContain("TASKS_DB_URL");
+    expect(env).toContain("Google");
+    expect(env).toContain("\n# GOOGLE_CLIENT_ID=\n");
+    expect(env).toContain("\n# GOOGLE_CLIENT_SECRET=\n");
   });
 
   test("WHATSAPP_SETUP.md explains no Message Template is ever needed here", () => {
@@ -106,49 +117,25 @@ describe("renderProject — productivity: true", () => {
     expect(setup).toContain("do **not** need to set up a WhatsApp Message Template");
   });
 
-  test("README mentions the productivity agent and the task UI URL", () => {
+  test("README mentions the productivity agent reads any question, not a fixed list", () => {
     const readme = files.get("README.md")!;
     expect(readme).toContain("Productivity agent");
-    expect(readme).toContain("task-management page");
+    expect(readme).toContain("any question");
+    expect(readme).not.toContain("task-management page");
   });
 
-  test("index.ts has no Knowledge/RAG wiring — the task router grounds replies in live fetched data instead", () => {
+  test("index.ts has no Knowledge/RAG wiring — real fetched data grounds each reply directly", () => {
     expect(indexTs).not.toContain("createKnowledge");
     expect(indexTs).not.toContain("retrieveRag");
   });
 
-  test("index.ts imports and wires @wappy_ai/connector-google's context functions into the router's connectors", () => {
-    expect(indexTs).toContain('from "@wappy_ai/connector-google"');
-    expect(indexTs).toContain("createGmailContextFn");
-    expect(indexTs).toContain("createCalendarContextFn");
-    expect(indexTs).toContain("createGoogleOAuthPlugin");
-    expect(indexTs).toContain("createGoogleTokenStore");
-    expect(indexTs).toMatch(/connectors:\s*\{\s*gmail:\s*createGmailContextFn\(/);
-  });
-
-  test("index.ts wires the OAuth plugin into createTaskUiServer, not left unused", () => {
-    expect(indexTs).toContain("oauthConnect: googlePlugin");
-  });
-
-  test("package.json depends on @wappy_ai/connector-google, no longer needs @libsql/client directly", () => {
-    const pkg = JSON.parse(files.get("package.json")!);
-    expect(pkg.dependencies["@wappy_ai/connector-google"]).toBe("0.2.0");
-    expect(pkg.dependencies["@libsql/client"]).toBeUndefined();
-  });
-
-  test(".env.sample lists GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as optional, under Google", () => {
-    const env = files.get(".env.sample")!;
-    expect(env).toContain("Google");
-    expect(env).toContain("\n# GOOGLE_CLIENT_ID=\n");
-    expect(env).toContain("\n# GOOGLE_CLIENT_SECRET=\n");
-  });
-
-  test("GOOGLE_SETUP.md is generated with the exact redirect URI and connect guidance", () => {
+  test("GOOGLE_SETUP.md is generated with the exact redirect URI and connect guidance, no task-authoring instructions", () => {
     const setup = files.get("GOOGLE_SETUP.md")!;
     expect(setup).toBeTruthy();
     expect(setup).toContain("http://localhost:3001/google/callback");
     expect(setup).toContain("Testing");
     expect(setup).toContain("Connect Google");
+    expect(setup).not.toContain("Create a");
   });
 
   test("README links to GOOGLE_SETUP.md", () => {

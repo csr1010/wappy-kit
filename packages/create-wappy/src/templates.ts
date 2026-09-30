@@ -126,8 +126,8 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push(`import { ${[...harnessImports].sort().join(", ")} } from "@wappy_ai/harness";`);
   lines.push(`import { ${[...whatsappImports].sort().join(", ")} } from "@wappy_ai/whatsapp";`);
   if (productivity) {
-    lines.push('import { createTaskRouter, createTaskStore, createTaskUiServer } from "@wappy_ai/productivity";');
-    lines.push('import { createCalendarContextFn, createGmailContextFn, createGoogleOAuthPlugin, createGoogleTokenStore } from "@wappy_ai/connector-google";');
+    lines.push('import { createConnectUiServer, createGoogleAssistant } from "@wappy_ai/productivity";');
+    lines.push('import { createCalendarSearchFn, createGmailSearchFn, createGoogleOAuthPlugin, createGoogleTokenStore } from "@wappy_ai/connector-google";');
   }
   lines.push(model.importLine);
   lines.push("");
@@ -164,14 +164,10 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   lines.push("");
 
   if (productivity) {
-    lines.push("// Productivity agent: saved Gmail/Calendar tasks (title + one optional filter, no schedule —");
-    lines.push("// nothing pushes on a timer) matched reactively against whatever the contact just said. See");
-    lines.push("// GOOGLE_SETUP.md for the one-time Google connection; tasks work fully today with no Google");
-    lines.push('// connected too — a matched task just replies that it needs "Connect Google" tapped first.');
-    lines.push('const taskStore = createTaskStore({ url: process.env.TASKS_DB_URL ?? "file:.wappy/tasks.db" });');
-    lines.push("");
-    lines.push("// Bring-your-own Google OAuth client (GOOGLE_SETUP.md) — inert until GOOGLE_CLIENT_ID/SECRET");
-    lines.push("// are filled in and the task list's \"Connect Google\" button is actually tapped.");
+    lines.push("// Productivity agent: reads (never writes) the user's own Gmail/Calendar, for ANY question");
+    lines.push("// phrased in normal language — no saved tasks, no fixed list of things it can answer. See");
+    lines.push('// GOOGLE_SETUP.md for the one-time Google connection; without it, a matched question just');
+    lines.push('// replies honestly that it needs "Connect Google" tapped first on the local connect page.');
     lines.push("const googleConfig = {");
     lines.push('  clientId: process.env.GOOGLE_CLIENT_ID ?? "",');
     lines.push('  clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",');
@@ -180,27 +176,28 @@ function renderIndexTs(opts: RenderProjectOptions): string {
     lines.push('const googleTokenStore = createGoogleTokenStore({ url: process.env.GOOGLE_TOKENS_DB_URL ?? "file:.wappy/google-tokens.db" });');
     lines.push("const googlePlugin = createGoogleOAuthPlugin({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock });");
     lines.push("");
-    lines.push("const taskRouter = createTaskRouter({");
-    lines.push("  store: taskStore, model,");
+    lines.push("const googleAssistant = createGoogleAssistant({");
+    lines.push("  model, clock: systemClock,");
     lines.push("  connectors: {");
-    lines.push("    gmail: createGmailContextFn({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock }),");
-    lines.push("    calendar: createCalendarContextFn({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock }),");
+    lines.push("    gmail: createGmailSearchFn({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock }),");
+    lines.push("    calendar: createCalendarSearchFn({ config: googleConfig, tokenStore: googleTokenStore, clock: systemClock }),");
     lines.push("  },");
     lines.push("});");
     lines.push("");
-    lines.push("// Wraps the reactive agent: every inbound message is tried against the contact's saved tasks");
-    lines.push("// first; a confident match replies directly from fresh Gmail/Calendar data, anything else");
-    lines.push("// falls through to the normal reactive agent unchanged — no cron, no background loop, no");
-    lines.push("// separate 'proactive' path at all.");
+    lines.push("// Wraps the reactive agent: every inbound message is offered real Gmail/Calendar search tools");
+    lines.push("// first (the model itself decides whether the message actually needs them, and constructs its");
+    lines.push("// own query/date-range — @wappy_ai/harness's createVercelModel already runs the full");
+    lines.push("// multi-step tool-calling loop internally); anything that didn't touch either tool falls");
+    lines.push("// through to the normal reactive agent unchanged.");
     lines.push("export const agent = {");
     lines.push("  async handle(message: Parameters<typeof reactiveAgent.handle>[0]) {");
-    lines.push("    const routed = await taskRouter.maybeHandle(message);");
+    lines.push("    const routed = await googleAssistant.maybeHandle(message);");
     lines.push("    if (routed.handled) return channel.send(message.contactId, { text: routed.reply! });");
     lines.push("    return reactiveAgent.handle(message);");
     lines.push("  },");
     lines.push("};");
     lines.push("");
-    lines.push("export const taskUiServer = createTaskUiServer({ store: taskStore, clock: systemClock, oauthConnect: googlePlugin });");
+    lines.push("export const taskUiServer = createConnectUiServer({ oauthConnect: googlePlugin });");
     lines.push("");
   }
 
@@ -215,15 +212,8 @@ const WHATSAPP_ENV: EnvVarSpec[] = [
   { name: "WHATSAPP_APP_SECRET", required: true, group: "WhatsApp", description: "Meta developer app > App settings > Basic > App secret. Used to verify webhook signatures, so forged requests are rejected." },
 ];
 
-const TASKS_DB_ENV: EnvVarSpec = {
-  name: "TASKS_DB_URL",
-  required: false,
-  group: "Productivity",
-  description: "LibSQL URL for the productivity agent's task store. Default: a local file at .wappy/tasks.db (nothing to set).",
-};
-
-/** Both optional/blank — a project works fully without them (the 3 Google-backed templates stay
- * honest stubs, per @wappy_ai/productivity's own default). See GOOGLE_SETUP.md for how to get real
+/** Both optional/blank — a project works fully without them (a Gmail/Calendar question just replies
+ * honestly that it needs "Connect Google" tapped first). See GOOGLE_SETUP.md for how to get real
  * values. */
 const GOOGLE_ENV: EnvVarSpec[] = [
   { name: "GOOGLE_CLIENT_ID", required: false, group: "Google", description: "Your own Google Cloud OAuth Client ID — see GOOGLE_SETUP.md." },
@@ -239,7 +229,6 @@ export function collectEnvVars(opts: RenderProjectOptions): EnvVarSpec[] {
   vars.push(MEMORY_ENV);
   vars.push(SESSION_PROFILE_ENV);
   if (answers.productivity.enabled) {
-    vars.push(TASKS_DB_ENV);
     vars.push(...GOOGLE_ENV);
   }
   return vars;
@@ -399,15 +388,16 @@ function renderWhatsAppSetup(opts: RenderProjectOptions): string {
 
 /** Generated only when the productivity-agent interview step is "yes". Bring-your-own Google OAuth
  * client — same unavoidable-one-time-setup category as WHATSAPP_SETUP.md, mirroring its format.
- * Unlike WhatsApp, actually CONNECTING is a click on the task list page, not a step in this file —
- * see that page's own "Connect Google" card. */
+ * Unlike WhatsApp, actually CONNECTING is a click on the connect page, not a step in this file — see
+ * that page's own "Connect Google" card. */
 function renderGoogleSetup(): string {
   const lines: string[] = [];
-  lines.push("# Connecting Google (Calendar + Gmail tasks)");
+  lines.push("# Connecting Google (Calendar + Gmail)");
   lines.push("");
-  lines.push("Every productivity task template needs this — real read access to your own Calendar and");
-  lines.push("Gmail, full read (not write), never a shared Wappy-operated account. Without it, a matched task");
-  lines.push('just replies honestly that it needs "Connect Google" tapped first, instead of failing silently.');
+  lines.push("The productivity agent needs this — real read access to your own Calendar and Gmail, full");
+  lines.push("read (never write, never a shared Wappy-operated account). Without it, a Gmail/Calendar");
+  lines.push('question just replies honestly that it needs "Connect Google" tapped first, instead of');
+  lines.push("failing silently.");
   lines.push("");
   lines.push("## 1. Create your own Google Cloud OAuth client");
   lines.push("");
@@ -424,25 +414,25 @@ function renderGoogleSetup(): string {
   lines.push("5. Application type: **Web application**.");
   lines.push("6. Under Authorized redirect URIs, add exactly: `http://localhost:3001/google/callback`");
   lines.push("   (this must match `index.ts`'s `GOOGLE_REDIRECT_URI` default exactly — only change both");
-  lines.push("   together if you've customized `TASK_UI_PORT`).");
+  lines.push("   together if you've customized `CONNECT_UI_PORT`).");
   lines.push("7. Copy the **Client ID** and **Client secret** into `.env` as `GOOGLE_CLIENT_ID` and");
   lines.push("   `GOOGLE_CLIENT_SECRET`.");
   lines.push("");
-  lines.push("## 2. Connect — one click, on the task list page");
+  lines.push("## 2. Connect — one click, on the local connect page");
   lines.push("");
-  lines.push("Restart `npm run dev` after filling in `.env`. Open the task list URL it prints — you'll see");
-  lines.push("a **Connect Google** card. Tap it, sign in with your own Google account, approve the real");
+  lines.push("Restart `npm run dev` after filling in `.env`. Open the connect page URL it prints — you'll");
+  lines.push("see a **Connect Google** card. Tap it, sign in with your own Google account, approve the real");
   lines.push("consent screen (it will look unverified, since this is your own personal app in Testing");
-  lines.push("mode — that's expected, not an error). You'll land back on the task list showing");
+  lines.push("mode — that's expected, not an error). You'll land back on the page showing");
   lines.push("**✓ Google connected**.");
   lines.push("");
   lines.push("No CLI command, no second install — that's the whole flow.");
   lines.push("");
   lines.push("## 3. Test it");
   lines.push("");
-  lines.push('Create a "Send me my meetings" task from the task list, then just text your bot something like');
-  lines.push('"what\'s on my calendar" — you should get a real reply from your own calendar, not the earlier');
-  lines.push('"Gmail/Calendar isn\'t connected yet" reply.');
+  lines.push('Just text your bot something like "what\'s on my calendar today" or "find emails about the');
+  lines.push('flight" — no task to create first, any real question about your Gmail/Calendar works. You');
+  lines.push("should get a real reply, not the earlier \"Gmail/Calendar isn't connected yet\" reply.");
   lines.push("");
   return lines.join("\n");
 }
@@ -475,7 +465,7 @@ function renderReadme(opts: RenderProjectOptions): string {
   lines.push(`- **Model:** ${answers.model.provider}`);
   lines.push("- **Memory:** local SQLite file (`.wappy/memory.db`), plus a session profile (`.wappy/session-profile.db`) — facts and where the conversation currently stands, TTL-bound");
   if (answers.productivity.enabled) {
-    lines.push("- **Productivity agent:** on — saved Gmail/Calendar tasks (title + one optional filter, no schedule) matched reactively against the live chat, no cron and no WhatsApp Message Template ever needed. Reply honestly that they're not connected until you connect Google (see [`GOOGLE_SETUP.md`](./GOOGLE_SETUP.md), then tap \"Connect Google\" on the task list page). Tasks live in `.wappy/tasks.db`.");
+    lines.push("- **Productivity agent:** on — reads (never writes) your own Gmail/Calendar for any question phrased in normal language, no saved tasks and no fixed list of things it can answer, no cron and no WhatsApp Message Template ever needed. Replies honestly that it's not connected until you connect Google (see [`GOOGLE_SETUP.md`](./GOOGLE_SETUP.md), then tap \"Connect Google\" on the local connect page).");
   }
   lines.push("");
   lines.push("No tools/connectors are wired by default — see `index.ts`'s comment above `createAgent` for how to add one.");
@@ -483,7 +473,7 @@ function renderReadme(opts: RenderProjectOptions): string {
   lines.push("Once WHATSAPP_SETUP.md's steps are done, `npm run dev` (this project's `wappy dev`) starts the");
   lines.push(
     answers.productivity.enabled
-      ? "webhook server and the local task-management page (its URL prints alongside the webhook URL)."
+      ? "webhook server and the local Google-connect page (its URL prints alongside the webhook URL)."
       : "webhook server.",
   );
   lines.push("Run `wappy status` any time to see what's done vs. pending, and `wappy doctor` to");

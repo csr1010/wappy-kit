@@ -15,9 +15,9 @@ import { createWebhookServer } from "@wappy_ai/whatsapp";
  *
  * When that project also has a productivity agent wired in (templates.ts, only when that interview
  * step was "yes" — it exports `taskUiServer` alongside `agent`/`channel` in that case), this same
- * command additionally boots the local task-management page — one command, one process. There's no
- * background loop to start: v2's task router is purely reactive, matched per inbound message inside
- * `agent.handle()` itself, so nothing here needs to be started or stopped for it.
+ * command additionally boots the local Google-connect page — one command, one process. There's no
+ * background loop to start: the productivity agent is purely reactive, offering Gmail/Calendar tools
+ * inside `agent.handle()` itself, so nothing here needs to be started or stopped for it.
  *
  * Deliberately dynamic-imports `<cwd>/index.ts` directly rather than requiring a build step. Loads
  * `<cwd>/.env` itself (via `dotenv`), explicitly and first — NOT by relying on the generated
@@ -32,8 +32,9 @@ export interface GeneratedProjectExports {
   agent: Agent;
   channel: MessageChannel;
   /** Only present when the productivity-agent interview step was answered "yes" (templates.ts) — the
-   * local task-management page. No `taskRunner`/scheduler export anymore: v2's task router is purely
-   * reactive (matched inside `agent.handle()` itself), so there's no background loop to start/stop. */
+   * local Google-connect page. No `taskRunner`/scheduler export at all: the productivity agent is
+   * purely reactive (tool calls happen inside `agent.handle()` itself), so there's no background
+   * loop to start/stop. */
   taskUiServer?: Server;
 }
 
@@ -140,10 +141,10 @@ export async function runDev(opts: RunDevOptions): Promise<RunDevResult> {
   }
 
   // Productivity agent (templates.ts, only present when that interview step was "yes"): boot the
-  // local task-management page alongside the webhook server, same process, same `wappy dev` command
+  // local Google-connect page alongside the webhook server, same process, same `wappy dev` command
   // — no separate step for the person running this, and nothing to start/stop in the background.
   if (project.taskUiServer) {
-    const taskUiPort = Number(env.TASK_UI_PORT ?? port + 1);
+    const taskUiPort = Number(env.CONNECT_UI_PORT ?? port + 1);
     await new Promise<void>((resolvePromise, reject) => {
       project.taskUiServer!.once("error", reject);
       project.taskUiServer!.listen(taskUiPort, () => resolvePromise());
