@@ -50,15 +50,19 @@ export function createGmailContextFn(opts: CreateGoogleContextOptions): () => Pr
   };
 }
 
-/** Same shape for Calendar — fetches the next 7 days' events (a fixed default window), formatted as
- * plain text for the compose step to filter/summarize per the matched task's instructions. */
+/** Same shape for Calendar — fetches the next 30 days' events (a fixed default window, wide enough
+ * to cover "next 2 weeks"-style phrasing in a task's own instructions without truncating; Calendar's
+ * API has no per-request result cap the way Gmail's does, so a wider window costs nothing extra),
+ * formatted as plain text for the compose step to filter/summarize per the matched task's
+ * instructions — a task asking about "today" still gets a correct answer, it just receives more raw
+ * data than it needs and the model narrows it down. */
 export function createCalendarContextFn(opts: CreateGoogleContextOptions): () => Promise<string> {
   return async () => {
     const accessToken = await getFreshAccessToken(opts);
     if (!accessToken) return NOT_CONNECTED_CALENDAR;
     const now = opts.clock.now();
-    const events = await fetchEvents(accessToken, now, now + 7 * 24 * 60 * 60 * 1000, opts.fetchImpl);
-    if (events.length === 0) return "No upcoming events in the next 7 days.";
+    const events = await fetchEvents(accessToken, now, now + 30 * 24 * 60 * 60 * 1000, opts.fetchImpl);
+    if (events.length === 0) return "No upcoming events in the next 30 days.";
     return events.map((e, i) => `${i + 1}. ${e.summary} — ${new Date(e.start).toLocaleString()}${e.location ? ` (${e.location})` : ""}`).join("\n");
   };
 }

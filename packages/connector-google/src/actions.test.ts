@@ -40,13 +40,13 @@ describe("createCalendarContextFn", () => {
     expect(await calendar()).toContain("No upcoming events");
   });
 
-  test("fetches a 7-day window from the clock's current time", async () => {
+  test("fetches a 30-day window from the clock's current time (wide enough for 'next 2 weeks'-style phrasing)", async () => {
     const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ items: [] }) }) as unknown as Response);
     const calendar = createCalendarContextFn(await connectedOptions(fetchImpl));
     await calendar();
     const url = new URL(String(fetchImpl.mock.calls[0]![0]));
     const spanMs = new Date(url.searchParams.get("timeMax")!).getTime() - new Date(url.searchParams.get("timeMin")!).getTime();
-    expect(spanMs).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(spanMs).toBe(30 * 24 * 60 * 60 * 1000);
   });
 
   test("a token past expiry is refreshed before the Calendar call fires", async () => {
