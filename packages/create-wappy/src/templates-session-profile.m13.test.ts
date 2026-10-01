@@ -5,7 +5,11 @@ import { renderProject, type PartVersions } from "./templates.js";
 const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", createWappy: "0.1.0" };
 
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
-  return { model: overrides.model ?? DEFAULT_ANSWERS.model, productivity: overrides.productivity ?? DEFAULT_ANSWERS.productivity };
+  return {
+    model: overrides.model ?? DEFAULT_ANSWERS.model,
+    memory: overrides.memory ?? DEFAULT_ANSWERS.memory,
+    productivity: overrides.productivity ?? DEFAULT_ANSWERS.productivity,
+  };
 }
 
 function fileMap(files: { path: string; content: string }[]): Map<string, string> {
@@ -39,10 +43,14 @@ describe("renderProject — session profile is default-on, every combo", () => {
     expect(env).not.toContain("\nSESSION_PROFILE_DB_URL=");
   });
 
-  test("no new package.json dependency: createLibsqlSessionProfileStore is already part of @wappy_ai/harness", () => {
+  // --allow-test-change (M15, "Memory backend — local vs. Cognee"): @libsql/client IS now a real
+  // direct dependency for the default local memory backend (createKnowledge({ client }) needs a
+  // real Client, not just createLibsqlSessionProfileStore's URL-based constructor) — flipped from
+  // toBeUndefined(), confirmed real.
+  test("createLibsqlSessionProfileStore itself needs no new dependency; @libsql/client is present for the (unrelated) local Knowledge backend", () => {
     const files = fileMap(renderProject({ answers: complete(), versions: VERSIONS }));
     const pkg = JSON.parse(files.get("package.json")!);
     expect(pkg.dependencies["@wappy_ai/harness"]).toBe("0.1.0");
-    expect(pkg.dependencies["@libsql/client"]).toBeUndefined();
+    expect(pkg.dependencies["@libsql/client"]).toBe("0.18.0");
   });
 });

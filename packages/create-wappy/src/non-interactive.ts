@@ -21,6 +21,7 @@ export interface NonInteractiveFlags {
   /** Accept the default (`DEFAULT_ANSWERS`) for any step whose flag is omitted. */
   yes?: boolean;
   model?: string;
+  memory?: string;
   productivity?: string;
 }
 
@@ -42,6 +43,14 @@ function resolveStepAnswer(step: InterviewStepId, flags: NonInteractiveFlags, er
         return undefined;
       }
       return { provider: flags.model };
+    }
+    case "memory": {
+      if (flags.memory === undefined) return undefined;
+      if (flags.memory !== "local" && flags.memory !== "cognee") {
+        errors.push(`--memory must be "local" or "cognee", got "${flags.memory}".`);
+        return undefined;
+      }
+      return { backend: flags.memory };
     }
     case "productivity": {
       if (flags.productivity === undefined) return undefined;

@@ -9,10 +9,14 @@ const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", createWap
 
 // The interview's "tools" step (M9, Shopify) was removed entirely — `complete()` no longer needs
 // the Shopify-path branch it used to have (`--allow-test-change`, SPEC.md decisions log).
+//
+// --allow-test-change (M15, "Memory backend — local vs. Cognee"): `complete()` needs `memory` too,
+// since `CompleteInterviewAnswers` now requires it.
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
   const model = overrides.model ?? DEFAULT_ANSWERS.model;
+  const memory = overrides.memory ?? DEFAULT_ANSWERS.memory;
   const productivity = overrides.productivity ?? DEFAULT_ANSWERS.productivity;
-  return { model, productivity };
+  return { model, memory, productivity };
 }
 
 const dirs: string[] = [];

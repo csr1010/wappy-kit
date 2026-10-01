@@ -2,12 +2,15 @@ import { describe, expect, test } from "vitest";
 import { DEFAULT_ANSWERS, type CompleteInterviewAnswers, type InterviewAnswers } from "./interview.js";
 import { renderProject, type PartVersions, type RenderProjectOptions } from "./templates.js";
 
-const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", createWappy: "0.1.0" };
+const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", productivity: "0.1.0", connectorGoogle: "0.1.0", connectorCognee: "0.1.0", createWappy: "0.1.0" };
 
+// --allow-test-change (M15, "Memory backend — local vs. Cognee"): `complete()` needs `memory` too,
+// since `CompleteInterviewAnswers` now requires it.
 function complete(overrides: Partial<InterviewAnswers> = {}): CompleteInterviewAnswers {
   const model = overrides.model ?? DEFAULT_ANSWERS.model;
+  const memory = overrides.memory ?? DEFAULT_ANSWERS.memory;
   const productivity = overrides.productivity ?? DEFAULT_ANSWERS.productivity;
-  return { model, productivity };
+  return { model, memory, productivity };
 }
 
 function fileMap(files: { path: string; content: string }[]): Map<string, string> {
@@ -30,7 +33,11 @@ describe("renderProject — golden path (openai)", () => {
     expect([...files.keys()].sort()).toEqual(["README.md", "WHATSAPP_SETUP.md", ".env.sample", ".gitignore", "index.ts", "package.json"].sort());
   });
 
-  test("index.ts imports the OpenAI adapter and wires model/memory/sessionProfileStore/router/channel — no tools/skills/rag wiring", () => {
+  // --allow-test-change (M15, "Memory backend — local vs. Cognee"): createKnowledge/createKnowledgeRag
+  // wiring is now unconditional (independent of productivity) — flipped from not.toContain to
+  // toContain, confirmed real by reading the actual current templates.ts/test content first, not
+  // assumed.
+  test("index.ts imports the OpenAI adapter and wires model/memory/sessionProfileStore/router/channel/knowledge-rag — no tools/skills wiring", () => {
     const indexTs = files.get("index.ts")!;
     expect(indexTs).toContain('import { openai } from "@ai-sdk/openai";');
     expect(indexTs).toContain('openai(process.env.OPENAI_MODEL ?? "gpt-4o")');
@@ -41,10 +48,19 @@ describe("renderProject — golden path (openai)", () => {
     expect(indexTs).not.toContain("createToolInvoker");
     expect(indexTs).not.toContain("createShopifyToolProvider");
     expect(indexTs).not.toContain("createSkillRegistry");
-    expect(indexTs).not.toContain("createKnowledge");
-    expect(indexTs).not.toContain("createKnowledgeRag");
+    expect(indexTs).toContain("createKnowledge");
+    expect(indexTs).toContain("createKnowledgeRag");
+    expect(indexTs).toContain("retrieveRag,");
     expect(indexTs).toContain("createWhatsAppChannel({");
     expect(indexTs).toContain("export const agent = createAgent({");
+  });
+
+  test("the local (default) memory backend wires createClient/createKnowledge against a local file, no Cognee import", () => {
+    const indexTs = files.get("index.ts")!;
+    expect(indexTs).toContain('import { createClient } from "@libsql/client";');
+    expect(indexTs).toContain("file:.wappy/knowledge.db");
+    expect(indexTs).not.toContain("createCogneeKnowledge");
+    expect(indexTs).not.toContain("@wappy_ai/connector-cognee");
   });
 
   test(".env.sample lists every key needed to run, blank — never a real secret value", () => {
@@ -65,6 +81,8 @@ describe("renderProject — golden path (openai)", () => {
     expect(env).toContain("\n# MEMORY_DB_URL=\n"); // optional: default applies unless uncommented
     expect(env).not.toContain("\nMEMORY_DB_URL=");
     expect(env).toContain("\n# SESSION_PROFILE_DB_URL=\n"); // M13: on by default, optional to override
+    expect(env).toContain("\n# KNOWLEDGE_DB_URL=\n"); // M15: local knowledge/RAG storage, optional
+    expect(env).not.toContain("COGNEE"); // memory.backend defaults to "local" — no Cognee vars needed
     expect(env).not.toContain("SHOPIFY"); // no connector wiring left to need it
   });
 
@@ -87,7 +105,10 @@ describe("renderProject — golden path (openai)", () => {
     // assumed >=20 — confirmed against its own package.json. Declared so `npm install` warns on an
     // incompatible Node version instead of a confusing runtime failure later.
     expect(pkg.engines).toEqual({ node: ">=22" });
-    expect(pkg.dependencies["@libsql/client"]).toBeUndefined();
+    // M15: the local (default) memory backend needs @libsql/client directly — createKnowledge({
+    // client }) takes a real Client, not a URL. Flipped from toBeUndefined(), confirmed real.
+    expect(pkg.dependencies["@libsql/client"]).toBe("0.18.0");
+    expect(pkg.dependencies["@wappy_ai/connector-cognee"]).toBeUndefined();
   });
 
   test("README documents every env var, no Tools/Skills line", () => {
@@ -142,7 +163,7 @@ describe("renderProject — no tools, ever", () => {
 });
 
 describe("renderProject — incomplete answers refused", () => {
-  test("throws if the (only) interview step is still unanswered", () => {
+  test("throws if any interview step is still unanswered", () => {
     expect(() => renderProject({ answers: {} as CompleteInterviewAnswers, versions: VERSIONS })).toThrow(/incomplete/);
   });
 });

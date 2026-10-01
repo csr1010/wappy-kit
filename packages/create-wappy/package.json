@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/create-agent",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "npm create @wappy_ai/agent \u2014 scaffold a real WhatsApp AI agent (your own model, your own number, your own data) in one command.",
   "keywords": [
     "whatsapp",
@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.8.1",
+    "@wappy_ai/connector-cognee": "workspace:*",
     "@wappy_ai/connector-google": "workspace:*",
     "@wappy_ai/core": "workspace:*",
     "@wappy_ai/harness": "workspace:*",

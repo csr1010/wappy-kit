@@ -16,14 +16,14 @@ function onCancel(): never {
   process.exit(1);
 }
 
-async function selectOne<T extends string>(message: string, choices: { value: string; label: string }[]): Promise<T> {
-  const choice = await clack.select({ message, options: choices.map((c) => ({ value: c.value, label: c.label })) });
+async function selectOne<T extends string>(message: string, choices: { value: string; label: string; hint?: string }[]): Promise<T> {
+  const choice = await clack.select({ message, options: choices.map((c) => ({ value: c.value, label: c.label, hint: c.hint })) });
   if (clack.isCancel(choice)) onCancel();
   return choice as T;
 }
 
 /**
- * Runs the interactive interview (`model` then `productivity`) and returns a complete, valid
+ * Runs the interactive interview (`model`, `memory`, `productivity`) and returns a complete, valid
  * `InterviewAnswers`. No "re-prompt on an invalid answer" loop here: `applyAnswer` can never reject
  * what `selectOne` returns (it's always one of the choices clack was given), so that branch would be
  * dead code, not real defensiveness.
@@ -39,6 +39,9 @@ export async function runInteractiveInterview(): Promise<CompleteInterviewAnswer
     switch (q.step) {
       case "model":
         value = { provider: await selectOne<ModelProvider>(q.prompt, q.choices!) };
+        break;
+      case "memory":
+        value = { backend: await selectOne<"local" | "cognee">(q.prompt, q.choices!) };
         break;
       case "productivity":
         value = { enabled: (await selectOne<"yes" | "no">(q.prompt, q.choices!)) === "yes" };

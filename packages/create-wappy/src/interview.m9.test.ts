@@ -19,6 +19,7 @@ function must(r: ReturnType<typeof applyAnswer>): InterviewAnswers {
 }
 
 const openai = { provider: "openai" } as const;
+const localMemory = { backend: "local" } as const;
 const noProductivity = { enabled: false } as const;
 
 // The interview's "tools" step (M9, Shopify) was removed entirely: domain connectors are out of
@@ -27,11 +28,13 @@ const noProductivity = { enabled: false } as const;
 //
 // A "productivity" step was added back later (@wappy_ai/productivity — not domain-specific, so this
 // doesn't reopen the boundary above): the interview is now model + productivity, not model-only.
-// Every assertion below that hardcoded "just model" needed updating (`--allow-test-change`, same
-// decisions log).
+//
+// --allow-test-change (M15, "Memory backend — local vs. Cognee"): a "memory" step was inserted
+// between "model" and "productivity" — retrieved-knowledge/RAG backend choice (local vs. Cognee).
+// Every assertion below that hardcoded the old 2-step order/shape needed updating.
 describe("the interview asks only what changes the generated code, and never a credential", () => {
-  test("step order is model then productivity", () => {
-    expect([...INTERVIEW_STEP_ORDER]).toEqual(["model", "productivity"]);
+  test("step order is model, memory, productivity", () => {
+    expect([...INTERVIEW_STEP_ORDER]).toEqual(["model", "memory", "productivity"]);
   });
 
   test("questions carry prompts + choices; no free-text or credential questions exist", () => {
@@ -41,15 +44,24 @@ describe("the interview asks only what changes the generated code, and never a c
       expect(q.choices?.length).toBeGreaterThan(0);
     }
     expect(questionFor("model").choices?.map((c) => c.value)).toEqual(["openai", "anthropic", "gemini", "ollama"]);
+    expect(questionFor("memory").choices?.map((c) => c.value)).toEqual(["local", "cognee"]);
     expect(questionFor("productivity").choices?.map((c) => c.value)).toEqual(["no", "yes"]);
+  });
+
+  test("the memory step's cognee choice carries a real explanatory hint, not just a bare label", () => {
+    const cognee = questionFor("memory").choices?.find((c) => c.value === "cognee");
+    expect(cognee?.hint).toBeTruthy();
+    expect(cognee?.hint).toMatch(/knowledge graph/i);
   });
 });
 
-describe("the interview is complete once both steps are answered", () => {
-  test("answering model then productivity completes the interview", () => {
+describe("the interview is complete once every step is answered", () => {
+  test("answering model, memory, then productivity completes the interview", () => {
     let a: InterviewAnswers = {};
     expect(nextStep(a)).toBe("model");
     a = must(applyAnswer(a, "model", openai));
+    expect(nextStep(a)).toBe("memory");
+    a = must(applyAnswer(a, "memory", localMemory));
     expect(nextStep(a)).toBe("productivity");
     a = must(applyAnswer(a, "productivity", noProductivity));
     expect(nextStep(a)).toBeNull();
@@ -63,12 +75,16 @@ describe("assertComplete", () => {
     expect(() => assertComplete({})).toThrow(/"model" hasn't been answered/);
   });
 
-  test("assertComplete throws naming productivity once model is answered but productivity isn't", () => {
-    expect(() => assertComplete({ model: openai })).toThrow(/"productivity" hasn't been answered/);
+  test("assertComplete throws naming memory once model is answered but memory isn't", () => {
+    expect(() => assertComplete({ model: openai })).toThrow(/"memory" hasn't been answered/);
   });
 
-  test("assertComplete passes once both steps are answered", () => {
-    expect(() => assertComplete({ model: openai, productivity: noProductivity })).not.toThrow();
+  test("assertComplete throws naming productivity once model+memory are answered but productivity isn't", () => {
+    expect(() => assertComplete({ model: openai, memory: localMemory })).toThrow(/"productivity" hasn't been answered/);
+  });
+
+  test("assertComplete passes once every step is answered", () => {
+    expect(() => assertComplete({ model: openai, memory: localMemory, productivity: noProductivity })).not.toThrow();
   });
 });
 
@@ -82,6 +98,16 @@ describe("applyAnswer validation", () => {
   test("a missing model provider is rejected", () => {
     const r = applyAnswer({}, "model", {} as never);
     expect(r.ok).toBe(false);
+  });
+
+  test("a missing/invalid memory backend is rejected", () => {
+    expect(applyAnswer({}, "memory", {} as never).ok).toBe(false);
+    expect(applyAnswer({}, "memory", { backend: "redis" } as never).ok).toBe(false);
+  });
+
+  test("a valid memory backend (local or cognee) is accepted", () => {
+    expect(applyAnswer({}, "memory", { backend: "local" }).ok).toBe(true);
+    expect(applyAnswer({}, "memory", { backend: "cognee" }).ok).toBe(true);
   });
 
   test("a missing productivity enabled flag is rejected", () => {
@@ -98,13 +124,22 @@ describe("goBack / skipStep / defaults", () => {
     expect(nextStep(back)).toBe("model");
   });
 
-  test("defaults: openai, productivity off", () => {
-    expect(DEFAULT_ANSWERS).toEqual({ model: openai, productivity: noProductivity });
+  test("goBack to memory clears memory and everything after it (productivity), but not model", () => {
+    let a: InterviewAnswers = must(applyAnswer({}, "model", openai));
+    a = must(applyAnswer(a, "memory", localMemory));
+    a = must(applyAnswer(a, "productivity", noProductivity));
+    const back = goBack(a, "memory");
+    expect(back).toEqual({ model: openai });
+    expect(nextStep(back)).toBe("memory");
+  });
+
+  test("defaults: openai, local memory, productivity off", () => {
+    expect(DEFAULT_ANSWERS).toEqual({ model: openai, memory: localMemory, productivity: noProductivity });
   });
 
   test("skipping every step completes the interview with the defaults", () => {
     let a: InterviewAnswers = {};
     while (!isComplete(a)) a = must(skipStep(a, nextStep(a)!));
-    expect(a).toEqual({ model: openai, productivity: noProductivity });
+    expect(a).toEqual({ model: openai, memory: localMemory, productivity: noProductivity });
   });
 });

@@ -1,0 +1,47 @@
+{
+  "name": "@wappy_ai/connector-cognee",
+  "version": "0.1.0",
+  "description": "Bring-your-own Cognee (self-hosted or cloud): a real Knowledge/RAG backend for @wappy_ai/harness, backed by Cognee's knowledge-graph API instead of local BM25.",
+  "keywords": [
+    "whatsapp",
+    "ai-agent",
+    "productivity",
+    "cognee",
+    "knowledge-graph",
+    "rag",
+    "typescript"
+  ],
+  "homepage": "https://github.com/csr1010/wappy-kit#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/csr1010/wappy-kit.git",
+    "directory": "packages/connector-cognee"
+  },
+  "bugs": "https://github.com/csr1010/wappy-kit/issues",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "@wappy_ai/harness": "workspace:*"
+  }
+}

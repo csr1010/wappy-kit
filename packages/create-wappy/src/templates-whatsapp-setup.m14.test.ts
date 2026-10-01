@@ -12,7 +12,7 @@ import { renderProject, type PartVersions } from "./templates.js";
 const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", createWappy: "0.1.0" };
 
 function complete(): CompleteInterviewAnswers {
-  return { model: DEFAULT_ANSWERS.model, productivity: DEFAULT_ANSWERS.productivity };
+  return { model: DEFAULT_ANSWERS.model, memory: DEFAULT_ANSWERS.memory, productivity: DEFAULT_ANSWERS.productivity };
 }
 
 function fileMap(files: { path: string; content: string }[]): Map<string, string> {

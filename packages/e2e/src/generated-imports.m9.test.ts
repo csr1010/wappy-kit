@@ -22,16 +22,22 @@ import { DEFAULT_ANSWERS, renderProject, type RenderProjectOptions } from "@wapp
  * include both, and the combo matrix now covers productivity true/false, not just model providers —
  * otherwise this test would silently stop checking the newest import surface it exists to catch bugs
  * in (`--allow-test-change`, SPEC.md decisions log).
+ *
+ * M15 ("Memory backend — local vs. Cognee") added a `memory` interview step
+ * (@wappy_ai/connector-cognee for the Cognee-backed wiring) — same reasoning, same update:
+ * `VERSIONS`/`PACKAGE_DIR` now include `connector-cognee`, and the combo matrix covers
+ * memory:local/cognee too (`--allow-test-change`, same decisions log).
  */
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", productivity: "0.1.0", connectorGoogle: "0.1.0", createWappy: "0.1.0" };
+const VERSIONS = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.0", productivity: "0.1.0", connectorGoogle: "0.1.0", connectorCognee: "0.1.0", createWappy: "0.1.0" };
 const PACKAGE_DIR: Record<string, string> = {
   "@wappy_ai/core": "core",
   "@wappy_ai/harness": "harness",
   "@wappy_ai/whatsapp": "whatsapp",
   "@wappy_ai/productivity": "productivity",
   "@wappy_ai/connector-google": "connector-google",
+  "@wappy_ai/connector-cognee": "connector-cognee",
 };
 
 const IMPORT_RE = /^import\s+(?:type\s+)?\{([^}]+)\}\s+from\s+"(@wappy_ai\/[a-z-]+)";?$/gm;
@@ -53,10 +59,12 @@ function importedNames(content: string): { pkg: string; names: string[] }[] {
 }
 
 const combos: { label: string; answers: RenderProjectOptions["answers"] }[] = [
-  { label: "openai (default), productivity off", answers: { model: DEFAULT_ANSWERS.model, productivity: { enabled: false } } },
-  { label: "anthropic, productivity off", answers: { model: { provider: "anthropic" }, productivity: { enabled: false } } },
-  { label: "ollama, productivity off", answers: { model: { provider: "ollama" }, productivity: { enabled: false } } },
-  { label: "openai, productivity ON", answers: { model: DEFAULT_ANSWERS.model, productivity: { enabled: true } } },
+  { label: "openai (default), local memory, productivity off", answers: { model: DEFAULT_ANSWERS.model, memory: DEFAULT_ANSWERS.memory, productivity: { enabled: false } } },
+  { label: "anthropic, local memory, productivity off", answers: { model: { provider: "anthropic" }, memory: DEFAULT_ANSWERS.memory, productivity: { enabled: false } } },
+  { label: "ollama, local memory, productivity off", answers: { model: { provider: "ollama" }, memory: DEFAULT_ANSWERS.memory, productivity: { enabled: false } } },
+  { label: "openai, local memory, productivity ON", answers: { model: DEFAULT_ANSWERS.model, memory: DEFAULT_ANSWERS.memory, productivity: { enabled: true } } },
+  { label: "openai, cognee memory, productivity off", answers: { model: DEFAULT_ANSWERS.model, memory: { backend: "cognee" }, productivity: { enabled: false } } },
+  { label: "openai, cognee memory, productivity ON", answers: { model: DEFAULT_ANSWERS.model, memory: { backend: "cognee" }, productivity: { enabled: true } } },
 ];
 
 describe.each(combos)("generated project imports are real, for combo: $label", ({ answers }) => {

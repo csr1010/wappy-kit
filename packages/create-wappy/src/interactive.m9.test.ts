@@ -14,12 +14,17 @@ import { describe, expect, test, vi } from "vitest";
  * re-prompt" scenario to exercise here (clack's own `select()` can only ever return one of the
  * choices it was given) — that invalid-combo coverage lives in `interview.m9.test.ts`'s own
  * `applyAnswer` tests instead.
+ *
+ * --allow-test-change (M15, "Memory backend — local vs. Cognee"): a "memory" step was inserted
+ * between model and productivity — updated to script all three `select()` calls, and to assert the
+ * real `hint` passthrough (the one thing genuinely new in `selectOne` for this step, since no prior
+ * step's choices used `hint`).
  */
 
 const CANCEL = Symbol("cancel");
 type Scripted<T> = (T | typeof CANCEL)[];
 
-const state: { select: Scripted<string> } = { select: [] };
+const state: { select: Scripted<string>; selectCalls: { message: string; options: { value: string; label: string; hint?: string }[] }[] } = { select: [], selectCalls: [] };
 
 function shift<T>(queue: Scripted<T>): T | typeof CANCEL {
   if (queue.length === 0) throw new Error("test setup: prompt queue exhausted");
@@ -32,7 +37,10 @@ vi.mock("@clack/prompts", () => ({
   cancel: vi.fn(),
   isCancel: (v: unknown) => v === CANCEL,
   log: { error: vi.fn() },
-  select: vi.fn(async () => shift(state.select)),
+  select: vi.fn(async (args: { message: string; options: { value: string; label: string; hint?: string }[] }) => {
+    state.selectCalls.push(args);
+    return shift(state.select);
+  }),
 }));
 
 async function importFresh() {
@@ -42,18 +50,31 @@ async function importFresh() {
 
 function reset() {
   state.select = [];
+  state.selectCalls = [];
 }
 
 describe("runInteractiveInterview — sequencing + answer mapping (clack mocked)", () => {
-  test("asks model then productivity, then finishes — no credential question", async () => {
+  test("asks model, memory, then productivity, then finishes — no credential question", async () => {
     reset();
-    state.select = ["anthropic", "yes"];
+    state.select = ["anthropic", "cognee", "yes"];
 
     const { runInteractiveInterview } = await importFresh();
     const answers = await runInteractiveInterview();
 
-    expect(answers).toEqual({ model: { provider: "anthropic" }, productivity: { enabled: true } });
+    expect(answers).toEqual({ model: { provider: "anthropic" }, memory: { backend: "cognee" }, productivity: { enabled: true } });
     expect(state.select).toHaveLength(0);
+  });
+
+  test("the memory step's select() options carry the real hint text through, not dropped", async () => {
+    reset();
+    state.select = ["openai", "local", "no"];
+
+    const { runInteractiveInterview } = await importFresh();
+    await runInteractiveInterview();
+
+    const memoryCall = state.selectCalls[1]!;
+    const cogneeOption = memoryCall.options.find((o) => o.value === "cognee");
+    expect(cogneeOption?.hint).toBeTruthy();
   });
 });
 

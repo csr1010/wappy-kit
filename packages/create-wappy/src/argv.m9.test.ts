@@ -25,8 +25,12 @@ describe("parseArgv", () => {
     expect(parsed).toEqual({ model: "anthropic", dir: "./my-bot" });
   });
 
+  // --allow-test-change (M15, "Memory backend — local vs. Cognee"): --memory removed from this list
+  // — it's a real flag again (a different, unrelated choice than whatever the original pre-M9
+  // "memory storage" step asked; this one picks the Knowledge/RAG backend) — see its own coverage
+  // in `resolveNonInteractiveAnswers`'s tests instead.
   test("flags for steps that no longer exist are rejected, not silently ignored", () => {
-    for (const gone of ["--framework", "--memory", "--router", "--whatsapp", "--shopify-store-domain", "--whatsapp-access-token", "--skills", "--api"]) {
+    for (const gone of ["--framework", "--router", "--whatsapp", "--shopify-store-domain", "--whatsapp-access-token", "--skills", "--api"]) {
       expect(() => parseArgv([gone, "x"])).toThrow(/Unrecognized flag/);
     }
   });
@@ -46,8 +50,13 @@ describe("parseArgv", () => {
   });
 
   // productivity (--productivity, @wappy_ai/productivity) added as a second interview-step flag
-  // later — updated to match, excluding --dir/--yes/--help (`--allow-test-change`, SPEC.md decisions log).
-  test("STEP_FLAG_KEYS lists exactly the 2 interview-step flags, excluding --dir/--yes/--help", () => {
-    expect([...STEP_FLAG_KEYS]).toEqual(["model", "productivity"]);
+  // later; memory (--memory, M15) added as a third — updated to match, excluding
+  // --dir/--yes/--help (`--allow-test-change`, SPEC.md decisions log).
+  test("STEP_FLAG_KEYS lists exactly the 3 interview-step flags, excluding --dir/--yes/--help", () => {
+    expect([...STEP_FLAG_KEYS]).toEqual(["model", "memory", "productivity"]);
+  });
+
+  test("--memory is a real, recognized flag again (the Knowledge/RAG backend choice)", () => {
+    expect(parseArgv(["--memory", "cognee"])).toEqual({ memory: "cognee" });
   });
 });

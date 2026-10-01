@@ -11,10 +11,12 @@ import { renderProject, type PartVersions } from "./templates.js";
  * answer leaves everything exactly as it was before this step existed.
  */
 
-const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.1", productivity: "0.3.0", connectorGoogle: "0.3.0", createWappy: "0.1.0" };
+const VERSIONS: PartVersions = { core: "0.1.0", harness: "0.1.0", whatsapp: "0.1.1", productivity: "0.3.0", connectorGoogle: "0.3.0", connectorCognee: "0.1.0", createWappy: "0.1.0" };
 
+// --allow-test-change (M15, "Memory backend — local vs. Cognee"): needs `memory` too, since
+// `CompleteInterviewAnswers` now requires it.
 function withProductivity(enabled: boolean): CompleteInterviewAnswers {
-  return { model: DEFAULT_ANSWERS.model, productivity: { enabled } };
+  return { model: DEFAULT_ANSWERS.model, memory: DEFAULT_ANSWERS.memory, productivity: { enabled } };
 }
 
 function fileMap(files: { path: string; content: string }[]): Map<string, string> {
@@ -124,9 +126,14 @@ describe("renderProject — productivity: true", () => {
     expect(readme).not.toContain("task-management page");
   });
 
-  test("index.ts has no Knowledge/RAG wiring — real fetched data grounds each reply directly", () => {
-    expect(indexTs).not.toContain("createKnowledge");
-    expect(indexTs).not.toContain("retrieveRag");
+  // --allow-test-change (M15, "Memory backend — local vs. Cognee"): Knowledge/RAG wiring is now
+  // unconditional (independent of productivity) — flipped from not.toContain to toContain, confirmed
+  // real by reading the actual current templates.ts content first, not assumed. The productivity
+  // agent's own Gmail/Calendar tool-calling path is separate and unaffected either way.
+  test("index.ts has real Knowledge/RAG wiring too (independent of productivity) — passed into the reactive agent, not the productivity path", () => {
+    expect(indexTs).toContain("createKnowledge");
+    expect(indexTs).toContain("retrieveRag");
+    expect(indexTs).toMatch(/createAgent\(\{[\s\S]*retrieveRag,[\s\S]*\}\)/);
   });
 
   test("GOOGLE_SETUP.md is generated with the exact redirect URI and connect guidance, no task-authoring instructions", () => {
