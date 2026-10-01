@@ -48,6 +48,14 @@ export function createCogneeKnowledge(opts: CogneeKnowledgeOptions): Knowledge {
     async ingest(sourceId: string, text: string, chunkOptions?: ChunkOptions): Promise<number> {
       void chunkOptions; // intentionally unused — see the comment above
       if (!text.trim()) return 0;
+      // `ingest()` REPLACES a source's prior content, it does not accrete alongside it — the same
+      // contract `@wappy_ai/harness`'s own local Knowledge enforces (it deletes a sourceId's old
+      // chunks before inserting new ones). Confirmed live that Cognee itself does NOT do this on its
+      // own: calling add() twice under the same dataset name creates two separate documents, and a
+      // CHUNKS search then returns both the old and new text side by side — e.g. a stale "budget
+      // $2000" chunk kept surfacing alongside a newer "budget $2800" one. So this client removes any
+      // existing dataset for `sourceId` first; `removeDataset` is already a no-op when none exists.
+      await client.removeDataset(sourceId);
       await client.add(sourceId, text);
       await client.cognify(sourceId);
       // Cognee's cognify response doesn't give a confirmed "chunk count" equivalent (see client.ts's

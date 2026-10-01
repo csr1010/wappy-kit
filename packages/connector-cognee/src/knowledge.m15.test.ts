@@ -16,13 +16,27 @@ function fakeFetch(responses: unknown[]) {
 }
 
 describe("createCogneeKnowledge — ingest", () => {
-  test("calls add() then cognify() for the given sourceId, in order", async () => {
-    const fetchImpl = fakeFetch([{}, {}]);
+  test("on a fresh sourceId: looks up (finds nothing), then calls add() and cognify(), in order", async () => {
+    const fetchImpl = fakeFetch([[], {}, {}]); // GET /datasets -> no match, then add, then cognify
     const knowledge = createCogneeKnowledge({ baseUrl: "http://localhost:8000", fetchImpl });
     await knowledge.ingest("doc-1", "some real text to ingest");
-    expect(fetchImpl.mock.calls).toHaveLength(2);
-    expect(String(fetchImpl.mock.calls[0]![0])).toContain("/api/v1/add");
-    expect(String(fetchImpl.mock.calls[1]![0])).toContain("/api/v1/cognify");
+    expect(fetchImpl.mock.calls).toHaveLength(3);
+    expect(String(fetchImpl.mock.calls[0]![0])).toContain("/api/v1/datasets");
+    expect(String(fetchImpl.mock.calls[1]![0])).toContain("/api/v1/add");
+    expect(String(fetchImpl.mock.calls[2]![0])).toContain("/api/v1/cognify");
+  });
+
+  test("ingesting a SECOND time under the same sourceId REPLACES the prior content, it does not accrete alongside it — matches the contract @wappy_ai/harness's own local Knowledge already enforces (it deletes a sourceId's old chunks before inserting new ones)", async () => {
+    const fetchImpl = fakeFetch([[{ id: "uuid-old", name: "doc-1" }], {}, {}, {}]); // GET /datasets -> finds the old one, DELETE it, then add, then cognify
+    const knowledge = createCogneeKnowledge({ baseUrl: "http://localhost:8000", fetchImpl });
+    await knowledge.ingest("doc-1", "updated text, supersedes the old version");
+    expect(fetchImpl.mock.calls).toHaveLength(4);
+    expect(String(fetchImpl.mock.calls[0]![0])).toContain("/api/v1/datasets");
+    expect((fetchImpl.mock.calls[0]![1] as { method: string })?.method).toBe("GET");
+    expect(String(fetchImpl.mock.calls[1]![0])).toBe("http://localhost:8000/api/v1/datasets/uuid-old");
+    expect((fetchImpl.mock.calls[1]![1] as { method: string }).method).toBe("DELETE");
+    expect(String(fetchImpl.mock.calls[2]![0])).toContain("/api/v1/add");
+    expect(String(fetchImpl.mock.calls[3]![0])).toContain("/api/v1/cognify");
   });
 
   test("empty/whitespace-only text is a no-op — never calls the API, returns 0", async () => {
@@ -34,17 +48,17 @@ describe("createCogneeKnowledge — ingest", () => {
   });
 
   test("a real ingest returns 1 (one source ingested — not a literal chunk count, see knowledge.ts's own comment)", async () => {
-    const fetchImpl = fakeFetch([{}, {}]);
+    const fetchImpl = fakeFetch([[], {}, {}]);
     const knowledge = createCogneeKnowledge({ baseUrl: "http://localhost:8000", fetchImpl });
     const count = await knowledge.ingest("doc-1", "real text");
     expect(count).toBe(1);
   });
 
   test("chunkOptions is accepted (matches the Knowledge interface) but doesn't change the request — Cognee does its own chunking", async () => {
-    const fetchImpl = fakeFetch([{}, {}]);
+    const fetchImpl = fakeFetch([[], {}, {}]);
     const knowledge = createCogneeKnowledge({ baseUrl: "http://localhost:8000", fetchImpl });
     await knowledge.ingest("doc-1", "real text", { maxChunkChars: 50, overlapChars: 5 });
-    const body = (fetchImpl.mock.calls[0]![1] as { body: FormData }).body;
+    const body = (fetchImpl.mock.calls[1]![1] as { body: FormData }).body;
     expect(body.has("maxChunkChars")).toBe(false);
     expect(body.has("overlapChars")).toBe(false);
   });
