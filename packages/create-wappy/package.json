@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/create-agent",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "npm create @wappy_ai/agent \u2014 scaffold a real WhatsApp AI agent (your own model, your own number, your own data) in one command.",
   "keywords": [
     "whatsapp",
@@ -12,7 +12,9 @@
     "cli",
     "scaffold",
     "create-app",
-    "typescript"
+    "typescript",
+    "instinct",
+    "muse"
   ],
   "homepage": "https://github.com/csr1010/wappy-kit#readme",
   "repository": {
