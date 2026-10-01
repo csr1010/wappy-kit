@@ -133,10 +133,22 @@ export function createCogneeClient(opts: CogneeClientOptions): CogneeClient {
         body: JSON.stringify({ query, searchType: "CHUNKS", ...(topK !== undefined ? { topK } : {}) }),
       });
       const json = await parseJsonOrThrow(res, "search");
-      // Confirmed live: a successful CHUNKS search returns a bare array of chunk objects. An empty/
-      // no-data dataset throws a 4xx with a `detail` string instead (handled by parseJsonOrThrow's
-      // !res.ok path above) — this defensive fallback is for any other, unanticipated shape.
-      return Array.isArray(json) ? (json as CogneeChunk[]) : [];
+      // Confirmed live, against TWO real server configurations that return genuinely different
+      // shapes for the exact same CHUNKS search: a single-user/no-auth instance
+      // (ENABLE_BACKEND_ACCESS_CONTROL=false) returns a bare array of chunk objects directly; the
+      // default auth-enabled/multi-tenant instance wraps results per dataset instead —
+      // `[{ dataset_id, dataset_name, search_result: [...chunks] }]` — and the default mode is the
+      // one anyone self-hosting without extra config will actually hit. Missing this wrapper meant
+      // every chunk silently vanished (fell through to the "unanticipated shape" fallback) on a real
+      // auth-enabled server, confirmed by comparing the server's own log ("Found 1 chunks from vector
+      // search") against this client returning `[]`. Both shapes are handled here; an empty/no-data
+      // dataset throws a 4xx with a `detail` string instead (handled by parseJsonOrThrow's !res.ok
+      // path above).
+      if (!Array.isArray(json)) return [];
+      if (json.length > 0 && typeof json[0] === "object" && json[0] !== null && "search_result" in json[0]) {
+        return (json as { search_result: unknown }[]).flatMap((envelope) => (Array.isArray(envelope.search_result) ? (envelope.search_result as CogneeChunk[]) : []));
+      }
+      return json as CogneeChunk[];
     },
 
     async removeDataset(datasetName) {

@@ -102,11 +102,41 @@ describe("createCogneeClient — search()", () => {
     expect(body).not.toHaveProperty("topK");
   });
 
-  test("a real CHUNKS response is a bare array of {id, text, score, document_id} — confirmed live", async () => {
+  test("a single-user/no-auth CHUNKS response is a bare array of {id, text, score, document_id} — confirmed live with ENABLE_BACKEND_ACCESS_CONTROL=false", async () => {
     const fetchImpl = fakeFetch([{ id: "c1", text: "a matching chunk", score: 0.8, document_id: "doc-1", document_name: "text_abc" }]);
     const client = createCogneeClient({ baseUrl: "http://localhost:8000", fetchImpl });
     const results = await client.search("query");
     expect(results).toEqual([{ id: "c1", text: "a matching chunk", score: 0.8, document_id: "doc-1", document_name: "text_abc" }]);
+  });
+
+  test("a default auth-enabled/multi-tenant CHUNKS response wraps results per dataset — confirmed live: this is the shape anyone self-hosting WITHOUT setting ENABLE_BACKEND_ACCESS_CONTROL=false actually gets, and missing it silently dropped every real chunk", async () => {
+    const fetchImpl = fakeFetch([
+      { dataset_id: "ds-1", dataset_name: "ds-one", search_result: [{ id: "c1", text: "chunk from dataset one", score: 0.2 }] },
+      { dataset_id: "ds-2", dataset_name: "ds-two", search_result: [{ id: "c2", text: "chunk from dataset two", score: 0.4 }] },
+    ]);
+    const client = createCogneeClient({ baseUrl: "http://localhost:8000", fetchImpl });
+    const results = await client.search("query");
+    expect(results).toEqual([
+      { id: "c1", text: "chunk from dataset one", score: 0.2 },
+      { id: "c2", text: "chunk from dataset two", score: 0.4 },
+    ]);
+  });
+
+  test("a multi-tenant envelope with an empty search_result contributes nothing, not a crash", async () => {
+    const fetchImpl = fakeFetch([{ dataset_id: "ds-1", dataset_name: "ds-one", search_result: [] }]);
+    const client = createCogneeClient({ baseUrl: "http://localhost:8000", fetchImpl });
+    const results = await client.search("query");
+    expect(results).toEqual([]);
+  });
+
+  test("a multi-tenant envelope whose search_result isn't an array (unexpected) contributes nothing, not a crash", async () => {
+    const fetchImpl = fakeFetch([
+      { dataset_id: "ds-1", dataset_name: "ds-one", search_result: "not-an-array" },
+      { dataset_id: "ds-2", dataset_name: "ds-two", search_result: [{ id: "c2", text: "real chunk", score: 0.3 }] },
+    ]);
+    const client = createCogneeClient({ baseUrl: "http://localhost:8000", fetchImpl });
+    const results = await client.search("query");
+    expect(results).toEqual([{ id: "c2", text: "real chunk", score: 0.3 }]);
   });
 
   test("an unrecognized response shape degrades to an empty result, not a crash", async () => {
