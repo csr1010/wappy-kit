@@ -1,13 +1,27 @@
 # Wappy
 
-### The open-source AI agent SDK for WhatsApp. Bring your own model, your own number, your own data.
+### Build a real AI agent on WhatsApp, running on your own machine, in under a minute.
 
 [![CI](https://github.com/csr1010/wappy-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/csr1010/wappy-kit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![npm](https://img.shields.io/npm/v/%40wappy_ai%2Fcreate-agent?label=%40wappy_ai%2Fcreate-agent)](https://www.npmjs.com/package/@wappy_ai/create-agent)
-[![Local-first](https://img.shields.io/badge/local--first-%E2%9C%94-brightgreen)](#why-this-exists)
+[![Local-first](https://img.shields.io/badge/local--first-%E2%9C%94-brightgreen)](#why-now)
 
-## Install
+Free. Open source. No account with us, ever. Your conversations, your memory, your data stay in
+one file on your own machine — nothing routes through a server we run.
+
+## Why now
+
+AI models finally got good enough to reliably use tools, remember context, and hold a real
+conversation, not just autocomplete a reply. At the same time, WhatsApp is already the app on
+over 2 billion phones, nobody has to install anything new to talk to your agent. Put those two
+things together and the obvious move is: skip building a new app, skip handing your data to
+someone else's cloud, and just run your own agent, locally, on the channel people already have
+open.
+
+That's what this is. One command, your own model key, your own WhatsApp number, your own data.
+
+## Install — under a minute, free, 100% local
 
 ```bash
 npm create @wappy_ai/agent
@@ -15,8 +29,6 @@ cp .env.sample .env    # fill in your model key + WhatsApp creds
 npm install
 npm run dev             # boots the server, opens a tunnel, prints the URL for Meta's webhook config
 ```
-
-Here's the whole install, start to finish:
 
 ```
 $ npm create @wappy_ai/agent
@@ -29,72 +41,71 @@ $ npm create @wappy_ai/agent
 │  ○ Gemini
 │  ○ Local Ollama
 │
-◆  Add a productivity agent (reads your Gmail/Calendar once you connect Google, answers
-│  any question about them in plain language)?
+◆  Where should retrieved knowledge (anything you ingest) live?
+│  ● Local (SQLite/LibSQL) — free, no account, works offline
+│  ○ Cognee — self-hosted or cloud knowledge graph
+│
+◆  Add a productivity agent (reads your Gmail/Calendar, answers in plain language)?
 │  ○ No
 │  ● Yes
 └
 ◇  Interview complete — generating your project...
 
 Done — 7 file(s) written in ./my-agent.
-See README.md for next steps. Full WhatsApp connection walkthrough in WHATSAPP_SETUP.md.
 ```
 
-That single prompt is the entire interview. Everything else, memory, context, reply formatting,
-is already wired and running on your own machine the moment it finishes. Nobody's server sits in
-the middle. Nobody can shut it off.
+A few questions, then a working agent. No credit card, no signup for Wappy itself, nothing
+phoning home.
 
-## What it does
+## Personal use cases
 
-Ever tried building a bot on WhatsApp with one of the usual tools out there and hit one of these?
-Yeah, us too. These are real complaints about the drag-and-drop tools and canned chatbot builders,
-not this project. Here's what actually goes wrong with those, and what happens here instead.
+- 🧠 **A personal assistant that actually remembers you.** Not just the last message, a real
+  session profile of what's going on, so three days later it still knows what you meant.
+- 📅 **"What's on my calendar / find that email"** — connect your own Google account once, then
+  just ask in plain English. No fixed command list.
+- 📚 **A private, grounded knowledge base.** Ingest your own notes or documents and ask questions
+  about them, answered from what you actually gave it, never a hallucinated guess, and it never
+  leaves your machine.
 
-- 🔒 **"Wait, where's my data actually going?"** With most tools, it's on their server, not yours.
-  Here, memory, chat history, even the model reading your documents, all of it lives in one plain
-  file on your own machine. Nothing leaves unless you say so.
-- 🧠 **"Wait, why did my agent just forget what we were talking about?"** Most bots only keep the
-  raw chat log, so the second a message scrolls past, the thread is gone, and a one-word reply like
-  "medium" three days later reads as gibberish. This one keeps a real session profile: what's
-  actually going on right now, not just old messages, so it still knows exactly what that's an
-  answer to, and the conversation never has to restart from zero.
-- ⚡ **"Why is even a simple message burning through my API credits?"** It's not really about
-  saying "hi" specifically. It's that most bots run every message through the same expensive path
-  no matter how simple it is. This one routes first: a lightweight decision step figures out whether
-  a message actually needs a data lookup or a tool call before anything expensive happens, so a
-  plain message gets a plain, cheap answer, and only the ones that truly need it pay for it.
-- 🎛️ **"Why does every reply look like the same copy-pasted template?"** Because most bots have no
-  memory and no context, so every single person gets the exact same canned message back. This one
-  personalizes: the same agent harness that remembers who it's talking to also decides, live, what
-  shape the reply should take, text, buttons, a list, a link, tailored to what's actually being
-  said instead of one hardcoded format for everyone.
-- 🛑 **"What if it fires the same charge twice?"** It won't. Anything real, a charge, a
-  cancellation, waits for an actual confirmation first, and can never double-fire by mistake.
-- 🧩 **"So what am I locked into?"** Nothing. Your number, your model, your own tools and APIs. No
-  vendor holding the leash.
+## Business use cases
 
-Tested by hand against a real WhatsApp number, not just automated checks. If it's in here, it works.
+- 🎫 **A support agent** that resolves things in your own ticketing system instead of collecting
+  an email and vanishing.
+- 🍽️ **A booking agent** for a restaurant, clinic, or studio, wired to your real reservations
+  system.
+- 🏢 **An internal ops bot** for IT or HR, reachable from the app your team already has open all
+  day.
+
+None of these ship pre-built, they're what you wire your own data and tools into. The agent
+(memory, context, tool-calling, reply formatting) is already built; your business logic is yours.
+
+## Memory backend: local or Cognee
+
+Every generated project wires in a real `Knowledge`/RAG layer, so anything you ingest can
+actually be retrieved and grounded in a reply. The interview picks what backs it:
+
+- **Local (default)** — SQLite/LibSQL, BM25 matching, zero setup, fully offline.
+- **[Cognee](https://www.cognee.ai/)** — self-hosted or cloud. Extracts entities and relationships
+  into a real knowledge graph instead of plain keyword matching, and keeps refining it over time.
+  Needs your own running Cognee instance — the generated project's `COGNEE_SETUP.md` covers both
+  the self-hosted and cloud paths.
+
+Same rule as everywhere else here: bring your own instance, nothing routed through us.
 
 ## A real sample tool: Gmail/Calendar assistant
 
-Say "yes" to the second interview question and you get a working example of the tool-calling
-harness already used for everything else here, not a toy demo. Once you connect your own Google
-account (one click, on a local page the generated project serves), you can text the bot **anything**
-about your Gmail or Calendar in plain language, there's no fixed command list to learn:
+Say "yes" to the productivity question and you get a working example of the tool-calling harness
+used for everything else here, not a toy demo. Connect your own Google account (one click, on a
+local page the project serves) and text the bot anything about your Gmail or Calendar:
 
 - "What's on my calendar today?"
 - "Find emails about the invoice from last week"
 - "Summarize my unread mail by topic from the last 2 days"
 
-Under the hood it's two generic, parameterized, read-only tools (`search_gmail`, `search_calendar`)
-using Gmail's and Calendar's own real query syntax. The model constructs the actual query itself
-from whatever you asked, no hand-built filtering logic, no MCP server, no extra framework, just
-`@wappy_ai/core`'s own `Tool` interface and the multi-step tool-calling loop `@wappy_ai/harness`'s
-model layer already runs. It only reads, never sends an email or creates/edits/deletes an event,
-that's real open-source headroom if you want to build it.
-
-Not connected yet? A matched question just replies honestly that it needs "Connect Google" tapped
-first, never a fabricated answer.
+Two generic, parameterized, read-only tools (`search_gmail`, `search_calendar`) using each API's
+own real query syntax — the model builds the actual query itself, no hand-built filters, no MCP
+server. It only reads, never sends or deletes anything. Not connected yet? It says so honestly
+instead of making something up.
 
 ## Packages
 
@@ -103,57 +114,20 @@ first, never a fabricated answer.
 | `@wappy_ai/core` | The shared contracts everything else is built on. |
 | `@wappy_ai/harness` | The agent itself: how it thinks, remembers, and decides what to do. |
 | `@wappy_ai/whatsapp` | Talking to WhatsApp correctly: message formatting, retries, a real webhook server. |
-| `@wappy_ai/create-agent` | The installer (`npm create @wappy_ai/agent`). Two questions, then a working project. |
-| `@wappy_ai/productivity` *(optional)* | The Gmail/Calendar assistant above — generic, read-only, parameterized search tools plus the local "Connect Google" page. |
-| `@wappy_ai/connector-google` *(optional)* | Bring-your-own Google OAuth + the real Gmail/Calendar API calls behind `@wappy_ai/productivity`'s tools. |
+| `@wappy_ai/create-agent` | The installer (`npm create @wappy_ai/agent`). |
+| `@wappy_ai/connector-cognee` *(optional)* | Bring-your-own Cognee REST client + `Knowledge` implementation, used when you pick Cognee over the local memory backend. |
+| `@wappy_ai/productivity` *(optional)* | The Gmail/Calendar assistant above. |
+| `@wappy_ai/connector-google` *(optional)* | Bring-your-own Google OAuth + the real Gmail/Calendar API calls behind it. |
 
-Every install pulls in the first four. The last two are opt-in, only added when you answer "yes"
-to the productivity question, nothing extra otherwise.
-
-## Why this exists
-
-The real problem was never the drag-and-drop canvas. It's that there was no easy way to actually
-plug your own data and logic into WhatsApp without it turning into a full custom build. So you
-either settle for a canned chatbot, or you build everything yourself from scratch, and most people
-give up and go back to a spreadsheet and a phone.
-
-Wappy is the easy way in without giving up control: talk to WhatsApp correctly, remember who
-you're talking to, reply in whatever shape fits, so you spend your time on what your agent
-actually does, not on rebuilding the basics.
-
-## What you can build on it
-
-This isn't built around one use case. It's a real agent with memory, context, and a decision loop
-already working, WhatsApp is just the surface. Whatever business already runs on some system with
-real data behind it (a CRM, a booking calendar, a ticketing tool, an inventory sheet, an internal
-API) can have that system answering customers on WhatsApp directly, the moment you wire its tools
-in. That's not a small list of "supported integrations," it's anything you can call from code,
-which is close to everything:
-
-- 🏋️ **A fitness coach** that reads your Fitbit data and finds you a gym nearby.
-- 🛍️ **A commerce agent** that checks stock and looks up real order status.
-- 🎫 **A support agent** that resolves things in your ticketing system, instead of collecting an
-  email and vanishing.
-- 🍽️ **A booking agent** for a restaurant, a clinic, a studio, anything with a reservations system.
-- 🏠 **A leasing agent** that answers "is this still available" from your real listings.
-- 🧠 **A personal assistant** wired to your calendar, your notes, your own tools.
-- 📚 **A doc-grounded expert**, answers grounded in what you actually gave it, running entirely
-  on your machine.
-- 🏢 **An internal ops bot** for IT, HR, whatever your company already runs, reachable from the
-  app your team already has open all day.
-
-None of that ships in this repo, on purpose. This handles WhatsApp and the thinking. Your product
-idea is yours to build on top, using the same building blocks the core already uses. No forking
-required.
+Every install pulls in `core`/`harness`/`whatsapp`/`create-agent`. `connector-cognee` is only
+added if you pick Cognee; `productivity`/`connector-google` only if you say yes to the
+productivity question. Nothing extra otherwise.
 
 ## Requirements
 
 - **Node.js 22+** (the Vercel AI SDK, which every generated project depends on directly, requires it)
-- **A WhatsApp Cloud API app.** Free, via [Meta's developer portal](https://developers.facebook.com/apps). You'll need a phone number, an access token, and an app secret. The generated project's own README walks you through every field.
+- **A WhatsApp Cloud API app.** Free, via [Meta's developer portal](https://developers.facebook.com/apps). You'll need a phone number, an access token, and an app secret — the generated project's own README walks through every field.
 - **A model API key.** OpenAI, Anthropic, or Gemini. Or skip it entirely and run fully offline against local Ollama.
-
-No credit card. No signup for Wappy itself. No forced cloud service in the critical path. The
-only network calls a generated project makes are to the providers you chose.
 
 ## For contributors (and your coding agent)
 
@@ -166,6 +140,6 @@ MIT. See [`LICENSE`](./LICENSE).
 
 ---
 
-*Built for developers who want a real agent on WhatsApp, not another flowchart.*
+*Built for people who want a real agent on WhatsApp, not another flowchart.*
 
 *Not affiliated with, endorsed by, or sponsored by WhatsApp or Meta. This project talks to the public WhatsApp Cloud API, the same one any developer can request access to.*
