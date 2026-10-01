@@ -128,6 +128,7 @@ productivity question. Nothing extra otherwise.
 - **Node.js 22+** (the Vercel AI SDK, which every generated project depends on directly, requires it)
 - **A WhatsApp Cloud API app.** Free, via [Meta's developer portal](https://developers.facebook.com/apps). You'll need a phone number, an access token, and an app secret — the generated project's own README walks through every field.
 - **A model API key.** OpenAI, Anthropic, or Gemini. Or skip it entirely and run fully offline against local Ollama.
+- **Python 3.10–3.14 — only if you pick Cognee as your memory backend AND self-host it without Docker.** The default (local) memory backend needs nothing extra, and Cognee itself can also be run via Docker or Cognee Cloud instead — your generated project's own `COGNEE_SETUP.md` covers all three. Not a requirement of `npm create @wappy_ai/agent` itself.
 
 ## For contributors (and your coding agent)
 
