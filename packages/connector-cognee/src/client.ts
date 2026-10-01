@@ -5,18 +5,22 @@
  * `@wappy_ai/connector-google`'s `oauth.ts` (a plain `fetch`-based client, injectable `fetchImpl` for
  * testing, no SDK dependency).
  *
- * Endpoints (confirmed real, under the `/api/v1/` prefix — see https://api.cognee.ai/docs for the
- * full Swagger reference): `POST /api/v1/add` (ingest raw text), `POST /api/v1/cognify` (triggers
- * the entity/relationship extraction pipeline on previously-added data — must run after `add`,
- * before that data is searchable), `POST /api/v1/search` (semantic query), `DELETE /api/v1/datasets`
- * (remove a dataset).
- *
- * HONEST, STATED UNKNOWN (per the plan this was built from): the exact request/response JSON body
- * shapes for these four endpoints were not independently confirmed against a live Cognee instance —
- * only the endpoint paths, methods, and general purpose were verified via Cognee's own published
- * docs. The shapes below are this implementation's best-effort construction from that documentation;
- * verify against https://api.cognee.ai/docs (interactive Swagger) against a real instance before
- * trusting this in production, and adjust if the real server disagrees.
+ * Every request/response shape here was confirmed against a REAL, locally-booted Cognee server
+ * (v1.6.2) — its own live OpenAPI spec (`GET /openapi.json`) plus real `curl` round-trips (register →
+ * login → create an API key → add → cognify → search → delete), not just read from docs. Concretely
+ * confirmed, not assumed:
+ * - `POST /api/v1/add` is `multipart/form-data`, fields `raw_data` (string) + `datasetName` — a JSON
+ *   body is rejected.
+ * - `POST /api/v1/cognify` is JSON `{ datasets: [name] }`.
+ * - `POST /api/v1/search` is JSON `{ query, searchType, topK? }`. `searchType` matters a lot —
+ *   the default (`HYBRID_COMPLETION`) returns an LLM-composed answer, not scored chunks; `"CHUNKS"`
+ *   is what returns a flat array of `{ id, text, score, document_id, document_name, ... }` objects,
+ *   which is the shape this client maps onto `Knowledge`'s `RecalledChunk`.
+ * - Self-hosted auth (when enabled) uses `X-Api-Key: <key>`, NOT `Authorization: Bearer`.
+ * - `DELETE /api/v1/datasets` (no path segment) deletes **every** dataset the caller can see,
+ *   confirmed by a real call — there is no "delete by name in the body" variant. Deleting one
+ *   dataset requires looking its id up by name via `GET /api/v1/datasets` first, then
+ *   `DELETE /api/v1/datasets/{id}`.
  */
 
 export type FetchImpl = typeof fetch;
@@ -25,27 +29,34 @@ export interface CogneeClientOptions {
   /** Your own Cognee instance — self-hosted (e.g. "http://localhost:8000") or Cognee Cloud. */
   baseUrl: string;
   /** Only needed for Cognee Cloud or an auth-enabled self-hosted instance. Sent as
-   * `Authorization: Bearer {apiKey}`; omitted entirely for an unauthenticated self-hosted instance. */
+   * `X-Api-Key: {apiKey}`; omitted entirely for an unauthenticated self-hosted instance. */
   apiKey?: string;
   fetchImpl?: FetchImpl;
 }
 
-export interface CogneeSearchResult {
+export interface CogneeChunk {
   id?: string;
   text?: string;
   score?: number;
-  /** Cognee's real response may nest additional graph/entity metadata beyond what this client reads
-   * — kept as an open record rather than a narrow type, since the exact full shape isn't confirmed
-   * (see the module-level honest-unknown note above). */
+  document_id?: string;
+  document_name?: string;
   [key: string]: unknown;
 }
 
-function headers(apiKey: string | undefined, extra?: Record<string, string>): Record<string, string> {
+interface CogneeDataset {
+  id: string;
+  name: string;
+}
+
+function jsonHeaders(apiKey: string | undefined): Record<string, string> {
   return {
     "content-type": "application/json",
-    ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
-    ...extra,
+    ...(apiKey ? { "x-api-key": apiKey } : {}),
   };
+}
+
+function authHeaders(apiKey: string | undefined): Record<string, string> {
+  return apiKey ? { "x-api-key": apiKey } : {};
 }
 
 async function parseJsonOrThrow(res: Response, action: string): Promise<unknown> {
@@ -64,38 +75,53 @@ async function parseJsonOrThrow(res: Response, action: string): Promise<unknown>
 }
 
 export interface CogneeClient {
-  /** Ingests raw text under `datasetId` (Cognee's own "dataset" concept — used here as the
-   * equivalent of `Knowledge`'s `sourceId`). Data added this way isn't searchable until `cognify()`
-   * runs on it. */
-  add(datasetId: string, text: string): Promise<void>;
+  /** Ingests raw text into the dataset named `datasetName` (Cognee's own "dataset" concept — used
+   * here as the equivalent of `Knowledge`'s `sourceId`). Data added this way isn't searchable until
+   * `cognify()` runs on it. */
+  add(datasetName: string, text: string): Promise<void>;
   /** Triggers Cognee's entity/relationship extraction pipeline over previously-`add`ed data for
-   * `datasetId`. Must run after `add`, before that data is searchable via `search()`. */
-  cognify(datasetId: string): Promise<void>;
-  /** Semantic search across ingested data. */
-  search(query: string, topK?: number): Promise<CogneeSearchResult[]>;
-  /** Removes a dataset entirely. */
-  removeDataset(datasetId: string): Promise<void>;
+   * `datasetName`. Must run after `add`, before that data is searchable via `search()`. */
+  cognify(datasetName: string): Promise<void>;
+  /** Semantic search across ingested data, using Cognee's "CHUNKS" search type so results come back
+   * as scored passages rather than an LLM-composed answer. */
+  search(query: string, topK?: number): Promise<CogneeChunk[]>;
+  /** Removes the dataset named `datasetName` entirely. A no-op if no dataset with that name exists
+   * (never falls back to Cognee's bare `DELETE /datasets`, which deletes everything). */
+  removeDataset(datasetName: string): Promise<void>;
 }
 
 export function createCogneeClient(opts: CogneeClientOptions): CogneeClient {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const base = opts.baseUrl.replace(/\/$/, "");
 
+  async function findDatasetId(name: string): Promise<string | null> {
+    const res = await fetchImpl(`${base}/api/v1/datasets`, {
+      method: "GET",
+      headers: authHeaders(opts.apiKey),
+    });
+    const json = await parseJsonOrThrow(res, "findDatasetId");
+    const datasets = Array.isArray(json) ? (json as CogneeDataset[]) : [];
+    return datasets.find((d) => d.name === name)?.id ?? null;
+  }
+
   return {
-    async add(datasetId, text) {
+    async add(datasetName, text) {
+      const form = new FormData();
+      form.append("raw_data", text);
+      form.append("datasetName", datasetName);
       const res = await fetchImpl(`${base}/api/v1/add`, {
         method: "POST",
-        headers: headers(opts.apiKey),
-        body: JSON.stringify({ data: text, datasetName: datasetId }),
+        headers: authHeaders(opts.apiKey),
+        body: form,
       });
       await parseJsonOrThrow(res, "add");
     },
 
-    async cognify(datasetId) {
+    async cognify(datasetName) {
       const res = await fetchImpl(`${base}/api/v1/cognify`, {
         method: "POST",
-        headers: headers(opts.apiKey),
-        body: JSON.stringify({ datasets: [datasetId] }),
+        headers: jsonHeaders(opts.apiKey),
+        body: JSON.stringify({ datasets: [datasetName], runInBackground: false }),
       });
       await parseJsonOrThrow(res, "cognify");
     },
@@ -103,25 +129,22 @@ export function createCogneeClient(opts: CogneeClientOptions): CogneeClient {
     async search(query, topK) {
       const res = await fetchImpl(`${base}/api/v1/search`, {
         method: "POST",
-        headers: headers(opts.apiKey),
-        body: JSON.stringify({ query, ...(topK !== undefined ? { topK } : {}) }),
+        headers: jsonHeaders(opts.apiKey),
+        body: JSON.stringify({ query, searchType: "CHUNKS", ...(topK !== undefined ? { topK } : {}) }),
       });
       const json = await parseJsonOrThrow(res, "search");
-      // Cognee's real response shape isn't independently confirmed (see module-level note) — this
-      // defensively accepts either a bare array or a `{ results: [...] }` envelope, the two most
-      // common REST conventions, rather than assuming one specific shape.
-      if (Array.isArray(json)) return json as CogneeSearchResult[];
-      if (json && typeof json === "object" && "results" in json && Array.isArray((json as { results: unknown }).results)) {
-        return (json as { results: CogneeSearchResult[] }).results;
-      }
-      return [];
+      // Confirmed live: a successful CHUNKS search returns a bare array of chunk objects. An empty/
+      // no-data dataset throws a 4xx with a `detail` string instead (handled by parseJsonOrThrow's
+      // !res.ok path above) — this defensive fallback is for any other, unanticipated shape.
+      return Array.isArray(json) ? (json as CogneeChunk[]) : [];
     },
 
-    async removeDataset(datasetId) {
-      const res = await fetchImpl(`${base}/api/v1/datasets`, {
+    async removeDataset(datasetName) {
+      const id = await findDatasetId(datasetName);
+      if (!id) return; // nothing to remove — never falls back to delete-everything
+      const res = await fetchImpl(`${base}/api/v1/datasets/${id}`, {
         method: "DELETE",
-        headers: headers(opts.apiKey),
-        body: JSON.stringify({ datasetName: datasetId }),
+        headers: authHeaders(opts.apiKey),
       });
       await parseJsonOrThrow(res, "removeDataset");
     },
