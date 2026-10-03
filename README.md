@@ -8,8 +8,11 @@
 [![Local-first](https://img.shields.io/badge/local--first-%E2%9C%94-brightgreen)](#why-now)
 
 <p align="center">
-  <img src="docs/images/products-demo.gif" alt="Wappy agent replying to 'Show me ur products' on WhatsApp" width="45%">
-  <img src="docs/images/calendar-demo.png" alt="Wappy agent answering 'Whats on my calendar this week' on WhatsApp" width="45%">
+  <img src="docs/images/products-demo.gif" alt="Wappy agent replying to 'Show me ur products' on WhatsApp" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/images/calendar-demo.png" alt="Wappy agent answering 'Whats on my calendar this week' on WhatsApp" width="100%">
 </p>
 
 Free. Open source. No account with us, ever. Your conversations, your memory, your data stay in
