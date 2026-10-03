@@ -7,6 +7,11 @@
 [![npm](https://img.shields.io/npm/v/%40wappy_ai%2Fcreate-agent?label=%40wappy_ai%2Fcreate-agent)](https://www.npmjs.com/package/@wappy_ai/create-agent)
 [![Local-first](https://img.shields.io/badge/local--first-%E2%9C%94-brightgreen)](#why-now)
 
+<p align="center">
+  <img src="docs/images/products-demo.gif" alt="Wappy agent replying to 'Show me ur products' on WhatsApp" width="45%">
+  <img src="docs/images/calendar-demo.png" alt="Wappy agent answering 'Whats on my calendar this week' on WhatsApp" width="45%">
+</p>
+
 Free. Open source. No account with us, ever. Your conversations, your memory, your data stay in
 one file on your own machine — nothing routes through a server we run.
 
