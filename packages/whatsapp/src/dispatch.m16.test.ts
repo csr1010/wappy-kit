@@ -48,4 +48,26 @@ describe("M16: dispatchInbound — receive, read + typing, handle (for hosts wit
     await dispatchInbound({ channel: plain, payload: {}, handle: async (m) => { handled.push(m.id); } });
     expect(handled).toEqual(["a"]);
   });
+
+  test("a typing call that rejects (not just returns ok:false) is reported, and the message is still handled", async () => {
+    const errors: unknown[] = [];
+    const handled: string[] = [];
+    const channel = {
+      name: "whatsapp",
+      receive: async () => [{ id: "t1", contactId: "c", channel: "whatsapp", timestamp: 0 }],
+      send: async () => ({ status: "sent" as const }),
+      markReadAndTyping: async () => { throw new Error("socket closed"); },
+    };
+    await dispatchInbound({ channel, payload: {}, handle: async (m) => { handled.push(m.id); }, onError: (e) => errors.push(e) });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(handled).toEqual(["t1"]);
+    expect(errors.map(String)).toEqual(["Error: socket closed"]);
+  });
+
+  test("a receive() that throws is reported and handles nothing", async () => {
+    const errors: unknown[] = [];
+    const channel: MessageChannel = { name: "x", receive: async () => { throw new Error("bad payload"); }, send: async () => ({ status: "sent" }) };
+    expect(await dispatchInbound({ channel, payload: {}, handle: async () => undefined, onError: (e) => errors.push(e) })).toEqual([]);
+    expect(errors.map(String)).toEqual(["Error: bad payload"]);
+  });
 });

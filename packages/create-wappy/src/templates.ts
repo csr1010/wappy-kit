@@ -122,7 +122,8 @@ function renderIndexTs(opts: RenderProjectOptions): string {
   const productivity = answers.productivity.enabled;
   const memoryBackend = answers.memory.backend;
 
-  const harnessImports = ["createAgent", "createVercelModel", "createLibsqlMemory", "createLibsqlSessionProfileStore", "createLlmRouter", "createKnowledge", "createKnowledgeRag"];
+  // createKnowledge backs the local memory option only; a Cognee project would import it unused.
+  const harnessImports = ["createAgent", "createVercelModel", "createLibsqlMemory", "createLibsqlSessionProfileStore", "createLlmRouter", "createKnowledgeRag", ...(memoryBackend === "local" ? ["createKnowledge"] : [])];
   const whatsappImports = ["createWhatsAppChannel"];
 
   const lines: string[] = [];

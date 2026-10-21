@@ -1,43 +1,17 @@
-import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, SessionProfile, SessionProfileStore, SmartMessage, TracedSystem, Tool, Tracer, Turn } from "@wappy_ai/core";
+import type { Agent, Clock, DeliveryResult, InboundMessage, MessageChannel, Memory, Model, Router, RouterDecision, SessionProfileStore, SmartMessage, TracedSystem, Tool, Tracer, Turn } from "@wappy_ai/core";
 import { boundInboundText, DEFAULT_INBOUND_TEXT_LIMITS, type InboundTextLimits } from "./bound-inbound-text.js";
-import { composeWithBudget } from "./compose-with-budget.js";
-import { createContextBudget, type ContextBudget } from "./context-budget.js";
-import { windowHistory } from "./history-window.js";
-import { selectTools } from "./tool-selector.js";
-import { TOOL_SCHEMAS_BUDGET_FRACTION } from "./assemble.js";
+import type { ContextBudget } from "./context-budget.js";
 import type { SkillRegistry } from "./skills.js";
-import { CANCEL_ACTION, parseConfirmSelection, type ConfirmFlow, type ParsedConfirmSelection } from "./confirm.js";
+import { parseConfirmSelection, type ConfirmFlow } from "./confirm.js";
+import { safeAppend, safeCall, safeLoad, safeLoadSessionProfile, safeSetSessionProfile, summarizeReply, trace } from "./agent-support.js";
+import { resolvePendingConfirmation } from "./agent-confirm.js";
+import { routeAndCompose, type ComposedReply } from "./agent-compose.js";
 
-const SCOPE_GUARDRAIL = "If the user's request is genuinely unrelated to what you're configured to help with, say so honestly and directly rather than guessing or making something up.";
-
-/** M12: replaces every per-skill format hint that used to be hand-authored per domain (e.g. a
- * products skill saying "prefer a list for multiple items"). One fixed instruction, zero domain
- * language, applies to every reply regardless of what connector or skill produced the content —
- * a cognitive question series, not a flat command, per the design this milestone settled on.
- * Runs on every compose call, including the cheapest path ("hi") — a deliberate trade against the
- * router's own cheapest-path principle, made explicitly, not by accident. */
-export const FORMAT_REASONING = `Before you reply, work through these questions about how to present it, not just what to say:
-1. What formats can I actually use? Plain text. Up to 3 quick-reply buttons. A list of up to 10 options. A single link as a tappable button. An image, video, or document, optionally paired with buttons or a list.
-2. Does this reply have 2 or more distinct things the person could choose between? If yes, a list or buttons let them tap instead of type.
-3. Is there exactly one clear next action, like opening a link? A tappable link button beats a raw URL in text.
-4. Would an image, video, or document actually help here? If yes, attach it — pair it with buttons or a list too if you're also offering a choice.
-5. Is this just a short, conversational answer with nothing to structure? Plain text is correct then. Don't force structure onto it.
-6. Given all that, which single format fits best, and why? State that reason in formatRationale, specific to this exact reply, not a generic justification you'd give for any reply.`;
-
-/** M12: the single, generic honesty rule that replaced three near-identical, hand-written
- * sentences (store-info/orders/products' own skill fragments each said this in different words). */
-export const GROUNDING_HONESTY =
-  "Only state what a tool call or retrieved document actually returned. Never invent a detail, a value, or a status that wasn't actually provided. If nothing relevant was found, or a tool call failed, say so honestly rather than guessing.";
+// The agent's prompt rules live with the compose path; re-exported here, where callers always found them.
+export { FORMAT_REASONING, GROUNDING_HONESTY } from "./agent-compose.js";
 
 const REFUSAL_TEXT = "That message is too long for me to process — could you send it as a shorter message?";
 const OVERSIZED_PLACEHOLDER = "(the user sent a message too large to process)";
-const NOTHING_PENDING_TEXT = "There's nothing pending to confirm right now.";
-const STALE_CONFIRMATION_TEXT = "That confirmation isn't valid anymore — please ask again.";
-const CONFIRM_TOOL_UNAVAILABLE_TEXT = "Sorry, I couldn't complete that — please try again, or our team will follow up.";
-
-/** Used when the caller doesn't supply one — a conservative, safe-by-default budget (§10 T6.1). */
-const DEFAULT_CONTEXT_BUDGET: ContextBudget = createContextBudget("unrecognized");
-const DEFAULT_MAX_RECENT_TURNS = 20;
 /** M13: session profile TTL — renewed on every successful turn (a plain `set()`, no separate
  * "touch" verb). 30 minutes of inactivity resets the session to empty, matching the design's own
  * "session-scoped, not a permanent user profile" boundary (docs/milestones/M13.md). */
@@ -131,144 +105,6 @@ async function handleSafely(message: InboundMessage, deps: AgentDeps): Promise<D
   }
 }
 
-async function safeLoad(memory: Memory, contactId: string): Promise<Turn[]> {
-  try {
-    return await memory.load(contactId);
-  } catch {
-    return []; // degrade to a "new contact" view rather than blocking the whole turn on a memory outage
-  }
-}
-
-async function safeAppend(memory: Memory, turn: Turn): Promise<void> {
-  try {
-    await memory.append(turn);
-  } catch {
-    // best-effort: a persistence hiccup must not cost the user their reply
-  }
-}
-
-/** M13: `undefined` on any failure (missing store, backend outage, expired) — a session-profile
- * hiccup degrades to "no profile this turn," never blocks the reply, same posture as `safeLoad`. */
-async function safeLoadSessionProfile(store: SessionProfileStore | undefined, contactId: string, now: number): Promise<SessionProfile | undefined> {
-  if (!store) return undefined;
-  try {
-    return await store.get(contactId, now);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Only ever called from behind an `if (deps.sessionProfileStore)` guard at the call site — takes
- * a required `store`, not `| undefined`, so there's no redundant/untested defensive branch here. */
-async function safeSetSessionProfile(store: SessionProfileStore, profile: SessionProfile): Promise<void> {
-  try {
-    await store.set(profile);
-  } catch {
-    // best-effort: a persistence hiccup must not cost the user their reply
-  }
-}
-
-/** Renders a `SessionProfile` into the small text block `assemble.ts`'s `sessionProfile` input
- * expects — kept here (not in assemble.ts, which stays decoupled from the profile's shape) since
- * this is the one caller that actually has a `SessionProfile` to render. `undefined` when there's
- * nothing worth including (no facts, no currentState, no summary) — an all-empty profile renders
- * to nothing rather than an empty placeholder section. */
-function renderSessionProfile(profile: SessionProfile | undefined): string | undefined {
-  if (!profile) return undefined;
-  const lines: string[] = [];
-  const factEntries = Object.entries(profile.facts);
-  if (factEntries.length > 0) lines.push(`Known facts about this contact: ${factEntries.map(([k, v]) => `${k}: ${v}`).join("; ")}`);
-  if (profile.currentState) lines.push(`Current state of this thread: ${profile.currentState}`);
-  if (profile.summary) lines.push(`Session summary so far: ${profile.summary}`);
-  return lines.length > 0 ? lines.join("\n") : undefined;
-}
-
-/** Runs an optional hook (RAG/tools/escalate), swallowing a throw so one integration's outage
- * degrades to "no extra context" rather than losing the whole turn (§10, "each step with a fallback"). */
-async function safeCall<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await fn();
-  } catch {
-    return fallback;
-  }
-}
-
-/**
- * Resolves a contact's pending confirmation in response to a "confirm"/"cancel" button reply (T8.5).
- * `parsed.pendingId` — embedded in the button's own selectionId by `confirmSelectionId()`/
- * `cancelSelectionId()` when the confirmation was first requested — MUST match the CURRENT pending
- * confirmation's own id before anything executes: WhatsApp buttons are static once sent, so if this
- * contact was asked to confirm action A, didn't answer, and was later asked to confirm a different
- * action B (which replaces A as their one pending confirmation), a stale tap on A's old "Confirm"
- * button must not execute B — a confused-deputy replay, not hypothetical, since `request()`
- * unconditionally supersedes an earlier unresolved confirmation for the same contact. A mismatch
- * leaves the CURRENT pending confirmation untouched (it wasn't what the user actually replied to),
- * so a genuine reply to it can still resolve it later.
- *
- * `resolve()` is awaited BEFORE the tool ever runs (not after) so the pending state is gone the
- * instant this function starts acting on it — combined with `createAgent`'s own per-contact
- * serialization (two messages for the same contact are never handled concurrently), a duplicate
- * "confirm" delivered twice back-to-back can never execute the tool twice: the second one finds
- * nothing pending (§9 "confirm executes once even if 'yes' is delivered twice").
- */
-async function resolvePendingConfirmation(message: InboundMessage, parsed: ParsedConfirmSelection, confirmFlow: ConfirmFlow, deps: AgentDeps): Promise<SmartMessage> {
-  const pending = await safeCall(() => confirmFlow.getPending(message.contactId), undefined);
-  if (!pending) return { text: NOTHING_PENDING_TEXT };
-  if (pending.id !== parsed.pendingId) return { text: STALE_CONFIRMATION_TEXT };
-
-  await safeCall(async () => {
-    await confirmFlow.resolve(message.contactId);
-    return undefined;
-  }, undefined);
-
-  if (parsed.action === CANCEL_ACTION) {
-    trace(deps.tracer, "tools", "invoke", { toolName: pending.toolName, confirmOutcome: "canceled" });
-    return { text: `Okay, I've canceled that — ${pending.summary} was not carried out.` };
-  }
-
-  trace(deps.tracer, "tools", "invoke", { toolName: pending.toolName, confirmOutcome: "confirmed" });
-  const tool = deps.tools?.find((t) => t.name === pending.toolName);
-  if (!tool) return { text: CONFIRM_TOOL_UNAVAILABLE_TEXT };
-
-  const toolResult = await safeCall(() => tool.execute(pending.args), { toolName: pending.toolName, ok: false, error: "internal error invoking tool" });
-  if (toolResult.ok) return { text: `Done — ${pending.summary} completed.` };
-
-  await safeCall(async () => {
-    await deps.onEscalate?.(message, { intent: "confirm", needsRAG: false, needsTool: true, escalate: true, confidence: 1 });
-    return undefined;
-  }, undefined);
-  return { text: `I couldn't complete that (${toolResult.error ?? "unknown error"}) — I've let the team know and they'll follow up.` };
-}
-
-/**
- * A textual stand-in for what was persisted to memory: `SmartMessage.text` is independent of
- * `buttons`/`list`/`cta`/`media` (§6.3 "the model controls UX intent — buttons vs list vs text"), so
- * a rich reply with no `text` set would otherwise persist as `Turn.text: undefined` — which
- * model.ts's `toModelMessages()` then filters out entirely, making the agent's own reply invisible
- * to itself on the next turn. Every real caller here (`composeSmartMessage`'s degrade path always
- * sets `text`; every other reply in this file — refusal, oversized-decline, confirm/cancel — also
- * always sets `text`) only ever produces a `SmartMessage` satisfying `SmartMessageSchema`'s own
- * `.refine()`, which requires at least one of text/buttons/list/cta/media — so `parts` is never
- * empty here; no fallback-to-undefined branch is reachable to simplify away.
- */
-function summarizeReply(message: SmartMessage): string {
-  if (message.text) return message.text;
-  const parts: string[] = [];
-  if (message.buttons) parts.push(`buttons: ${message.buttons.map((b) => b.title).join(", ")}`);
-  if (message.list) parts.push(`list: ${message.list.sections.flatMap((s) => s.rows.map((r) => r.title)).join(", ")}`);
-  if (message.cta) parts.push(`link "${message.cta.text}": ${message.cta.url}`);
-  if (message.media) parts.push(message.media.caption ? `${message.media.kind}: ${message.media.caption}` : message.media.kind);
-  return `[${parts.join("; ")}]`;
-}
-
-function trace(tracer: Tracer, system: TracedSystem, event: string, data?: unknown): void {
-  try {
-    tracer.record(system, event, data);
-  } catch {
-    // observability must never cost the user their reply
-  }
-}
-
 /** M16: ask each registered skill with respond(), in order; a throwing responder is skipped. */
 async function firstSkillResponse(message: InboundMessage, history: Turn[], deps: AgentDeps): Promise<SmartMessage | undefined> {
   const skills = deps.skills?.list() ?? [];
@@ -324,7 +160,7 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
   let direct: SmartMessage | undefined;
   // M13: only set on the compose path (refusal/confirm replies don't route through the model, so
   // there's nothing to extract) — merged over the existing profile, not replacing it, when written below.
-  let extracted: { facts?: Record<string, string>; currentState?: string; summary?: string } = {};
+  let extracted: ComposedReply["extracted"] = {};
   if (bounded?.refuse) {
     reply = { text: REFUSAL_TEXT };
   } else if (parsedConfirm) {
@@ -336,101 +172,7 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     // M16: a skill answered directly — no routing, no model call. Persist/dedupe/send below as usual.
     reply = direct;
   } else {
-    trace(deps.tracer, "router", "route");
-    let decision: RouterDecision;
-    try {
-      // The full tool pool's names, not just a skill's own subset — the router decides needsTool
-      // (and which skill) BEFORE a skill is chosen, so it can't yet know a skill-scoped list.
-      // Previously hardcoded to [] here, which made the router's own prompt literally say
-      // "Available tools: (none)" even when tools existed — found by hand-testing a real
-      // conversation: "show me your products" was declined because the router, told there were no
-      // tools at all, never set needsTool even though searchProducts was fully wired.
-      // The full tool pool's names, not just a skill's own subset — the router decides needsTool
-      // (and which skill) BEFORE a skill is chosen, so it can't yet know a skill-scoped list.
-      // Previously hardcoded to [] here, which made the router's own prompt literally say
-      // "Available tools: (none)" even when tools existed — found by hand-testing a real
-      // conversation: "show me your products" was declined because the router, told there were no
-      // tools at all, never set needsTool even though searchProducts was fully wired.
-      decision = await deps.router.route({ message: { ...message, text: effectiveText }, history, availableSkills: deps.skills?.names() ?? [], availableTools: deps.tools?.map((t) => t.name) ?? [] });
-    } catch {
-      decision = { intent: "general", needsRAG: false, needsTool: false, escalate: false, confidence: 0 };
-    }
-
-    const confident = decision.confidence >= (deps.confidenceThreshold ?? 0.3);
-    const budget = deps.contextBudget ?? DEFAULT_CONTEXT_BUDGET;
-
-    const skillFragments: string[] = [];
-    let skillToolNames: string[] = [];
-    if (confident && decision.skill) {
-      const skill = await safeCall(async () => deps.skills?.get(decision.skill!), undefined);
-      if (skill) {
-        trace(deps.tracer, "skill", "selected", { skill: skill.name });
-        skillFragments.push(skill.promptFragment);
-        skillToolNames = skill.tools ?? [];
-      }
-    }
-
-    // Tool-invocation findings are typically more directly actionable (e.g. "order 8842: shipped")
-    // than generic RAG recall, so they're kept in their own array and placed AHEAD of recalledSnippets
-    // when the two are combined below — capArrayFromEnd drops from the tail first, so this ordering
-    // means generic RAG results are dropped before tool findings under budget pressure, not the reverse.
-    const toolFindings: string[] = [];
-    const recalledSnippets: string[] = [];
-    if (confident && decision.needsRAG && deps.retrieveRag) {
-      trace(deps.tracer, "rag", "retrieve");
-      const snippets = await safeCall(() => deps.retrieveRag!({ contactId: message.contactId, query: effectiveText ?? "" }), []);
-      recalledSnippets.push(...snippets);
-    }
-
-    const toolSchemas: string[] = [];
-    if (confident && decision.needsTool) {
-      if (deps.invokeTools) {
-        trace(deps.tracer, "tools", "invoke");
-        // Uses the same bounded/truncated text every other consumer (router, RAG query, selectTools,
-        // the persisted turn) already uses — not the raw, unbounded message.
-        const findings = await safeCall(() => deps.invokeTools!({ message: { ...message, text: effectiveText }, decision }), []);
-        toolFindings.push(...findings.map((f) => `Tool result: ${f}`));
-      }
-      if (deps.tools && deps.tools.length > 0) {
-        const selected = selectTools({ tools: deps.tools, message: effectiveText ?? "", alwaysInclude: skillToolNames, maxTokens: Math.floor(budget.promptBudget * TOOL_SCHEMAS_BUDGET_FRACTION) });
-        toolSchemas.push(...selected.map((t) => JSON.stringify({ name: t.name, description: t.description, parameters: t.parameters })));
-      }
-    }
-
-    if (decision.escalate && deps.onEscalate) {
-      await safeCall(async () => {
-        await deps.onEscalate!(message, decision);
-        return undefined;
-      }, undefined);
-    }
-
-    // §10 "out-of-scope ask -> honest decline": a standing instruction, not special-cased branching —
-    // the model is trusted to say so plainly rather than guess when a request is genuinely unrelated
-    // to what it's configured to help with. Kept as its own leading skill-like fragment.
-    const windowed = await windowHistory({ model: deps.model, memory: deps.memory, contactId: message.contactId, history, maxRecentTurns: deps.maxRecentTurns ?? DEFAULT_MAX_RECENT_TURNS, clock: deps.clock, tracer: deps.tracer });
-
-    const composed = await composeWithBudget({
-      model: deps.model,
-      input: {
-        system: `${SCOPE_GUARDRAIL}\n\n${FORMAT_REASONING}\n\n${GROUNDING_HONESTY}`,
-        sessionProfile: renderSessionProfile(sessionProfile),
-        skillFragments,
-        toolSchemas,
-        summary: windowed.summary,
-        recalledSnippets: [...toolFindings, ...recalledSnippets],
-        recentTurns: windowed.recentTurns,
-        userMessage: effectiveText ?? "(no text)",
-      },
-      budget,
-    });
-    // One "llm" event (not two) carries both the compose step and its token-usage-per-section (T6.9)
-    // — spine A's own assertion counts "llm" trace events as a proxy for underlying model calls, and
-    // this compose step is exactly one such call (retries/shrinks happen inside composeWithBudget).
-    trace(deps.tracer, "llm", "compose", { usage: composed.usage, dropped: composed.dropped, shrunkForContextLength: composed.shrunkForContextLength, formatRationale: composed.formatRationale });
-    reply = composed.reply;
-    // M13: this same compose call drafted the extraction, for free — carried through to the write
-    // below rather than a second read of `composed` (which is out of scope past this block).
-    extracted = { facts: composed.sessionFacts, currentState: composed.sessionCurrentState, summary: composed.sessionSummary };
+    ({ reply, extracted } = await routeAndCompose(message, effectiveText, history, sessionProfile, deps));
   }
 
   const channelSystem = KNOWN_TRACED_CHANNELS.has(deps.channel.name) ? (deps.channel.name as TracedSystem) : undefined;

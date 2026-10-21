@@ -290,6 +290,12 @@ importers:
       '@libsql/client':
         specifier: 0.18.0
         version: 0.18.0
+      '@wappy_ai/connector-cognee':
+        specifier: workspace:*
+        version: link:../connector-cognee
+      '@wappy_ai/connector-google':
+        specifier: workspace:*
+        version: link:../connector-google
       '@wappy_ai/core':
         specifier: workspace:*
         version: link:../core
@@ -299,12 +305,18 @@ importers:
       '@wappy_ai/harness':
         specifier: workspace:*
         version: link:../harness
+      '@wappy_ai/productivity':
+        specifier: workspace:*
+        version: link:../productivity
       '@wappy_ai/testkit':
         specifier: workspace:*
         version: link:../testkit
       '@wappy_ai/whatsapp':
         specifier: workspace:*
         version: link:../whatsapp
+      ai:
+        specifier: 7.0.107
+        version: 7.0.107(zod@4.6.5)
     devDependencies:
       '@types/node':
         specifier: ^26.6.2

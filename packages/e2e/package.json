@@ -15,11 +15,15 @@
   },
   "dependencies": {
     "@libsql/client": "0.18.0",
+    "@wappy_ai/connector-cognee": "workspace:*",
+    "@wappy_ai/connector-google": "workspace:*",
     "@wappy_ai/core": "workspace:*",
-    "@wappy_ai/harness": "workspace:*",
-    "@wappy_ai/testkit": "workspace:*",
     "@wappy_ai/create-agent": "workspace:*",
-    "@wappy_ai/whatsapp": "workspace:*"
+    "@wappy_ai/harness": "workspace:*",
+    "@wappy_ai/productivity": "workspace:*",
+    "@wappy_ai/testkit": "workspace:*",
+    "@wappy_ai/whatsapp": "workspace:*",
+    "ai": "7.0.107"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

@@ -53,6 +53,11 @@ describe("M16: createWhatsAppChannel({ ownNumberOnly }) — one payload, many ch
     expect(seen).toEqual(["2:o1"]);
   });
 
+  test("a payload with nothing for this channel's number yields nothing", async () => {
+    const three = createWhatsAppChannel({ phoneNumberId: "333", accessToken: "t", ownNumberOnly: true });
+    expect(await three.receive(payload)).toEqual([]);
+  });
+
   test("off by default: a channel still accepts every number, as before", async () => {
     const any = createWhatsAppChannel({ phoneNumberId: "999", accessToken: "t" });
     expect((await any.receive(payload)).map((m) => m.id)).toEqual(["a", "b"]);

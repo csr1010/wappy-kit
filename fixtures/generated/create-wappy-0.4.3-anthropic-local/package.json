@@ -1,0 +1,23 @@
+{
+  "name": "wappy-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "wappy dev",
+    "start": "wappy dev"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.0",
+    "@libsql/client": "0.18.0",
+    "@wappy_ai/core": "0.2.0",
+    "@wappy_ai/create-agent": "0.4.3",
+    "@wappy_ai/harness": "0.2.0",
+    "@wappy_ai/whatsapp": "0.2.0",
+    "ai": "^7.0.0",
+    "dotenv": "^17.0.0"
+  }
+}
