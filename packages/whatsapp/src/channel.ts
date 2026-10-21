@@ -1,5 +1,5 @@
 import { systemClock, type Clock, type DeliveryResult, type InboundMessage, type MessageChannel, type SmartMessage } from "@wappy_ai/core";
-import { parseWebhookPayload, type StatusEvent } from "./parser.js";
+import { parseWebhookByNumber, parseWebhookPayload, type StatusEvent } from "./parser.js";
 import { createMemorySeenStore, type SeenStore } from "./seen-store.js";
 import { createSessionWindowTracker, type SessionWindowTracker } from "./session-window.js";
 import { sendSmartMessage, type SendDeps } from "./send/orchestrator.js";
@@ -34,6 +34,13 @@ export interface WhatsAppChannelOptions {
    * machine when wired to updateDeliveryState (M4, send/delivery-state.ts) by the caller.
    */
   onStatus?: (status: StatusEvent) => void;
+  /**
+   * Only accept messages/statuses addressed to `phoneNumberId` (`value.metadata.phone_number_id`).
+   * For hosts that serve several numbers from one webhook and hand the same payload to each
+   * number's channel. Off by default: single-number setups (and payloads without metadata) keep
+   * accepting everything, as before.
+   */
+  ownNumberOnly?: boolean;
 
   // --- smart send (M4) ---
   /** Full Clock (now + sleep) for retry backoff; falls back to `now` + real timers, then systemClock. */
@@ -65,7 +72,9 @@ export function createWhatsAppChannel(opts: WhatsAppChannelOptions): WhatsAppMes
     name: channelName,
 
     async receive(rawWebhook: unknown): Promise<InboundMessage[]> {
-      const { messages, statuses } = parseWebhookPayload(rawWebhook, channelName);
+      const { messages, statuses } = opts.ownNumberOnly
+        ? parseWebhookByNumber(rawWebhook, channelName).find((b) => b.phoneNumberId === opts.phoneNumberId) ?? { messages: [], statuses: [] }
+        : parseWebhookPayload(rawWebhook, channelName);
 
       for (const status of statuses) {
         // Keyed on (messageId, status), not messageId alone: a message legitimately passes through
