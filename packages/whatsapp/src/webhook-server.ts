@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Agent, MessageChannel } from "@wappy_ai/core";
 import { handleVerifyHandshake } from "./verify-handshake.js";
 import { verifySignature } from "./signature.js";
-import type { WhatsAppMessageChannel } from "./channel.js";
+import { dispatchInbound } from "./dispatch.js";
 
 /**
  * T9.7's server: the actual `http.Server` a generated project's `wappy dev` boots. Deliberately
@@ -121,25 +121,8 @@ export function createWebhookServer(opts: CreateWebhookServerOptions): Server {
       // so there's no correctness reason to make Meta wait for the agent to finish replying.
       send(res, 200);
 
-      try {
-        const messages = await opts.channel.receive(payload);
-        for (const message of messages) {
-          // Fired before/alongside agent.handle(), not awaited — it's the user-visible "..." while
-          // the slower model/tool work runs, so it must go out as early as possible, and Meta
-          // auto-dismisses it on its own (25s, or when the real reply lands) so there's nothing to
-          // clean up here even if agent.handle() is slow or fails. WhatsAppMessageChannel-specific
-          // (checked via the property, not the `MessageChannel` core type) — a channel without it
-          // just skips this, same as any channel implementation that isn't WhatsApp.
-          if (typeof (opts.channel as Partial<WhatsAppMessageChannel>).markReadAndTyping === "function") {
-            void (opts.channel as WhatsAppMessageChannel).markReadAndTyping(message.id).then((r) => {
-              if (!r.ok) opts.onError?.(new Error(`markReadAndTyping: ${r.error}`));
-            });
-          }
-          void opts.agent.handle(message).catch((e: unknown) => opts.onError?.(e));
-        }
-      } catch (e) {
-        opts.onError?.(e);
-      }
+      // Not awaited: the response already went out; dispatch never rejects.
+      void dispatchInbound({ channel: opts.channel, payload, handle: (m) => opts.agent.handle(m), onError: opts.onError });
     })();
   });
 }
