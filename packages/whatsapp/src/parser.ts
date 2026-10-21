@@ -31,6 +31,13 @@ function tsMs(raw: unknown): number {
 
 const MEDIA_TYPES = ["image", "document", "video", "audio"] as const;
 
+/** One business phone number's share of a webhook delivery. */
+export interface NumberBatch extends ParsedWebhook {
+  /** Meta phone_number_id the messages arrived on (or the statuses were sent from). */
+  phoneNumberId: string;
+  displayPhoneNumber?: string;
+}
+
 /**
  * Parses one raw Meta "messages" webhook payload (arbitrary/possibly-malformed JSON) into the
  * InboundMessages + StatusEvents it contains. Every field access is guarded — this NEVER throws,
@@ -39,6 +46,22 @@ const MEDIA_TYPES = ["image", "document", "video", "audio"] as const;
 export function parseWebhookPayload(payload: unknown, channel = "whatsapp"): ParsedWebhook {
   const messages: InboundMessage[] = [];
   const statuses: StatusEvent[] = [];
+  for (const b of parseWebhookByNumber(payload, channel, { keepUnaddressed: true })) {
+    messages.push(...b.messages);
+    statuses.push(...b.statuses);
+  }
+  return { messages, statuses };
+}
+
+/**
+ * Same parse, grouped by the business number each change was addressed to
+ * (`value.metadata.phone_number_id`). A host serving many numbers from one webhook needs this to
+ * pick the right tenant and send-from number; the flat `parseWebhookPayload` loses it. Changes
+ * with no phone_number_id are dropped (nothing to route them to), and batches for the same number
+ * are merged, in payload order. Never throws.
+ */
+export function parseWebhookByNumber(payload: unknown, channel = "whatsapp", opts: { keepUnaddressed?: boolean } = {}): NumberBatch[] {
+  const byNumber = new Map<string, NumberBatch>();
 
   const entries = Array.isArray(record(payload).entry) ? (record(payload).entry as unknown[]) : [];
   for (const entry of entries) {
@@ -47,21 +70,30 @@ export function parseWebhookPayload(payload: unknown, channel = "whatsapp"): Par
       const c = record(change);
       if (c.field !== "messages") continue;
       const value = record(c.value);
+      const meta = record(value.metadata);
+      const phoneNumberId = str(meta.phone_number_id) ?? "";
+      if (!phoneNumberId && !opts.keepUnaddressed) continue;
+
+      let batch = byNumber.get(phoneNumberId);
+      if (!batch) {
+        batch = { phoneNumberId, displayPhoneNumber: str(meta.display_phone_number), messages: [], statuses: [] };
+        byNumber.set(phoneNumberId, batch);
+      }
 
       const rawMessages = Array.isArray(value.messages) ? (value.messages as unknown[]) : [];
       for (const raw of rawMessages) {
         const msg = parseOneMessage(raw, channel);
-        if (msg) messages.push(msg);
+        if (msg) batch.messages.push(msg);
       }
 
       const rawStatuses = Array.isArray(value.statuses) ? (value.statuses as unknown[]) : [];
       for (const raw of rawStatuses) {
         const s = parseOneStatus(raw);
-        if (s) statuses.push(s);
+        if (s) batch.statuses.push(s);
       }
     }
   }
-  return { messages, statuses };
+  return [...byNumber.values()];
 }
 
 function parseOneMessage(raw: unknown, channel: string): InboundMessage | null {
