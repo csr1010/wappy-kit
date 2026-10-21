@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/connector-cognee",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Bring-your-own Cognee (self-hosted or cloud): a real Knowledge/RAG backend for @wappy_ai/harness, backed by Cognee's knowledge-graph API instead of local BM25.",
   "keywords": [
     "whatsapp",

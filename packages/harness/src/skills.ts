@@ -1,4 +1,4 @@
-import type { Skill } from "@wappy_ai/core";
+import type { Skill, WappyApp } from "@wappy_ai/core";
 
 /** Registered Skills (prompt fragment + tools + optional memory schema, §17), keyed by name. */
 export interface SkillRegistry {
@@ -20,4 +20,9 @@ export function createSkillRegistry(): SkillRegistry {
     list: () => [...skills.values()],
     names: () => [...skills.keys()],
   };
+}
+
+/** M16: install apps onto a registry, in order. Skill names must be unique across all apps. */
+export function registerApps(registry: SkillRegistry, apps: WappyApp[]): void {
+  for (const app of apps) for (const skill of app.skills ?? []) registry.register(skill);
 }

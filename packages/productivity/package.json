@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/productivity",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A reactive Gmail/Calendar assistant for WhatsApp agents - answers any question in normal language via real, parameterized read-only search tools, no saved tasks, no cron, no WhatsApp Message Templates required.",
   "keywords": [
     "whatsapp",

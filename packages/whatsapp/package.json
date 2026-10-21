@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/whatsapp",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A real WhatsApp Cloud API integration: webhook parsing, message rendering, delivery retries, and the 24-hour session-window rule, done correctly.",
   "keywords": [
     "whatsapp",

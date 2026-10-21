@@ -13,6 +13,12 @@ import { readPartVersions } from "./versions.js";
 // core/harness bumped 0.1.0 -> 0.1.1 (real content change: both packages gained a real
 // "engines": {"node": ">=22"} field, confirmed against the `ai` package's own actual requirement
 // before this bump, not guessed) — updated again for the same reason (`--allow-test-change`).
+// M16: stop hardcoding — every release bump broke this test for no real reason. It now asserts that
+// the resolved versions equal the monorepo's own package.json "version" fields, which is what the
+// test's name already promised (`--allow-test-change`, SPEC.md decisions log v2.9).
+import { readFileSync } from "node:fs";
+const own = (pkg: string) => JSON.parse(readFileSync(new URL(`../../${pkg}/package.json`, import.meta.url), "utf8")).version as string;
+
 describe("readPartVersions", () => {
   test("reads each @wappy_ai/* part's real installed version via require.resolve, not a hardcoded value", () => {
     const versions = readPartVersions(import.meta.url);
@@ -20,7 +26,7 @@ describe("readPartVersions", () => {
       expect(v).toMatch(/^\d+\.\d+\.\d+/);
     }
     // Matches this monorepo's own packages' actual package.json "version" fields.
-    expect(versions.core).toBe("0.1.1");
-    expect(versions.harness).toBe("0.1.1");
+    expect(versions.core).toBe(own("core"));
+    expect(versions.harness).toBe(own("harness"));
   });
 });

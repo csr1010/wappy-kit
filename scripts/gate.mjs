@@ -12,8 +12,8 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const argv = process.argv.slice(2);
 const n = Number(argv[0]);
-if (!Number.isInteger(n) || n < 0 || n > 11) {
-  console.error('usage: pnpm gate <0-11> [--quick] [--allow-test-change "reason"]');
+if (!Number.isInteger(n) || n < 0 || n > 99) {
+  console.error('usage: pnpm gate <milestone> [--quick] [--allow-test-change "reason"]');
   process.exit(2);
 }
 const quick = argv.includes("--quick");

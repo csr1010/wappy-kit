@@ -255,6 +255,10 @@
     "kind": "InterfaceDeclaration",
     "type": "Skill"
   },
+  "SkillRespondInput": {
+    "kind": "InterfaceDeclaration",
+    "type": "SkillRespondInput"
+  },
   "SmartButtonSchema": {
     "kind": "VariableDeclaration",
     "type": "z.ZodObject<{    id: z.ZodString;    title: z.ZodString;}, z.core.$strip>"
@@ -398,6 +402,10 @@
   "VersionSkewWarning": {
     "kind": "InterfaceDeclaration",
     "type": "VersionSkewWarning"
+  },
+  "WappyApp": {
+    "kind": "InterfaceDeclaration",
+    "type": "WappyApp"
   },
   "withLock": {
     "kind": "FunctionDeclaration",

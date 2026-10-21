@@ -30,6 +30,36 @@ export interface Skill {
   tools?: string[];
   /** Opaque, skill-owned shape persisted alongside Memory; core never interprets it. */
   memorySchema?: unknown;
+  /**
+   * M16: answer directly, without routing or a model call (commands, opt-outs, exact matches, echo).
+   * Tried before routing, in registration order; the first non-undefined result is the reply. The
+   * agent still persists turns, dedupes replays and sends through the channel as usual. Return
+   * undefined to let the normal route + compose path handle the message.
+   */
+  respond?(input: SkillRespondInput): SmartMessage | string | undefined | Promise<SmartMessage | string | undefined>;
+}
+
+export interface SkillRespondInput {
+  /** The inbound message, with text already bounded the same way the rest of the pipeline sees it. */
+  message: InboundMessage;
+  /** This contact's history as loaded for this turn (oldest first). */
+  history: Turn[];
+}
+
+/**
+ * M16: the unit a host installs on a number — an app/agent package. Depends only on core types, so
+ * the same app runs self-hosted (wired by hand) or on a multi-tenant host (wired per tenant).
+ */
+export interface WappyApp {
+  /** Stable id, unique across apps (e.g. "echo"). */
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  /** Skills this app adds to the agent on the number it's installed on. */
+  skills?: Skill[];
+  /** Tools this app contributes (its skills reference them by name). */
+  tools?: Tool[];
 }
 
 /**

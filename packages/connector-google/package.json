@@ -1,6 +1,6 @@
 {
   "name": "@wappy_ai/connector-google",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Bring-your-own Google Cloud OAuth: real, parameterized Calendar + Gmail search for @wappy_ai/productivity's Google assistant, connected from its own local connect page, not a CLI command.",
   "keywords": [
     "whatsapp",

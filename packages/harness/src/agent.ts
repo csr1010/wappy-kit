@@ -269,6 +269,19 @@ function trace(tracer: Tracer, system: TracedSystem, event: string, data?: unkno
   }
 }
 
+/** M16: ask each registered skill with respond(), in order; a throwing responder is skipped. */
+async function firstSkillResponse(message: InboundMessage, history: Turn[], deps: AgentDeps): Promise<SmartMessage | undefined> {
+  const skills = deps.skills?.list() ?? [];
+  for (const skill of skills) {
+    if (!skill.respond) continue;
+    const out = await safeCall(async () => skill.respond!({ message, history }), undefined);
+    if (out === undefined || out === "") continue;
+    trace(deps.tracer, "skill", "respond", { skill: skill.name });
+    return typeof out === "string" ? { text: out } : out;
+  }
+  return undefined;
+}
+
 async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<DeliveryResult> {
   trace(deps.tracer, "memory", "load", { contactId: message.contactId });
   const history = await safeLoad(deps.memory, message.contactId);
@@ -308,6 +321,7 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
   const parsedConfirm = deps.confirmFlow ? parseConfirmSelection(message.selectionId) : undefined;
 
   let reply: SmartMessage;
+  let direct: SmartMessage | undefined;
   // M13: only set on the compose path (refusal/confirm replies don't route through the model, so
   // there's nothing to extract) — merged over the existing profile, not replacing it, when written below.
   let extracted: { facts?: Record<string, string>; currentState?: string; summary?: string } = {};
@@ -318,6 +332,9 @@ async function handleOne(message: InboundMessage, deps: AgentDeps): Promise<Deli
     // nothing to the router without the pending-confirmation context) — resolved here, before
     // routing, instead of through the normal skill/RAG/tool/compose pipeline.
     reply = await resolvePendingConfirmation(message, parsedConfirm, deps.confirmFlow!, deps);
+  } else if ((direct = await firstSkillResponse({ ...message, text: effectiveText }, history, deps))) {
+    // M16: a skill answered directly — no routing, no model call. Persist/dedupe/send below as usual.
+    reply = direct;
   } else {
     trace(deps.tracer, "router", "route");
     let decision: RouterDecision;
