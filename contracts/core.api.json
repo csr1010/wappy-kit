@@ -23,6 +23,18 @@
     "kind": "FunctionDeclaration",
     "type": "(state: State, parts: StatePart[], manifests: SetupManifest[], clock?: Pick<Clock, \"now\">) => AppliedManifests"
   },
+  "AppSettingField": {
+    "kind": "TypeAliasDeclaration",
+    "type": "AppSettingField"
+  },
+  "AppSettings": {
+    "kind": "TypeAliasDeclaration",
+    "type": "AppSettings"
+  },
+  "AppSettingValue": {
+    "kind": "TypeAliasDeclaration",
+    "type": "AppSettingValue"
+  },
   "checkVersionSkew": {
     "kind": "FunctionDeclaration",
     "type": "(coreVersion: string, parts: {    name: string;    coreVersionRange: string;}[]) => VersionSkewWarning[]"
@@ -199,9 +211,17 @@
     "kind": "TypeAliasDeclaration",
     "type": "ResetScope"
   },
+  "ResolvedSettings": {
+    "kind": "TypeAliasDeclaration",
+    "type": "ResolvedSettings"
+  },
   "resolveEnabledPlugins": {
     "kind": "FunctionDeclaration",
     "type": "(registry: PluginRegistry, config: RegistryConfig) => Plugin[]"
+  },
+  "resolveSettings": {
+    "kind": "FunctionDeclaration",
+    "type": "(definition: Pick<WappyAppDefinition, \"settings\">, stored?: Record<string, unknown>) => ResolvedSettings"
   },
   "Router": {
     "kind": "InterfaceDeclaration",
@@ -339,6 +359,10 @@
     "kind": "ClassDeclaration",
     "type": "typeof StateVersionTooNewError"
   },
+  "staticAppDefinition": {
+    "kind": "FunctionDeclaration",
+    "type": "(app: WappyApp) => WappyAppDefinition"
+  },
   "StepDef": {
     "kind": "InterfaceDeclaration",
     "type": "StepDef"
@@ -406,6 +430,10 @@
   "WappyApp": {
     "kind": "InterfaceDeclaration",
     "type": "WappyApp"
+  },
+  "WappyAppDefinition": {
+    "kind": "InterfaceDeclaration",
+    "type": "WappyAppDefinition"
   },
   "withLock": {
     "kind": "FunctionDeclaration",

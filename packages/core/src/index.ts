@@ -7,6 +7,7 @@ export * from "./clock.js";
 export * from "./logger.js";
 export * from "./tracer.js";
 export * from "./interfaces.js";
+export * from "./app-settings.js";
 export * from "./semver.js";
 export * from "./setup-manifest.js";
 export * from "./registry.js";
